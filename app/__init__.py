@@ -19,9 +19,23 @@ def create_app(config_class=Config):
     from app.modules.ingestion.routes import ingestion_bp
     from app.modules.channels.routes import channels_bp
     from app.modules.playlists.routes import playlists_bp
+    from app.modules.auth.routes import auth_bp
     app.register_blueprint(ingestion_bp, url_prefix='/ingestion')
     app.register_blueprint(channels_bp, url_prefix='/channels')
     app.register_blueprint(playlists_bp, url_prefix='/playlists')
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    
+    # Initialize Login Manager
+    from flask_login import LoginManager
+    login_manager = LoginManager()
+    login_manager.login_view = 'auth.login'
+    login_manager.login_message_category = 'info'
+    login_manager.init_app(app)
+    
+    from app.modules.auth.services import AuthService
+    @login_manager.user_loader
+    def load_user(user_id):
+        return AuthService.get_user_by_id(user_id)
     
     # Initialize Scheduler
     init_scheduler(app)

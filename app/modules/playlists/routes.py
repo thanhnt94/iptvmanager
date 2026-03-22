@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, Response, abort, jsonify, flash
+from flask_login import login_required
 from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
 from app.modules.playlists.services import PlaylistService
 from app.modules.channels.services import ChannelService
@@ -8,6 +9,7 @@ from app.core.database import db
 playlists_bp = Blueprint('playlists', __name__, template_folder='templates')
 
 @playlists_bp.route('/')
+@login_required
 def index():
     profiles = PlaylistProfile.query.all()
     return render_template('playlists/index.html', profiles=profiles)
@@ -32,6 +34,7 @@ def delete_profile(id):
     return redirect(url_for('playlists.index'))
 
 @playlists_bp.route('/view/<int:id>')
+@login_required
 def view_playlist(id):
     profile = PlaylistProfile.query.get_or_404(id)
     
@@ -65,6 +68,7 @@ def view_playlist(id):
                            epg_url=epg_url)
 
 @playlists_bp.route('/add-channel/<int:playlist_id>/<int:channel_id>', methods=['POST'])
+@login_required
 def add_channel(playlist_id, channel_id):
     # No longer taking group_id from form here as per user request
     PlaylistService.add_channel_to_playlist(playlist_id, channel_id)
@@ -79,6 +83,7 @@ def update_entry_group(entry_id):
     return jsonify({'status': 'ok'})
 
 @playlists_bp.route('/create-group/<int:playlist_id>', methods=['POST'])
+@login_required
 def create_group(playlist_id):
     name = request.form.get('name')
     if name:
@@ -86,6 +91,7 @@ def create_group(playlist_id):
     return redirect(url_for('playlists.view_playlist', id=playlist_id))
 
 @playlists_bp.route('/group/rename/<int:group_id>', methods=['POST'])
+@login_required
 def rename_group(group_id):
     data = request.json or {}
     new_name = data.get('new_name')
@@ -97,6 +103,7 @@ def rename_group(group_id):
     return jsonify({'status': 'error', 'message': 'Group not found'}), 404
 
 @playlists_bp.route('/reorder/<int:playlist_id>', methods=['POST'])
+@login_required
 def reorder(playlist_id):
     entry_ids = request.json.get('entry_ids', [])
     PlaylistService.reorder_entries(playlist_id, entry_ids)

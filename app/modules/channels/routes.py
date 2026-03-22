@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask_login import login_required
 import requests
 from app.modules.channels.models import Channel, EPGSource
 from app.modules.channels.services import ChannelService, EPGService
@@ -7,6 +8,7 @@ from app.core.database import db
 channels_bp = Blueprint('channels', __name__, template_folder='templates')
 
 @channels_bp.route('/')
+@login_required
 def index():
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search', '')
@@ -61,6 +63,7 @@ def index():
                            playlists=playlists)
 
 @channels_bp.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_channel():
     from app.modules.playlists.models import PlaylistProfile
     from app.modules.playlists.services import PlaylistService
@@ -102,6 +105,7 @@ def add_channel():
                          all_playlists=PlaylistProfile.query.filter_by(is_system=False).all())
 
 @channels_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
 def edit_channel(id):
     from app.modules.playlists.models import PlaylistProfile, PlaylistEntry
     from app.modules.playlists.services import PlaylistService
@@ -135,6 +139,7 @@ def edit_channel(id):
                          current_memberships=current_memberships)
 
 @channels_bp.route('/delete/<int:id>', methods=['POST'])
+@login_required
 def delete_channel(id):
     channel = Channel.query.get_or_404(id)
     db.session.delete(channel)
