@@ -179,6 +179,7 @@ def get_channel_info(id):
             'logo': channel.logo_url,
             'group': channel.group_name or 'Uncategorized',
             'play_url': url_for('channels.play_channel', id=channel.id),
+            'stream_url': channel.stream_url,
             'playlist_id': playlist_id,
             'stream_type': channel.stream_type or 'live'
         }
@@ -226,7 +227,8 @@ def player_playlist_channels(playlist_id):
                 'status': channel.status,
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', id=channel.id)
+                'play_url': url_for('channels.play_channel', id=channel.id),
+                'stream_url': channel.stream_url
             })
     else:
         # Fetch Channels ordered by index for custom playlists
@@ -252,7 +254,8 @@ def player_playlist_channels(playlist_id):
                 'status': channel.status,
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', id=channel.id)
+                'play_url': url_for('channels.play_channel', id=channel.id),
+                'stream_url': channel.stream_url
             })
         
     return jsonify({

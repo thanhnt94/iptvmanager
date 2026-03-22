@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="player-container bg-black overflow-hidden position-relative" style="height: calc(100vh - 56px); margin-top: -32px;">
+<div class="player-container bg-black overflow-hidden position-relative" style="height: calc(100vh - 48px); margin: 0 !important; padding: 0 !important;">
     <!-- Background Blur Effect -->
     <div class="bg-blur position-absolute w-100 h-100" style="background: radial-gradient(circle at 20% 30%, rgba(13, 110, 253, 0.15) 0%, rgba(0,0,0,0) 70%); pointer-events: none;"></div>
 
@@ -49,17 +49,28 @@
             </button>
 
             <!-- Player Container -->
-            <div id="playerArea" class="flex-grow-1 bg-black d-flex flex-column align-items-center justify-content-center">
+            <div id="playerArea" class="position-relative overflow-hidden bg-black transition-all flex-grow-1 d-flex flex-column align-items-center justify-content-center">
                 <div id="videoContainer" class="w-100 h-100 position-relative d-none">
-                    <video id="video" class="w-100 h-100" controls crossorigin playsinline style="object-fit: contain;"></video>
+                    <video id="video" class="w-100 h-100" playsinline style="object-fit: contain;"></video>
                     
                     <!-- Custom Top Controls -->
-                    <div id="topControls" class="position-absolute top-0 start-0 w-100 p-2 d-flex justify-content-between align-items-center transition-all opacity-0" style="z-index: 1010; background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);">
-                        <div class="d-flex gap-3">
-                            <button id="customPlayPause" class="btn btn-link text-white p-0 fs-4"><i class="bi bi-pause-fill"></i></button>
-                            <button id="customMute" class="btn btn-link text-white p-0 fs-4"><i class="bi bi-volume-up-fill"></i></button>
+                    <div id="topControls" class="position-absolute top-0 start-0 w-100 p-2 d-flex flex-column transition-all opacity-0" style="z-index: 1010; background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);">
+                        <div class="d-flex justify-content-between align-items-center w-100 mb-1">
+                            <div class="d-flex gap-3">
+                                <button id="customPlayPause" class="btn btn-link text-white p-0 fs-4"><i class="bi bi-pause-fill"></i></button>
+                                <button id="customMute" class="btn btn-link text-white p-0 fs-4"><i class="bi bi-volume-up-fill"></i></button>
+                            </div>
+                            <div id="streamClock" class="text-white small fw-bold opacity-75">LIVE</div>
                         </div>
-                        <div id="streamClock" class="text-white small fw-bold opacity-75">LIVE</div>
+                        
+                        <!-- VOD Seek Bar Integrated at Top -->
+                        <div id="vodControl" class="w-100 d-none opacity-0 transition-all px-2 pb-2" style="pointer-events: none;">
+                            <input type="range" id="seekBar" class="form-range w-100 mb-1 custom-range" value="0" step="0.1" style="pointer-events: auto;">
+                            <div class="d-flex justify-content-between text-white-50 xx-small" style="pointer-events: none;">
+                                <span id="currentTime">00:00</span>
+                                <span id="duration">00:00</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="playbackOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none">
@@ -146,6 +157,13 @@
         pointer-events: auto;
     }
     
+    .custom-range::-webkit-slider-thumb {
+        background: #0d6efd;
+        cursor: pointer;
+    }
+    
+    .xx-small { font-size: 0.65rem; }
+    
     .shadow-inner { box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); }
     
     .transition-all { transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -153,14 +171,14 @@
     .blur-20 { filter: blur(20px); }
     
     @media (max-width: 768px) {
-        .navbar { padding: 4px 0 !important; }
+        .navbar { display: flex !important; padding: 0 !important; margin-bottom: 0 !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
         .navbar-brand { font-size: 1rem !important; }
-        body { overflow: hidden !important; }
+        body { overflow: hidden !important; background-color: #000 !important; }
         .player-container { 
-            height: calc(100vh - 40px) !important; 
-            margin-top: 0 !important; 
-            top: 0 !important;
+            height: 100vh !important;
+            margin: 0 !important;
             padding: 0 !important;
+            top: 0 !important;
         }
         .desktop-only-header { display: none !important; }
         .mobile-sidebar-controls { padding: 4px !important; }
@@ -605,9 +623,33 @@
         } catch (err) { console.error("Check failed:", err); }
     }
 
+    const vodControl = document.getElementById('vodControl');
+    const seekBar = document.getElementById('seekBar');
+    const currentTimeText = document.getElementById('currentTime');
+    const durationText = document.getElementById('duration');
+
+    function formatTime(seconds) {
+        if (!seconds) return "00:00";
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        if (h > 0) return `${h}:${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+        return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+    }
+
     function playStream(url, meta) {
-        if (hls) hls.destroy();
+        if (hls) {
+            hls.destroy();
+            hls = null;
+        }
         currentStreamUrl = url;
+        
+        const realUrl = meta.stream_url || url;
+        const isHls = realUrl.toLowerCase().includes('.m3u8') || realUrl.toLowerCase().includes('m3u8');
+        
+        // Show/Hide VOD controls
+        if (isHls) vodControl.classList.add('d-none');
+        else vodControl.classList.remove('d-none');
         
         // Update URL for sticky refresh
         const newUrl = new URL(window.location.href);
@@ -638,41 +680,49 @@
         // Trigger Real-time Check
         fetchChannelStatus(meta.id);
 
-        if (Hls.isSupported()) {
-            hls = new Hls({
-                maxBufferLength: 30,
-                maxMaxBufferLength: 60,
-                enableWorker: true
-            });
-            hls.loadSource(url);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play().catch(() => {
-                    console.log("Autoplay blocked, user interaction required");
+        if (isHls) {
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 60,
+                    enableWorker: true
                 });
-                overlay.classList.add('d-none');
-                
-                // Hide native controls on mobile to avoid overlap, or at least try to move HUD
-                if (window.innerWidth <= 768) {
-                    video.removeAttribute('controls'); // Disable native controls if custom controls exist
-                }
-                
-                const activeId = document.getElementById('channelInfo').dataset.currentId;
-                updateStatusToLive(activeId);
-            });
-            hls.on(Hls.Events.ERROR, function (event, data) {
-                 if (data.fatal) {
-                     overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE</h5></div>';
-                 }
-            });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => {
+                        customPlayPause.innerHTML = '<i class="bi bi-play-fill"></i>';
+                    });
+                    overlay.classList.add('d-none');
+                    if (window.innerWidth <= 768) video.removeAttribute('controls');
+                    const activeId = document.getElementById('channelInfo').dataset.currentId;
+                    updateStatusToLive(activeId);
+                });
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                     if (data.fatal) {
+                         overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE</h5></div>';
+                     }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.addEventListener('loadedmetadata', () => {
+                    video.play();
+                    overlay.classList.add('d-none');
+                    const activeId = document.getElementById('channelInfo').dataset.currentId;
+                    updateStatusToLive(activeId);
+                });
+            }
+        } else {
+            // NATIVE DIRECT PLAYBACK (For MP4/VOD)
             video.src = url;
-            video.addEventListener('loadedmetadata', () => {
-                video.play();
+            video.load();
+            video.play().then(() => {
                 overlay.classList.add('d-none');
-                
                 const activeId = document.getElementById('channelInfo').dataset.currentId;
                 updateStatusToLive(activeId);
+            }).catch(e => {
+                console.error("Native Playback Error:", e);
+                customPlayPause.innerHTML = '<i class="bi bi-play-fill"></i>';
             });
         }
     }
@@ -709,18 +759,27 @@
         infoBar.classList.remove('hud-hidden');
         infoBar.classList.add('hud-visible');
         topControls.classList.remove('opacity-0');
+        
+        // Show VOD seek bar if active
+        if (!vodControl.classList.contains('d-none')) {
+            vodControl.classList.remove('opacity-0');
+            vodControl.style.pointerEvents = 'auto';
+        }
+        
         clearTimeout(hudTimeout);
         hudTimeout = setTimeout(hideHUD, 2000);
     }
     
     function hideHUD() {
-        if (infoBar.matches(':hover') || topControls.matches(':hover')) {
+        if (infoBar.matches(':hover') || topControls.matches(':hover') || vodControl.matches(':hover')) {
             hudTimeout = setTimeout(hideHUD, 1000);
             return;
         }
         infoBar.classList.remove('hud-visible');
         infoBar.classList.add('hud-hidden');
         topControls.classList.add('opacity-0');
+        vodControl.classList.add('opacity-0');
+        vodControl.style.pointerEvents = 'none';
     }
     
     playerArea.addEventListener('mousemove', showHUD);
@@ -792,6 +851,23 @@
             });
     });
 
+
+    // VOD Seek Bar Events
+    video.addEventListener('timeupdate', () => {
+        if (!video.duration) return;
+        const percent = (video.currentTime / video.duration) * 100;
+        seekBar.value = video.currentTime;
+        currentTimeText.innerText = formatTime(video.currentTime);
+    });
+
+    video.addEventListener('durationchange', () => {
+        seekBar.max = video.duration;
+        durationText.innerText = formatTime(video.duration);
+    });
+
+    seekBar.addEventListener('input', () => {
+        video.currentTime = seekBar.value;
+    });
 
     // Initial Load
     playlistSelector.addEventListener('change', (e) => loadPlaylist(e.target.value, false));
