@@ -62,3 +62,12 @@ class PlaylistService:
             if entry and entry.playlist_id == int(playlist_id):
                 entry.order_index = index
         db.session.commit()
+
+    @staticmethod
+    def update_entry_group(entry_id, group_id):
+        entry = PlaylistEntry.query.get(entry_id)
+        if entry:
+            entry.group_id = group_id
+            db.session.commit()
+            return True
+        return False

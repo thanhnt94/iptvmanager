@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center p-3">
+                <h4 class="mb-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-box-arrow-in-down me-2" viewBox="0 0 16 16">
+                      <path fill-rule="evenodd" d="M3.5 6a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 1 0-1h2A1.5 1.5 0 0 1 14 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5v-8A1.5 1.5 0 0 1 3.5 5h2a.5.5 0 0 1 0 1z"/>
+                      <path fill-rule="evenodd" d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.854 8.146a.5.5 0 1 0-.708.708z"/>
+                    </svg>
+                    Link Grabber - Intelligent Stream Extractor
+                </h4>
+                <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-light">Back to List</a>
+            </div>
+            <div class="card-body p-5">
+                <div class="row g-4 align-items-center">
+                    <div class="col-md-9">
+                        <label for="webUrlInput" class="form-label fw-bold h5 mb-3">Website URL</label>
+                        <input type="url" id="webUrlInput" class="form-control form-control-lg" 
+                               placeholder="Paste a website link here (e.g., https://example.com/live-stream)...">
+                    </div>
+                    <div class="col-md-3 mt-md-5">
+                        <button id="doExtractBtn" type="button" class="btn btn-info btn-lg text-white w-100">Extract Stream</button>
+                    </div>
+                </div>
+
+                <hr class="my-5">
+
+                <div id="extractLoading" class="text-center d-none my-5">
+                    <div class="spinner-border text-info" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <p class="mt-3 h5 text-muted">Analyzing website... This may take up to 30 seconds...</p>
+                </div>
+
+                <div id="playerArea" class="d-none mb-4 animate-fade-in">
+                    <div class="card bg-dark border-0 shadow">
+                        <div class="card-header bg-dark text-white border-secondary d-flex justify-content-between">
+                            <span>Stream Preview</span>
+                            <button class="btn-close btn-close-white" onclick="document.getElementById('playerArea').classList.add('d-none'); document.getElementById('videoPlayer').pause();"></button>
+                        </div>
+                        <div class="card-body p-0">
+                            <video id="videoPlayer" controls class="w-100" style="max-height: 500px;"></video>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="extractResult" class="d-none animate-fade-in">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-success text-white">
+                            Discovered Media Streams (Select the one that works)
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Source</th>
+                                        <th>Direct Stream URL</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="linksTableBody">
+                                    <!-- Dynamic Rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <h6 class="text-uppercase text-muted fw-bold">Supported Platforms</h6>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <span class="badge bg-light text-dark border">Youtube</span>
+                        <span class="badge bg-light text-dark border">Facebook</span>
+                        <span class="badge bg-light text-dark border">Twitch</span>
+                        <span class="badge bg-light text-dark border">TikTok</span>
+                        <span class="badge bg-light text-dark border">Vimeo</span>
+                        <span class="badge bg-light text-dark border">M3U8 Players</span>
+                        <span class="badge bg-light text-dark border">And 3000+ more</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const extractBtn = document.getElementById('doExtractBtn');
+    const extractInput = document.getElementById('webUrlInput');
+    const extractResult = document.getElementById('extractResult');
+    const extractLoading = document.getElementById('extractLoading');
+    const linksTableBody = document.getElementById('linksTableBody');
+    
+    // Player elements
+    const playerArea = document.getElementById('playerArea');
+    const video = document.getElementById('videoPlayer');
+    let hls;
+
+    extractBtn.addEventListener('click', function() {
+        const url = extractInput.value.trim();
+        if (!url) return;
+
+        extractLoading.classList.remove('d-none');
+        extractResult.classList.add('d-none');
+        playerArea.classList.add('d-none');
+        extractBtn.disabled = true;
+        linksTableBody.innerHTML = '';
+
+        fetch("{{ url_for('channels.extract_link') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ url })
+        })
+        .then(r => r.json())
+        .then(data => {
+            extractLoading.classList.add('d-none');
+            extractBtn.disabled = false;
+            if (data.success && data.links.length > 0) {
+                extractResult.classList.remove('d-none');
+                data.links.forEach((link, index) => {
+                    const row = document.createElement('tr');
+                    const isAd = link.source.includes('Ad');
+                    row.innerHTML = `
+                        <td><span class="badge ${isAd ? 'bg-warning text-dark' : 'bg-info'}">${link.source}</span></td>
+                        <td><div class="text-truncate" style="max-width: 400px;" title="${link.url}">${link.url}</div></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary preview-link" data-url="${link.url}">Preview</button>
+                            <button class="btn btn-sm btn-outline-secondary copy-link" data-url="${link.url}">Copy</button>
+                            <button class="btn btn-sm btn-success add-link" data-url="${link.url}">Add</button>
+                        </td>
+                    `;
+                    linksTableBody.appendChild(row);
+                });
+            } else {
+                alert('No media streams found: ' + (data.error || 'Check the URL.'));
+            }
+        })
+        .catch(err => {
+            extractLoading.classList.add('d-none');
+            extractBtn.disabled = false;
+            alert('Error: ' + err);
+        });
+    });
+
+    // Handle table actions
+    linksTableBody.addEventListener('click', function(e) {
+        const url = e.target.getAttribute('data-url');
+        if (!url) return;
+
+        if (e.target.classList.contains('preview-link')) {
+            playStream(url);
+        } else if (e.target.classList.contains('copy-link')) {
+            navigator.clipboard.writeText(url);
+            const originalText = e.target.textContent;
+            e.target.textContent = 'OK!';
+            setTimeout(() => e.target.textContent = originalText, 1500);
+        } else if (e.target.classList.contains('add-link')) {
+            window.location.href = "{{ url_for('channels.add_channel') }}?stream_url=" + encodeURIComponent(url);
+        }
+    });
+
+    function playStream(url) {
+        playerArea.classList.remove('d-none');
+        playerArea.scrollIntoView({ behavior: 'smooth' });
+        
+        if (hls) { hls.destroy(); hls = null; }
+        video.pause();
+        video.src = ""; // Reset
+        
+        // Simple detection: check if it's HLS (.m3u8) or direct video (.mp4, .webm, etc)
+        const isHls = url.toLowerCase().includes('.m3u8');
+        
+        if (isHls) {
+            if (Hls.isSupported()) {
+                hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        alert('HLS playback failed. Technical error: ' + data.type);
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.play();
+            } else {
+                alert('HLS is not supported in this browser.');
+            }
+        } else {
+            // Treat as direct MP4/WebM/etc.
+            video.src = url;
+            video.play().catch(e => {
+                console.error("Native play error:", e);
+                alert('Browser cannot play this format directly. It might be an unsupported format or require a plugin.');
+            });
+        }
+    }
+});
+</script>
+
+<div id="playerArea" class="d-none mb-4 animate-fade-in">
+    <div class="card bg-dark border-0 shadow">
+        <div class="card-header bg-dark text-white border-secondary d-flex justify-content-between">
+            <span>Stream Preview</span>
+            <button class="btn-close btn-close-white" onclick="document.getElementById('playerArea').classList.add('d-none'); document.getElementById('videoPlayer').pause();"></button>
+        </div>
+        <div class="card-body p-0">
+            <video id="videoPlayer" controls class="w-100" style="max-height: 500px;"></video>
+        </div>
+    </div>
+</div>
+
+
+<style>
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+</style>
+{% endblock %}

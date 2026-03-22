@@ -28,7 +28,7 @@
                     
                     <div class="mb-3">
                         <label for="stream_url" class="form-label fw-bold">Stream URL (M3U8 / MP4)</label>
-                        <input type="url" name="stream_url" id="stream_url" class="form-control" placeholder="http://..." value="{{ form_data.stream_url if form_data else '' }}" required>
+                        <input type="url" name="stream_url" id="stream_url" class="form-control" placeholder="http://..." value="{{ form_data.stream_url if form_data else prefill_url }}" required>
                     </div>
 
                     <div class="row mb-3">

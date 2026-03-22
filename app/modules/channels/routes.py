@@ -56,6 +56,7 @@ def index():
 
 @channels_bp.route('/add', methods=['GET', 'POST'])
 def add_channel():
+    prefill_url = request.args.get('stream_url', '')
     if request.method == 'POST':
         name = request.form.get('name')
         stream_url = request.form.get('stream_url')
@@ -69,6 +70,7 @@ def add_channel():
             flash(f'Error: This stream URL already exists in channel "{existing.name}" (ID: {existing.id})', 'danger')
             return render_template('channels/add.html', 
                                    form_data=request.form,
+                                   prefill_url=prefill_url,
                                    distinct_groups=ChannelService.get_distinct_groups())
 
         new_channel = Channel(
@@ -91,6 +93,7 @@ def add_channel():
         return redirect(url_for('channels.index'))
         
     return render_template('channels/add.html', 
+                           prefill_url=prefill_url,
                            distinct_groups=ChannelService.get_distinct_groups())
 
 @channels_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
@@ -148,3 +151,19 @@ def epg_sources():
 def sync_epg(id):
     result = EPGService.sync_epg(id)
     return jsonify(result)
+
+@channels_bp.route('/extractor')
+def extractor_page():
+    return render_template('channels/extractor.html')
+
+@channels_bp.route('/extract_link', methods=['POST'])
+def extract_link():
+    from app.modules.channels.services import ExtractorService
+    data = request.json or {}
+    web_url = data.get('url')
+    if not web_url:
+        return jsonify({'success': False, 'error': 'No URL provided'})
+    
+    result = ExtractorService.extract_direct_url(web_url)
+    return jsonify(result)
+

@@ -103,3 +103,66 @@ class ChannelService:
                 print(f"VLC error: {e}")
                 continue
         return False
+
+class ExtractorService:
+    @staticmethod
+    def extract_direct_url(web_url):
+        """Uses both yt-dlp and regex scraping to find all media links from a webpage."""
+        results = []
+        seen_urls = set()
+
+        # 1. yt-dlp approach
+        cmd = [
+            'yt-dlp', 
+            '--get-url', 
+            '--no-playlist',
+            '--format', 'best', # Or try 'all' if we want many? --get-url --all-formats is slow. 
+                                # Let's stay with the 'best' one first.
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            web_url
+        ]
+        
+        try:
+            import subprocess
+            y_res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if y_res.returncode == 0:
+                for line in y_res.stdout.strip().split('\n'):
+                    u = line.strip()
+                    if u and u not in seen_urls:
+                        results.append({'url': u, 'source': 'yt-dlp', 'type': 'Auto'})
+                        seen_urls.add(u)
+        except Exception as e:
+            print(f"yt-dlp error: {e}")
+
+        # 2. Deep Regex Scraper (very effective for finding multiple streams/ads)
+        try:
+            import requests
+            import re
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            resp = requests.get(web_url, timeout=10, headers=headers)
+            if resp.status_code == 200:
+                html = resp.text
+                # Find all potential m3u8/mp4/ts links
+                patterns = [
+                    r'https?://[^\s\'"<>]+?\.m3u8[^\s\'"<>]*',
+                    r'https?://[^\s\'"<>]+?\.mp4[^\s\'"<>]*',
+                    r'https?://[^\s\'"<>]+?\.ts[^\s\'"<>]*'
+                ]
+                for p in patterns:
+                    found = re.findall(p, html)
+                    for u in found:
+                        u = u.replace('\\/', '/') # Unescape forward slashes if in JSON
+                        if u not in seen_urls:
+                            # Heuristic: links with 'ad' or 'tvc' might be ads, but we show them all
+                            source = 'Scraper'
+                            if any(x in u.lower() for x in ['ad', 'tvc', 'promo']):
+                                source = 'Scraper (Ad?)'
+                            results.append({'url': u, 'source': source, 'type': 'Manual'})
+                            seen_urls.add(u)
+        except Exception as e:
+            print(f"Scraper error: {e}")
+
+        if results:
+            return {'success': True, 'links': results}
+        return {'success': False, 'error': 'No media streams found on this page.'}
+
