@@ -34,3 +34,16 @@ class EPGSource(db.Model):
 
     def __repr__(self):
         return f'<EPGSource {self.name}>'
+
+class EPGData(db.Model):
+    __tablename__ = 'epg_data'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    epg_id = db.Column(db.String(128), nullable=False, index=True)
+    title = db.Column(db.String(512), nullable=False)
+    desc = db.Column(db.Text)
+    start = db.Column(db.DateTime, nullable=False, index=True)
+    stop = db.Column(db.DateTime, nullable=False, index=True)
+    
+    def __repr__(self):
+        return f'<EPGData {self.title} @ {self.start}>'

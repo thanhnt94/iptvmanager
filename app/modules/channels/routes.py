@@ -147,8 +147,30 @@ def epg_sources():
     sources = EPGSource.query.all()
     return render_template('channels/epg_sources.html', sources=sources)
 
+@channels_bp.route('/epg')
+def epg_management():
+    from app.modules.channels.services import EPGService
+    sources = EPGService.get_sources()
+    return render_template('channels/epg.html', sources=sources)
+
+@channels_bp.route('/epg/add', methods=['POST'])
+def add_epg_source():
+    from app.modules.channels.services import EPGService
+    name = request.form.get('name')
+    url = request.form.get('url')
+    if name and url:
+        EPGService.add_source(name, url)
+    return redirect(url_for('channels.epg_management'))
+
+@channels_bp.route('/epg/delete/<int:id>', methods=['POST'])
+def delete_epg_source(id):
+    from app.modules.channels.services import EPGService
+    EPGService.delete_source(id)
+    return redirect(url_for('channels.epg_management'))
+
 @channels_bp.route('/epg/sync/<int:id>', methods=['POST'])
 def sync_epg(id):
+    from app.modules.channels.services import EPGService
     result = EPGService.sync_epg(id)
     return jsonify(result)
 

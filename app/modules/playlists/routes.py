@@ -83,5 +83,24 @@ def publish_m3u8(slug):
         if client_ip not in profile.allowed_ips:
             abort(403, description="IP address not allowed")
 
-    m3u_content = PlaylistService.generate_m3u(profile.id)
+    m3u_url = url_for('playlists.publish_m3u8', slug=slug, token=token, _external=True)
+    xml_url = url_for('playlists.publish_xml', slug=slug, token=token, _external=True)
+    
+    m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url)
     return Response(m3u_content, mimetype='text/plain')
+
+@playlists_bp.route('/publish/<slug>.xml')
+def publish_xml(slug):
+    token = request.args.get('token')
+    profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
+    
+    if profile.security_token and token != profile.security_token:
+        abort(403, description="Invalid security token")
+        
+    if profile.allowed_ips:
+        client_ip = request.remote_addr
+        if client_ip not in profile.allowed_ips:
+            abort(403, description="IP address not allowed")
+
+    xml_content = PlaylistService.generate_xmltv(profile.id)
+    return Response(xml_content, mimetype='text/xml')

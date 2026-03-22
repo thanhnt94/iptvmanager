@@ -7,6 +7,10 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
+    # Initialize Logging
+    from app.core.logging_config import setup_logging
+    setup_logging(app)
+    
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)

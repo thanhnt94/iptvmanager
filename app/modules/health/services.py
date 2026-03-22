@@ -2,8 +2,11 @@ import requests
 import subprocess
 import json
 from datetime import datetime
+import logging
 from app.modules.channels.models import Channel
 from app.core.database import db
+
+logger = logging.getLogger('iptv')
 
 class HealthCheckService:
     @staticmethod
@@ -40,10 +43,18 @@ class HealthCheckService:
                 channel.status = 'die'
                 channel.quality = None
                 channel.latency = None
+                channel.resolution = None
+                channel.audio_codec = None
+                channel.stream_type = 'unknown'
                 
         except Exception as e:
-            print(f"Check error for {channel.name}: {e}")
+            logger.error(f"Check error for {channel.name}: {str(e)}", exc_info=True)
             channel.status = 'die'
+            channel.quality = None
+            channel.latency = None
+            channel.resolution = None
+            channel.audio_codec = None
+            channel.stream_type = 'unknown'
             
         channel.last_checked_at = datetime.utcnow()
         db.session.commit()

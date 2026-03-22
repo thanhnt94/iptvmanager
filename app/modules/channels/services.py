@@ -1,8 +1,14 @@
 import subprocess
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from app.modules.channels.models import Channel, EPGSource
+import os
+import logging
+import requests
+import re
+from app.modules.channels.models import Channel, EPGSource, EPGData
 from app.core.database import db
+
+logger = logging.getLogger('iptv')
 
 class EPGService:
     @staticmethod
@@ -108,6 +114,7 @@ class ExtractorService:
     @staticmethod
     def extract_direct_url(web_url):
         """Uses both yt-dlp and regex scraping to find all media links from a webpage."""
+        logger.info(f"Starting extraction for URL: {web_url}")
         results = []
         seen_urls = set()
 
@@ -129,10 +136,11 @@ class ExtractorService:
                 for line in y_res.stdout.strip().split('\n'):
                     u = line.strip()
                     if u and u not in seen_urls:
+                        logger.debug(f"yt-dlp found: {u}")
                         results.append({'url': u, 'source': 'yt-dlp', 'type': 'Auto'})
                         seen_urls.add(u)
         except Exception as e:
-            print(f"yt-dlp error: {e}")
+            logger.error(f"yt-dlp extraction error for {web_url}: {str(e)}", exc_info=True)
 
         # 2. Deep Regex Scraper (very effective for finding multiple streams/ads)
         try:
@@ -142,6 +150,7 @@ class ExtractorService:
             resp = requests.get(web_url, timeout=10, headers=headers)
             if resp.status_code == 200:
                 html = resp.text
+                logger.debug(f"Scraper fetched {len(html)} bytes from {web_url}")
                 # Find all potential m3u8/mp4/ts links
                 patterns = [
                     r'https?://[^\s\'"<>]+?\.m3u8[^\s\'"<>]*',
@@ -153,16 +162,121 @@ class ExtractorService:
                     for u in found:
                         u = u.replace('\\/', '/') # Unescape forward slashes if in JSON
                         if u not in seen_urls:
-                            # Heuristic: links with 'ad' or 'tvc' might be ads, but we show them all
                             source = 'Scraper'
                             if any(x in u.lower() for x in ['ad', 'tvc', 'promo']):
                                 source = 'Scraper (Ad?)'
+                            logger.info(f"Regex found match: {u} (Source: {source})")
                             results.append({'url': u, 'source': source, 'type': 'Manual'})
                             seen_urls.add(u)
         except Exception as e:
-            print(f"Scraper error: {e}")
+            logger.error(f"Deep Regex Scraper error for {web_url}: {str(e)}", exc_info=True)
 
         if results:
             return {'success': True, 'links': results}
         return {'success': False, 'error': 'No media streams found on this page.'}
+
+class EPGService:
+    @staticmethod
+    def get_sources():
+        from app.modules.channels.models import EPGSource
+        return EPGSource.query.all()
+
+    @staticmethod
+    def add_source(name, url):
+        from app.modules.channels.models import EPGSource
+        from app.core.database import db
+        source = EPGSource(name=name, url=url)
+        db.session.add(source)
+        db.session.commit()
+        return source
+
+    @staticmethod
+    def delete_source(source_id):
+        from app.modules.channels.models import EPGSource
+        from app.core.database import db
+        source = EPGSource.query.get(source_id)
+        if source:
+            db.session.delete(source)
+            db.session.commit()
+            return True
+        return False
+
+    @staticmethod
+    def sync_epg(source_id):
+        from app.modules.channels.models import EPGSource, EPGData
+        from app.core.database import db
+        from datetime import datetime
+        import requests
+        import xml.etree.ElementTree as ET
+
+        source = EPGSource.query.get(source_id)
+        if not source: return {'success': False, 'error': 'Source not found'}
+        
+        logger.info(f"Starting EPG sync for {source.name} from {source.url}")
+        try:
+            resp = requests.get(source.url, timeout=60)
+            if resp.status_code != 200:
+                logger.error(f"EPG Fetch failed for {source.name}: HTTP {resp.status_code}")
+                return {'success': False, 'error': f'HTTP {resp.status_code}'}
+            
+            logger.debug(f"EPG file fetched, size: {len(resp.content)} bytes")
+            # Simple ET parsing
+            # For large files, consider iterparse, but for now this is simpler
+            root = ET.fromstring(resp.content)
+            
+            # Optimization: collect all channel IDs in this file
+            file_channel_ids = set()
+            for ch in root.findall('channel'):
+                cid = ch.get('id')
+                if cid: file_channel_ids.add(cid)
+            
+            logger.info(f"Found {len(file_channel_ids)} channels in XMLTV file.")
+            # Delete old programs for those channels to avoid duplication
+            if file_channel_ids:
+                EPGData.query.filter(EPGData.epg_id.in_(file_channel_ids)).delete(synchronize_session=False)
+            
+            new_programs = []
+            count = 0
+            for prog in root.findall('programme'):
+                epg_id = prog.get('channel')
+                start_str = prog.get('start')
+                stop_str = prog.get('stop')
+                title_node = prog.find('title')
+                
+                if not epg_id or not start_str or not stop_str or title_node is None:
+                    continue
+                
+                new_programs.append(EPGData(
+                    epg_id=epg_id,
+                    title=title_node.text or "No Title",
+                    desc=prog.findtext('desc') or "",
+                    start=EPGService._parse_xmltv_date(start_str),
+                    stop=EPGService._parse_xmltv_date(stop_str)
+                ))
+                count += 1
+                
+                if len(new_programs) >= 1000:
+                    db.session.bulk_save_objects(new_programs)
+                    logger.debug(f"Bulk saved {count} programs...")
+                    new_programs = []
+            
+            if new_programs:
+                db.session.bulk_save_objects(new_programs)
+            
+            source.last_sync_at = datetime.utcnow()
+            db.session.commit()
+            logger.info(f"EPG sync completed for {source.name}. Total programs: {count}")
+            return {'success': True, 'count': count}
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"EPG sync exception for {source.name}: {str(e)}", exc_info=True)
+            return {'success': False, 'error': str(e)}
+
+    @staticmethod
+    def _parse_xmltv_date(date_str):
+        from datetime import datetime
+        # 20231023120000 +0000
+        clean = date_str.split(' ')[0]
+        return datetime.strptime(clean[:14], '%Y%m%d%H%M%S')
 

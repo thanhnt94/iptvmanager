@@ -466,7 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const statusB = data.status === 'live' ? '<span class="badge bg-success">Live</span>' : (data.status === 'die' ? '<span class="badge bg-danger">Die</span>' : '<span class="badge bg-secondary">Unknown</span>');
                     row.querySelector('.status-cell').innerHTML = statusB;
                     
-                    const typeB = data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>');
+                    const typeB = data.status === 'die' ? '-' : (data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>'));
                     row.querySelector('.type-cell').innerHTML = typeB;
                     
                     let qB = '-';

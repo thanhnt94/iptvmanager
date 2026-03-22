@@ -36,13 +36,17 @@ class PlaylistService:
         return entry
 
     @staticmethod
-    def generate_m3u(playlist_id):
+    def generate_m3u(playlist_id, epg_url=None):
         """Generates M3U8 string for a playlist."""
+        from app.modules.playlists.models import PlaylistProfile
         profile = PlaylistProfile.query.get(playlist_id)
         if not profile or not profile.is_active:
             return None
             
-        m3u_lines = ["#EXTM3U"]
+        header = "#EXTM3U"
+        if epg_url:
+            header += f' x-tvg-url="{epg_url}"'
+        m3u_lines = [header]
         
         for entry in profile.entries:
             ch = entry.channel
@@ -54,14 +58,54 @@ class PlaylistService:
             
         return "\n".join(m3u_lines)
 
-    @staticmethod
-    def reorder_entries(playlist_id, entry_ids):
-        """Reorders entries based on a list of IDs from the frontend."""
-        for index, entry_id in enumerate(entry_ids):
-            entry = PlaylistEntry.query.get(entry_id)
-            if entry and entry.playlist_id == int(playlist_id):
-                entry.order_index = index
         db.session.commit()
+
+    @staticmethod
+    def generate_xmltv(playlist_id):
+        """Generates XMLTV content for a playlist's channels."""
+        from app.modules.playlists.models import PlaylistProfile
+        from app.modules.channels.models import EPGData
+        from datetime import datetime, timedelta
+        import xml.etree.ElementTree as ET
+
+        profile = PlaylistProfile.query.get(playlist_id)
+        if not profile: return ""
+
+        root = ET.Element('tv')
+        root.set('generator-info-name', 'IPTV Manager')
+
+        # 1. Add <channel> entries
+        epg_ids = set()
+        for entry in profile.entries:
+            ch = entry.channel
+            if ch.epg_id:
+                epg_ids.add(ch.epg_id)
+                c_node = ET.SubElement(root, 'channel', id=ch.epg_id)
+                ET.SubElement(c_node, 'display-name').text = ch.name
+                if ch.logo_url:
+                    ET.SubElement(c_node, 'icon', src=ch.logo_url)
+
+        # 2. Add <programme> entries (last 24h to next 7 days)
+        if epg_ids:
+            now = datetime.utcnow()
+            start_limit = now - timedelta(days=1)
+            programs = EPGData.query.filter(
+                EPGData.epg_id.in_(epg_ids),
+                EPGData.stop >= start_limit
+            ).order_by(EPGData.start).all()
+
+            for p in programs:
+                p_node = ET.SubElement(root, 'programme', {
+                    'start': p.start.strftime('%Y%m%d%H%M%S +0000'),
+                    'stop': p.stop.strftime('%Y%m%d%H%M%S +0000'),
+                    'channel': p.epg_id
+                })
+                ET.SubElement(p_node, 'title', lang='vi').text = p.title
+                if p.desc:
+                    ET.SubElement(p_node, 'desc', lang='vi').text = p.desc
+
+        # Return as string
+        return ET.tostring(root, encoding='unicode', method='xml')
 
     @staticmethod
     def update_entry_group(entry_id, group_id):
