@@ -3,9 +3,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Absolute path to the IPTV root directory
+basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+instance_path = os.path.join(basedir, 'instance')
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-12345')
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///iptv_manager.db')
+    
+    # Default SQLite database in the instance folder at the project root
+    db_path = os.path.join(instance_path, 'iptv_manager.db')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Celery configuration
