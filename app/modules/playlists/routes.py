@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, Response, abort, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, Response, abort, jsonify, flash
 from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
 from app.modules.playlists.services import PlaylistService
 from app.modules.channels.services import ChannelService
@@ -19,10 +19,24 @@ def create_profile():
     PlaylistService.create_profile(name, slug)
     return redirect(url_for('playlists.index'))
 
+@playlists_bp.route('/delete/<int:id>', methods=['POST'])
+def delete_profile(id):
+    profile = PlaylistProfile.query.get_or_404(id)
+    if profile.is_system:
+        flash('Cannot delete a system-required playlist!')
+        return redirect(url_for('playlists.index'))
+        
+    db.session.delete(profile)
+    db.session.commit()
+    flash('Playlist deleted!')
+    return redirect(url_for('playlists.index'))
+
 @playlists_bp.route('/view/<int:id>')
 def view_playlist(id):
     profile = PlaylistProfile.query.get_or_404(id)
     
+    is_system_playlist = profile.is_system # Flag for system playlists
+
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search')
     group = request.args.get('group')
@@ -70,6 +84,17 @@ def create_group(playlist_id):
     if name:
         PlaylistService.create_group(playlist_id, name)
     return redirect(url_for('playlists.view_playlist', id=playlist_id))
+
+@playlists_bp.route('/group/rename/<int:group_id>', methods=['POST'])
+def rename_group(group_id):
+    data = request.json or {}
+    new_name = data.get('new_name')
+    if not new_name:
+        return jsonify({'status': 'error', 'message': 'New name is required'}), 400
+    
+    if PlaylistService.rename_group(group_id, new_name):
+        return jsonify({'status': 'ok'})
+    return jsonify({'status': 'error', 'message': 'Group not found'}), 404
 
 @playlists_bp.route('/reorder/<int:playlist_id>', methods=['POST'])
 def reorder(playlist_id):

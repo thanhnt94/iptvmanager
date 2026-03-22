@@ -1,34 +1,213 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container bg-white p-4 rounded shadow-sm" style="max-width: 600px;">
-    <h3>Edit Channel: {{ channel.name }}</h3>
+<div class="container bg-white p-4 rounded shadow-sm" style="max-width: 900px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>Edit Channel: {{ channel.name }}</h3>
+        <span class="badge {% if channel.status == 'live' %}bg-success{% else %}bg-danger{% endif %}">{{ channel.status|upper }}</span>
+    </div>
     <hr>
-    <form action="{{ url_for('channels.edit_channel', id=channel.id) }}" method="POST">
-        <div class="mb-3">
-            <label class="form-label">Channel Name</label>
-            <input type="text" name="name" class="form-control" value="{{ channel.name }}" required>
+
+    <div class="row">
+        <!-- Left Column: Form -->
+        <div class="col-md-6 border-end">
+            <form action="{{ url_for('channels.edit_channel', id=channel.id) }}" method="POST" id="editForm">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Channel Name</label>
+                    <input type="text" name="name" class="form-control" value="{{ channel.name }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Stream URL</label>
+                    <input type="text" id="streamUrlInput" name="stream_url" class="form-control" value="{{ channel.stream_url }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Logo URL</label>
+                    <div class="input-group">
+                        <input type="text" id="logoUrlInput" name="logo_url" class="form-control" value="{{ channel.logo_url }}">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Global Group/Category</label>
+                        <input type="text" name="group_name" class="form-control" value="{{ channel.group_name }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">EPG ID</label>
+                        <input type="text" name="epg_id" class="form-control" value="{{ channel.epg_id }}">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Playlist Memberships & Groups</label>
+                    <div class="border rounded bg-light" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th style="width: 40px;"></th>
+                                    <th>Playlist</th>
+                                    <th>Assign to Group</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if all_playlists %}
+                                    {% for playlist in all_playlists %}
+                                    <tr>
+                                        <td class="text-center">
+                                            <input class="form-check-input playlist-check" type="checkbox" name="playlists" value="{{ playlist.id }}" 
+                                                   id="plist-{{ playlist.id }}" {% if playlist.id in current_memberships %}checked{% endif %}>
+                                        </td>
+                                        <td>
+                                            <label class="form-check-label d-block" for="plist-{{ playlist.id }}">
+                                                {{ playlist.name }}
+                                            </label>
+                                        </td>
+                                        <td>
+                                            <select name="group_{{ playlist.id }}" class="form-select form-select-sm group-select" 
+                                                    {% if playlist.id not in current_memberships %}disabled{% endif %}>
+                                                <option value="">-- No Group --</option>
+                                                {% for group in playlist.groups %}
+                                                <option value="{{ group.id }}" {% if current_memberships.get(playlist.id) == group.id %}selected{% endif %}>
+                                                    {{ group.name }}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="3" class="text-center p-3 text-muted">No custom playlists created yet.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{{ url_for('channels.index') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+                </div>
+            </form>
         </div>
-        <div class="mb-3">
-            <label class="form-label">Stream URL</label>
-            <input type="text" name="stream_url" class="form-control" value="{{ channel.stream_url }}" required>
+
+        <!-- Right Column: Previews -->
+        <div class="col-md-6">
+            <div class="sticky-top" style="top: 20px;">
+                <h5 class="mb-3">Preview</h5>
+                
+                <!-- Logo Preview -->
+                <div class="mb-4 text-center p-3 border rounded bg-light">
+                    <label class="d-block mb-2 text-muted small fw-bold">LOGO PREVIEW</label>
+                    <img id="logoPreview" src="{{ channel.logo_url }}" class="img-fluid rounded shadow-sm" style="max-height: 120px; min-height: 50px; background: #eee;" onerror="this.src='https://placehold.co/200x120?text=No+Logo'">
+                </div>
+
+                <!-- Video Player -->
+                <div class="border rounded bg-dark overflow-hidden shadow">
+                    <div class="bg-secondary p-2 d-flex justify-content-between align-items-center">
+                        <span class="text-white small fw-bold">LIVE PLAYER (HLS)</span>
+                        <button class="btn btn-xs btn-outline-light py-0 px-2" id="reloadPlayer" style="font-size: 0.7rem;">Reload</button>
+                    </div>
+                    <div class="ratio ratio-16x9">
+                        <video id="videoPlayer" controls></video>
+                    </div>
+                    <div id="playerStatus" class="p-2 text-center text-white-50 small" style="font-size: 0.75rem;">
+                        Initializing player...
+                    </div>
+                </div>
+                
+                <div class="mt-3 alert alert-warning py-2" style="font-size: 0.8rem;">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Player works best with HLS (.m3u8) streams. Direct MP4 links might also work depending on browser.
+                </div>
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label">Logo URL</label>
-            <input type="text" name="logo_url" class="form-control" value="{{ channel.logo_url }}">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Group/Category</label>
-            <input type="text" name="group_name" class="form-control" value="{{ channel.group_name }}">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">EPG ID</label>
-            <input type="text" name="epg_id" class="form-control" value="{{ channel.epg_id }}">
-        </div>
-        <div class="d-flex justify-content-between">
-            <a href="{{ url_for('channels.index') }}" class="btn btn-secondary">Cancel</a>
-            <button type="submit" class="btn btn-success">Update Channel</button>
-        </div>
-    </form>
+    </div>
 </div>
+
+<!-- Load Hls.js -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const streamInput = document.getElementById('streamUrlInput');
+    const logoInput = document.getElementById('logoUrlInput');
+    const logoPreview = document.getElementById('logoPreview');
+    const video = document.getElementById('videoPlayer');
+    const playerStatus = document.getElementById('playerStatus');
+    const reloadBtn = document.getElementById('reloadPlayer');
+    
+    let hls = null;
+
+    // 1. Logo Preview Update (Instant)
+    logoInput.addEventListener('input', function() {
+        logoPreview.src = this.value || 'https://placehold.co/200x120?text=No+Logo';
+    });
+
+    // 2. Video Player Logic with Debounce
+    let streamTimeout = null;
+    function loadStream(url) {
+        if (!url) {
+            playerStatus.textContent = "No stream URL provided.";
+            return;
+        }
+
+        playerStatus.textContent = "Loading stream...";
+        
+        if (Hls.isSupported()) {
+            if (hls) hls.destroy();
+            hls = new Hls();
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                video.play();
+                playerStatus.textContent = "Streaming live...";
+            });
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) {
+                    playerStatus.innerHTML = `<span class="text-danger">Failed to load HLS stream.</span>`;
+                }
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = url;
+            video.addEventListener('loadedmetadata', function() {
+                video.play();
+                playerStatus.textContent = "Streaming live (Native)...";
+            });
+        }
+    }
+
+    // Initial load
+    loadStream(streamInput.value);
+
+    reloadBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        loadStream(streamInput.value);
+    });
+
+    // Debounced real-time update
+    streamInput.addEventListener('input', function() {
+        clearTimeout(streamTimeout);
+        streamTimeout = setTimeout(() => {
+            loadStream(this.value);
+        }, 500); // Wait 500ms after user stops typing
+    });
+
+    // 3. Playlist Checkbox & Group Select Sync
+    const playlistChecks = document.querySelectorAll('.playlist-check');
+    playlistChecks.forEach(check => {
+        check.addEventListener('change', function() {
+            const select = this.closest('tr').querySelector('.group-select');
+            select.disabled = !this.checked;
+            if (!this.checked) select.value = "";
+        });
+    });
+});
+</script>
+
+<style>
+.sticky-top { z-index: 1000; }
+.btn-xs { padding: 0.1rem 0.3rem; font-size: 0.75rem; }
+.group-select:disabled { background-color: #f8f9fa; opacity: 0.6; }
+</style>
 {% endblock %}

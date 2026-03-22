@@ -4,28 +4,43 @@
 <div class="container-fluid px-4">
     <h2>Managing Playlist: {{ profile.name }}</h2>
 
+    {% if profile.is_system %}
+    <div class="alert alert-warning border-warning shadow-sm mb-4">
+        <h5 class="alert-heading"><i class="bi bi-cpu-fill me-2"></i> Automated System Playlist</h5>
+        <p class="mb-0">This playlist is managed by the system. It <strong>automatically includes all channels</strong> that are currently marked as <span class="badge bg-success">LIVE</span>. You don't need to add channels manually.</p>
+    </div>
+    {% endif %}
+
     <!-- Share & Export Section -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card border-primary shadow-sm" style="background-color: #f0f7ff;">
                 <div class="card-body py-2 px-3">
                     <div class="row align-items-center">
-                        <div class="col-md-5 mb-2 mb-md-0">
+                        <div class="col-md-4 mb-2 mb-md-0">
                             <label class="form-label small mb-1 fw-bold text-primary">Playlist URL (M3U8)</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control bg-white" id="shareM3U" value="{{ share_url }}" readonly>
                                 <button class="btn btn-primary" type="button" onclick="copyToClipboard('shareM3U', this)">Copy</button>
                             </div>
                         </div>
-                        <div class="col-md-5 mb-2 mb-md-0">
+                        <div class="col-md-4 mb-2 mb-md-0">
                             <label class="form-label small mb-1 fw-bold text-primary">EPG URL (XMLTV)</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control bg-white" id="shareXML" value="{{ epg_url }}" readonly>
                                 <button class="btn btn-outline-primary" type="button" onclick="copyToClipboard('shareXML', this)">Copy</button>
                             </div>
                         </div>
-                        <div class="col-md-2 text-md-end">
-                            <a href="{{ share_url }}" target="_blank" class="btn btn-sm btn-link text-decoration-none">Test M3U8</a>
+                        <div class="col-md-4 text-md-end">
+                            <div class="d-flex align-items-center justify-content-end gap-2">
+                                <div id="scanStatusContainer" class="d-none text-end">
+                                    <div id="currentChannelInfo" class="text-primary small fw-bold" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+                                    <div id="scanProgressText" class="text-muted small"></div>
+                                </div>
+                                <button id="stopScanBtn" class="btn btn-sm btn-outline-danger d-none">Stop</button>
+                                <button id="scanPlaylistBtn" class="btn btn-sm btn-warning">Scan This Playlist</button>
+                                <a href="{{ share_url }}" target="_blank" class="btn btn-sm btn-link text-decoration-none">Test M3U8</a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -99,10 +114,22 @@
                                 </div>
                                 
                                 <!-- Action Section -->
-                                <div class="ms-2">
-                                    <form action="{{ url_for('playlists.add_channel', playlist_id=profile.id, channel_id=channel.id) }}" method="POST">
+                                <div class="ms-2 d-flex gap-1 align-items-center">
+                                    <button class="btn btn-xs btn-outline-info play-btn py-1 px-2" 
+                                            style="font-size: 0.7rem;"
+                                            data-url="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" 
+                                            data-name="{{ channel.name }}"
+                                            data-id="{{ channel.id }}">Play</button>
+
+                                    {% if not profile.is_system %}
+                                    <form action="{{ url_for('playlists.add_channel', playlist_id=profile.id, channel_id=channel.id) }}" method="POST" class="m-0">
                                         <button type="submit" class="btn btn-sm btn-success py-1 px-2" style="font-size: 0.75rem;">Add</button>
                                     </form>
+                                    {% else %}
+                                        {% if channel.status == 'live' %}
+                                        <span class="badge bg-light text-success border small">Auto-Added</span>
+                                        {% endif %}
+                                    {% endif %}
                                 </div>
                             </div>
                         </li>
@@ -120,7 +147,6 @@
                                 {% endif %}
                                 
                                 <span class="btn btn-xs btn-white disabled border-top border-bottom py-0">P.{{ pagination.page }} / {{ pagination.pages }}</span>
-
                                 {% if pagination.has_next %}
                                 <a href="{{ url_for('playlists.view_playlist', id=profile.id, page=pagination.next_num, search=search, group=group, stream_type=stream_type) }}" class="btn btn-xs btn-outline-secondary py-0">Next »</a>
                                 {% else %}
@@ -151,6 +177,21 @@
 
         <!-- Column: Playlist Channels -->
         <div class="col-md-7">
+            {% if profile.is_system %}
+            <div class="card h-100 shadow-sm border-0 bg-light">
+                <div class="card-body d-flex flex-column justify-content-center align-items-center text-center py-5">
+                    <div class="display-1 text-muted mb-4"><i class="bi bi-robot"></i></div>
+                    <h3 class="text-dark">Auto-Managed Content</h3>
+                    <p class="text-muted lead max-width-100 px-4" style="max-width: 450px;">
+                        The channel list and ordering for this system playlist are determined automatically based on the status of your channels. Only active <span class="text-success fw-bold">Live</span> channels are included.
+                    </p>
+                    <div class="mt-4">
+                        <a href="{{ url_for('channels.index') }}" class="btn btn-primary px-4">Go to Channel Management</a>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <!-- Existing Manual Management UI -->
             <div class="card mb-4">
                 <div class="card-header bg-dark text-white">Manage Groups</div>
                 <div class="card-body">
@@ -159,11 +200,19 @@
                         <button type="submit" class="btn btn-primary">Create Group</button>
                     </form>
                     {% if profile.groups %}
-                    <div class="mt-2">
-                        <strong>Existing Groups:</strong>
-                        {% for g in profile.groups %}
-                        <span class="badge bg-info text-dark">{{ g.name }}</span>
-                        {% endfor %}
+                    <div class="mt-3">
+                        <strong class="text-muted small d-block mb-1">Existing Groups:</strong>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for g in profile.groups %}
+                            <div class="badge bg-info text-dark d-flex align-items-center gap-2 py-2 px-3 shadow-sm" id="group-badge-{{ g.id }}">
+                                <span>{{ g.name }}</span>
+                                <i class="bi bi-pencil-square text-primary rename-group-icon" 
+                                   data-id="{{ g.id }}" 
+                                   data-name="{{ g.name }}"
+                                   title="Rename Group" style="cursor: pointer;"></i>
+                            </div>
+                            {% endfor %}
+                        </div>
                     </div>
                     {% endif %}
                 </div>
@@ -198,11 +247,30 @@
                     </ul>
                 </div>
             </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Player Modal -->
+<div class="modal fade" id="playerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-dark text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="playerTitle">Playing Channel</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="ratio ratio-16x9 bg-black">
+                    <video id="videoPlayer" controls autoplay class="w-100"></video>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 function copyToClipboard(id, btn) {
     const input = document.getElementById(id);
@@ -216,32 +284,139 @@ function copyToClipboard(id, btn) {
         setTimeout(() => {
             btn.innerText = originalText;
             btn.classList.replace('btn-success', 'btn-primary');
-            // If it was outline, it needs more care, but this is fine for now
             if (id === 'shareXML') btn.classList.add('btn-outline-primary'), btn.classList.remove('btn-primary');
         }, 2000);
     });
 }
 
-    const el = document.getElementById('sortable-list');
-    const sortable = Sortable.create(el, {
-        animation: 150,
-        handle: '.text-muted',
-        ghostClass: 'bg-light'
+    const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));
+    const video = document.getElementById('videoPlayer');
+    let hls;
+
+    document.addEventListener('click', function(e) {
+        const playBtn = e.target.closest('.play-btn');
+        if (playBtn) {
+            const url = playBtn.getAttribute('data-url');
+            const name = playBtn.getAttribute('data-name');
+            const chId = playBtn.getAttribute('data-id');
+
+            document.getElementById('playerTitle').textContent = 'Playing: ' + name;
+            
+            const isHls = url.toLowerCase().includes('play/') || url.toLowerCase().includes('.m3u8');
+            
+            if (isHls && Hls.isSupported()) {
+                if (hls) hls.destroy();
+                hls = new Hls();
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
+            } else {
+                if (hls) { hls.destroy(); hls = null; }
+                video.src = url;
+            }
+            playerModal.show();
+
+            // Refresh the row status after a delay since play_channel updates it in DB
+            setTimeout(() => {
+                // For simplified refresh in playlist view, we can reload this page 
+                // or just leave it for now since many rows might be showing.
+            }, 5000);
+        }
     });
 
-    document.getElementById('saveOrder').addEventListener('click', () => {
-        const entryIds = Array.from(el.children).map(li => li.getAttribute('data-id'));
-        
-        fetch("{{ url_for('playlists.reorder', playlist_id=profile.id) }}", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({entry_ids: entryIds})
-        })
-        .then(response => response.json())
+    const scanPlaylistBtn = document.getElementById('scanPlaylistBtn');
+    const stopScanBtn = document.getElementById('stopScanBtn');
+    let pollInterval;
+
+    function updateStatusUI() {
+        fetch("{{ url_for('health_status') }}")
+        .then(r => r.json())
         .then(data => {
-            if(data.status === 'ok') alert('Order saved!');
+            if (data.is_running) {
+                if (scanPlaylistBtn) scanPlaylistBtn.classList.add('d-none');
+                if (stopScanBtn) stopScanBtn.classList.remove('d-none');
+                
+                let percent = 0;
+                if (data.total > 0) percent = Math.round((data.current / data.total) * 100);
+                const progressEl = document.getElementById('scanProgressText');
+                if (progressEl) progressEl.textContent = `${percent}% (${data.current}/${data.total})`;
+                
+                const container = document.getElementById('scanStatusContainer');
+                const info = document.getElementById('currentChannelInfo');
+                if (container && info && data.current_name) {
+                    container.classList.remove('d-none');
+                    info.textContent = `Scanning: ${data.current_name}`;
+                }
+
+                if (!pollInterval) {
+                    pollInterval = setInterval(updateStatusUI, 3000);
+                }
+            } else {
+                if (scanPlaylistBtn) scanPlaylistBtn.classList.remove('d-none');
+                if (stopScanBtn) stopScanBtn.classList.add('d-none');
+                const container = document.getElementById('scanStatusContainer');
+                if (container) container.classList.add('d-none');
+                
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+            }
+        })
+        .catch(err => console.error('Status fetch error:', err));
+    }
+
+    updateStatusUI();
+
+    if (scanPlaylistBtn) {
+        scanPlaylistBtn.addEventListener('click', function() {
+            this.disabled = true;
+            fetch("{{ url_for('check_now') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mode: 'all', playlist_id: "{{ profile.id }}" })
+            })
+            .then(r => r.json())
+            .then(d => {
+                this.disabled = false;
+                updateStatusUI();
+            });
         });
-    });
+    }
+
+    if (stopScanBtn) {
+        stopScanBtn.addEventListener('click', function() {
+            if (confirm('Stop scanning?')) {
+                fetch("{{ url_for('stop_health_check') }}", {method: 'POST'})
+                .then(r => r.json())
+                .then(d => {
+                    updateStatusUI();
+                });
+            }
+        });
+    }
+
+    const el = document.getElementById('sortable-list');
+    if (el) {
+        const sortable = Sortable.create(el, {
+            animation: 150,
+            handle: '.text-muted',
+            ghostClass: 'bg-light'
+        });
+
+        document.getElementById('saveOrder').addEventListener('click', () => {
+            const entryIds = Array.from(el.children).map(li => li.getAttribute('data-id'));
+            
+            fetch("{{ url_for('playlists.reorder', playlist_id=profile.id) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({entry_ids: entryIds})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'ok') alert('Order saved!');
+            });
+        });
+    }
 
     // Group Selection AJAX
     document.querySelectorAll('.group-selector').forEach(select => {
@@ -260,6 +435,33 @@ function copyToClipboard(id, btn) {
                 // Optional: show a small toast or temporary visual feedback
             });
         });
+    });
+
+    // Group Rename Listener (Delegated)
+    document.addEventListener('click', function(e) {
+        const icon = e.target.closest('.rename-group-icon');
+        if (icon) {
+            const groupId = icon.getAttribute('data-id');
+            const currentName = icon.getAttribute('data-name');
+            const newName = prompt("Enter new name for group '" + currentName + "':", currentName);
+            
+            if (newName && newName !== currentName) {
+                fetch(`/playlists/group/rename/${groupId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({new_name: newName})
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        location.reload();
+                    } else {
+                        alert('Error renaming group: ' + (data.message || 'Unknown error'));
+                    }
+                })
+                .catch(err => console.error('Rename error:', err));
+            }
+        }
     });
 </script>
 {% endblock %}

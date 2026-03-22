@@ -1,6 +1,7 @@
 import requests
 import subprocess
 import json
+import time
 from datetime import datetime
 import logging
 from app.modules.channels.models import Channel
@@ -68,8 +69,8 @@ class HealthCheckService:
             '-print_format', 'json', 
             '-show_streams', '-show_format',
             '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            '-probesize', '5000000', 
-            '-analyzeduration', '5000000',
+            '-probesize', '1000000', 
+            '-analyzeduration', '1000000',
             channel.stream_url
         ]
         
@@ -110,6 +111,11 @@ class HealthCheckService:
         'is_running': False,
         'total': 0,
         'current': 0,
+        'current_name': '',
+        'current_id': None,
+        'live_count': 0,
+        'die_count': 0,
+        'unknown_count': 0,
         'stop_requested': False
     }
 
@@ -122,18 +128,35 @@ class HealthCheckService:
         HealthCheckService._scan_state['stop_requested'] = True
 
     @staticmethod
-    def start_background_scan(app, mode='all', days=None):
+    def start_background_scan(app, mode='all', days=None, playlist_id=None):
         """Starts the scanning process in a background thread."""
         if HealthCheckService._scan_state['is_running']:
             return
             
-        def run_scan(app_context, mode, days):
+        def run_scan(app_context, mode, days, playlist_id):
             with app_context:
                 HealthCheckService._scan_state['is_running'] = True
                 HealthCheckService._scan_state['stop_requested'] = False
                 HealthCheckService._scan_state['current'] = 0
                 
+                # Pre-load initial counts
+                from sqlalchemy import func
+                counts = db.session.query(Channel.status, func.count(Channel.id)).group_by(Channel.status).all()
+                counts_dict = dict(counts)
+                HealthCheckService._scan_state['live_count'] = counts_dict.get('live', 0)
+                HealthCheckService._scan_state['die_count'] = counts_dict.get('die', 0)
+                HealthCheckService._scan_state['unknown_count'] = counts_dict.get('unknown', 0)
+                
                 query = Channel.query
+                
+                if playlist_id:
+                    from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
+                    profile = PlaylistProfile.query.get(playlist_id)
+                    if profile and profile.is_system:
+                        # System playlist 'alliptv' means scan ALL channels
+                        pass
+                    else:
+                        query = query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
                 
                 if mode == 'never':
                     query = query.filter(Channel.last_checked_at == None)
@@ -154,13 +177,37 @@ class HealthCheckService:
                 for channel in channels:
                     if HealthCheckService._scan_state['stop_requested']:
                         break
+                    
+                    # Update current channel info for UI
+                    HealthCheckService._scan_state['current_name'] = channel.name
+                    HealthCheckService._scan_state['current_id'] = channel.id
+                    
+                    old_status = channel.status
                     HealthCheckService.check_stream(channel.id)
+                    new_status = channel.status
+                    
+                    # Update counts if status changed
+                    if old_status != new_status:
+                        if old_status in HealthCheckService._scan_state: # e.g. 'live_count'
+                            pass # Need to map status to state key
+                        
+                        # Direct update logic
+                        if old_status == 'unknown': HealthCheckService._scan_state['unknown_count'] -= 1
+                        elif old_status == 'live': HealthCheckService._scan_state['live_count'] -= 1
+                        elif old_status == 'die': HealthCheckService._scan_state['die_count'] -= 1
+                        
+                        if new_status == 'unknown': HealthCheckService._scan_state['unknown_count'] += 1
+                        elif new_status == 'live': HealthCheckService._scan_state['live_count'] += 1
+                        elif new_status == 'die': HealthCheckService._scan_state['die_count'] += 1
+
                     HealthCheckService._scan_state['current'] += 1
+                    # Small delay to prevent RAM spike and CPU high load on ARM devices
+                    time.sleep(1)
                 
                 HealthCheckService._scan_state['is_running'] = False
 
         import threading
-        thread = threading.Thread(target=run_scan, args=(app.app_context(), mode, days))
+        thread = threading.Thread(target=run_scan, args=(app.app_context(), mode, days, playlist_id))
         thread.daemon = True
         thread.start()
 

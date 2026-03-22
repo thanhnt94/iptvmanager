@@ -74,7 +74,32 @@ class ChannelService:
         return sorted([a[0] for a in aud if a[0]])
 
     @staticmethod
+    def create_channel(data):
+        """Creates a new channel with duplicate detection."""
+        stream_url = data.get('stream_url')
+        
+        # Duplicate check
+        existing = Channel.query.filter_by(stream_url=stream_url).first()
+        if existing:
+            return None
+            
+        new_channel = Channel(
+            name=data.get('name'),
+            stream_url=stream_url,
+            logo_url=data.get('logo_url'),
+            epg_id=data.get('epg_id'),
+            group_name=data.get('group_name', 'Manual'),
+            status='unknown',
+            stream_type='unknown'
+        )
+        db.session.add(new_channel)
+        db.session.commit()
+        
+        return new_channel
+
+    @staticmethod
     def update_channel(channel_id, data):
+        """Updates an existing channel."""
         channel = Channel.query.get(channel_id)
         if not channel:
             return None

@@ -10,6 +10,7 @@ class PlaylistProfile(db.Model):
     security_token = db.Column(db.String(128), unique=True)
     allowed_ips = db.Column(db.Text) # Stored as JSON or comma-separated
     is_active = db.Column(db.Boolean, default=True)
+    is_system = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship to entries

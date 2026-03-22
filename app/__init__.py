@@ -37,7 +37,8 @@ def create_app(config_class=Config):
         data = request.json or {}
         mode = data.get('mode', 'all')
         days = data.get('days')
-        HealthCheckService.start_background_scan(app, mode=mode, days=days)
+        playlist_id = data.get('playlist_id')
+        HealthCheckService.start_background_scan(app, mode=mode, days=days, playlist_id=playlist_id)
         return jsonify({"status": "started"})
         
     @app.route('/health/status', methods=['GET'], endpoint='health_status')
@@ -54,5 +55,7 @@ def create_app(config_class=Config):
     # Create tables automatically for development
     with app.app_context():
         db.create_all()
+        from app.modules.playlists.services import PlaylistService
+        PlaylistService.ensure_system_playlist()
         
     return app

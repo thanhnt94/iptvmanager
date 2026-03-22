@@ -12,13 +12,28 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100 shadow-sm">
                 <div class="card-body">
-                    <h5 class="card-title">{{ profile.name }}</h5>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0">{{ profile.name }}</h5>
+                        {% if profile.is_system %}
+                        <span class="badge bg-warning text-dark">System</span>
+                        {% endif %}
+                    </div>
                     <p class="text-muted small">Slug: {{ profile.slug }}</p>
                     <hr>
-                    <p>Channels: {{ profile.entries|length }}</p>
+                    {% if profile.is_system %}
+                    <p class="text-primary small mb-2"><i class="bi bi-info-circle"></i> This list automatically includes all live channels.</p>
+                    {% else %}
+                    <p class="mb-2">Channels: {{ profile.entries|length }}</p>
+                    {% endif %}
                     <div class="d-grid gap-2">
-                        <a href="{{ url_for('playlists.view_playlist', id=profile.id) }}" class="btn btn-outline-primary">Manage Channels</a>
-                        <button class="btn btn-outline-info btn-sm copy-link" data-link="{{ url_for('playlists.publish_m3u8', slug=profile.slug, token=profile.security_token, _external=True) }}">Copy M3U8 Link</button>
+                        <a href="{{ url_for('playlists.view_playlist', id=profile.id) }}" class="btn btn-primary">
+                            {% if profile.is_system %}View & Test{% else %}Manage Channels{% endif %}
+                        </a>
+                        {% if not profile.is_system %}
+                        <form action="{{ url_for('playlists.delete_profile', id=profile.id) }}" method="POST" onsubmit="return confirm('Delete this playlist?')">
+                            <button type="submit" class="btn btn-outline-danger btn-sm w-100">Delete</button>
+                        </form>
+                        {% endif %}
                     </div>
                 </div>
             </div>
