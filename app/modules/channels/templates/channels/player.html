@@ -357,6 +357,7 @@
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/mpegts.js@latest/dist/mpegts.min.js"></script>
 <script>
     const video = document.getElementById('video');
     const sidebar = document.getElementById('sidebar');
@@ -372,6 +373,7 @@
     const overlay = document.getElementById('playbackOverlay');
     
     let hls = null;
+    let mpegtsPlayer = null;
     let allChannels = [];
     let currentPage = 1;
     let isLoading = false;
@@ -642,10 +644,18 @@
     }
 
     function playStream(url, meta) {
+        // Destroy existing players
         if (hls) {
             hls.destroy();
             hls = null;
         }
+        if (mpegtsPlayer) {
+            mpegtsPlayer.destroy();
+            mpegtsPlayer.detachMediaElement();
+            mpegtsPlayer = null;
+        }
+        video.src = ""; // Clear native src
+        
         currentStreamUrl = url;
         
         // Heartbeat Tracking for Stats
@@ -661,10 +671,12 @@
         }, 15000); // Send heartbeat every 15 seconds
         
         const realUrl = meta.stream_url || url;
-        const isHls = realUrl.toLowerCase().includes('.m3u8') || realUrl.toLowerCase().includes('m3u8');
+        const lowUrl = realUrl.toLowerCase();
+        const isHls = lowUrl.includes('.m3u8') || lowUrl.includes('m3u8');
+        const isMpegTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || (meta.stream_type === 'iptv' && !isHls);
         
         // Show/Hide VOD controls
-        if (isHls) vodControl.classList.add('d-none');
+        if (isHls || (isMpegTS && meta.stream_type === 'iptv')) vodControl.classList.add('d-none');
         else vodControl.classList.remove('d-none');
         
         // Update URL for sticky refresh
@@ -716,7 +728,7 @@
                 });
                 hls.on(Hls.Events.ERROR, function (event, data) {
                      if (data.fatal) {
-                         overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE</h5></div>';
+                         overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE (HLS)</h5></div>';
                      }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -728,19 +740,55 @@
                     updateStatusToLive(activeId);
                 });
             }
+        } else if (isMpegTS && mpegts.getFeatureList().mseLivePlayback) {
+            // MPEG-TS PLAYBACK
+            try {
+                mpegtsPlayer = mpegts.createPlayer({
+                    type: 'mse',
+                    isLive: meta.stream_type === 'iptv',
+                    url: url
+                });
+                mpegtsPlayer.attachMediaElement(video);
+                mpegtsPlayer.load();
+                mpegtsPlayer.play().then(() => {
+                    overlay.classList.add('d-none');
+                    const activeId = document.getElementById('channelInfo').dataset.currentId;
+                    updateStatusToLive(activeId);
+                }).catch(e => {
+                    console.warn("MPEG-TS Play failed, trying fallback:", e);
+                    tryNativeFallback(url);
+                });
+                
+                mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
+                    console.error("mpegts error", type, detail, info);
+                    if (mpegtsPlayer) {
+                        mpegtsPlayer.destroy();
+                        mpegtsPlayer = null;
+                        tryNativeFallback(url);
+                    }
+                });
+            } catch (e) {
+                console.error("MPEG-TS Init failed:", e);
+                tryNativeFallback(url);
+            }
         } else {
-            // NATIVE DIRECT PLAYBACK (For MP4/VOD)
-            video.src = url;
-            video.load();
-            video.play().then(() => {
-                overlay.classList.add('d-none');
-                const activeId = document.getElementById('channelInfo').dataset.currentId;
-                updateStatusToLive(activeId);
-            }).catch(e => {
-                console.error("Native Playback Error:", e);
-                customPlayPause.innerHTML = '<i class="bi bi-play-fill"></i>';
-            });
+            tryNativeFallback(url);
         }
+    }
+
+    function tryNativeFallback(url) {
+        // NATIVE DIRECT PLAYBACK (For MP4/VOD or TS fallback)
+        video.src = url;
+        video.load();
+        video.play().then(() => {
+            overlay.classList.add('d-none');
+            const activeId = document.getElementById('channelInfo').dataset.currentId;
+            updateStatusToLive(activeId);
+        }).catch(e => {
+            console.error("Native Playback Error:", e);
+            overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE</h5><p class="small opacity-75">Try "Play with VLC" if this continues.</p></div>';
+            customPlayPause.innerHTML = '<i class="bi bi-play-fill"></i>';
+        });
     }
 
     // Search Logic
