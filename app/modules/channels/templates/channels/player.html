@@ -792,20 +792,24 @@
             }
         }, 15000); // Send heartbeat every 15 seconds
         
-        let realUrl = meta.streamUrl || meta.stream_url || url;
-        const lowUrl = realUrl.toLowerCase();
+        const sourceUrl = meta.stream_url || meta.url || url || '';
+        const lowSourceUrl = sourceUrl.toLowerCase();
         
-        let sType = meta.stream_type || meta.streamType || 'iptv';
+        // Correctly identify stream type
+        let sType = meta.stream_type || meta.streamType || 'live';
+        const isIPTV = sType === 'iptv' || sType === 'live';
+        const isMovieFile = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv'].some(ext => lowSourceUrl.includes(ext));
         
-        // Smart VOD Detection: If it's labeled IPTV but has a movie extension, treat as VOD
-        const movieExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv'];
-        const isMovieFile = movieExtensions.some(ext => lowUrl.includes(ext));
+        if (isIPTV && isMovieFile) sType = 'vod';
+        const isVOD = sType === 'vod';
+
+        // Detection based on ORIGINAL source
+        const isHls = lowSourceUrl.includes('.m3u8');
+        const isMpegTS = lowSourceUrl.includes('.ts') || lowSourceUrl.includes('mpegts') || (isIPTV && !isHls);
+        const isVodMp4 = lowSourceUrl.includes('.mp4') || lowSourceUrl.includes('.mkv');
         
-        if (sType === 'iptv' && isMovieFile) {
-            sType = 'vod';
-        }
-        const isHls = lowUrl.includes('.m3u8') || lowUrl.includes('m3u8');
-        const isMpegTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || (sType === 'iptv' && !isHls);
+        // Playback using PASSED url (can be proxy wrapper /play/123)
+        const playbackUrl = url || sourceUrl;
         
         // Show/Hide VOD controls: ONLY hide for IPTV, ALWAYS show for VOD
         if (sType === 'vod') {
@@ -849,11 +853,16 @@
         const resBadge = document.getElementById('resBadge');
         if (qualityLabel) qualityLabel.innerText = 'CALCULATING...';
         if (resBadge) resBadge.innerText = 'WAIT';
-
         const formatBadge = document.getElementById('formatBadge');
         if (formatBadge) {
-            let extension = realUrl.split('?')[0].split('.').pop().toUpperCase();
-            if (extension.length > 5 || extension.includes('/')) extension = isHls ? 'HLS' : (isMpegTS ? 'TS' : 'LINK');
+            // Use original url from meta if available for better extension detection
+            const detectUrl = meta.stream_url || meta.url || url || playbackUrl;
+            let extension = detectUrl.split('?')[0].split('.').pop().toUpperCase();
+            
+            // Validate extension or use engine detection
+            if (extension.length > 5 || extension.includes('/') || extension === 'PLAY' || !isNaN(extension)) {
+                extension = isHls ? 'HLS' : (isMpegTS ? 'TS' : 'LINK');
+            }
             if (extension === 'M3U8') extension = 'HLS';
             formatBadge.innerText = extension;
             
@@ -889,7 +898,7 @@
                 });
                 hls.attachMedia(video);
                 hls.on(Hls.Events.MEDIA_ATTACHED, function () {
-                    hls.loadSource(realUrl);
+                    hls.loadSource(playbackUrl);
                 });
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     video.play().catch(() => {
@@ -897,27 +906,25 @@
                     });
                     overlay.classList.add('d-none');
                     if (window.innerWidth <= 768) video.removeAttribute('controls');
-                    const activeId = document.getElementById('channelInfo').dataset.currentId;
-                    updateStatusToLive(activeId);
+                    updateStatusToLive(infoBar.dataset.currentId);
                 });
                 hls.on(Hls.Events.ERROR, function (event, data) {
                     if (data.fatal) {
-                        console.warn("HLS fatal error, current status:", infoBar.dataset.status);
+                        console.warn("HLS fatal error, status:", infoBar.dataset.status);
                         // If still checking, just wait for the check to finish or try fallback
                         if (infoBar.dataset.status === 'checking') {
-                             console.log("Still checking, suppressing early HLS error UI.");
+                             console.log("Still checking, skipping early HLS error.");
                         } else {
-                             tryBridgeFallback(realUrl, meta);
+                             tryBridgeFallback(playbackUrl, meta);
                         }
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = realUrl;
+                video.src = playbackUrl;
                 video.addEventListener('loadedmetadata', () => {
                     video.play();
                     overlay.classList.add('d-none');
-                    const activeId = document.getElementById('channelInfo').dataset.currentId;
-                    updateStatusToLive(activeId);
+                    updateStatusToLive(infoBar.dataset.currentId);
                 });
             }
         } else if (isMpegTS && mpegts.getFeatureList().mseLivePlayback) {
@@ -926,7 +933,7 @@
                 mpegtsPlayer = mpegts.createPlayer({
                     type: 'mse',
                     isLive: sType === 'iptv',
-                    url: realUrl,
+                    url: playbackUrl,
                     enableWorker: true,
                     enableStashBuffer: true,
                     stashInitialSize: 128 * 1024, // 128KB initial buffer
@@ -939,27 +946,26 @@
                 mpegtsPlayer.load();
                 mpegtsPlayer.play().then(() => {
                     overlay.classList.add('d-none');
-                    const activeId = document.getElementById('channelInfo').dataset.currentId;
-                    updateStatusToLive(activeId);
+                    updateStatusToLive(infoBar.dataset.currentId);
                 }).catch(e => {
                     console.warn("MPEG-TS Play failed, trying fallback:", e);
-                    tryNativeFallback(realUrl);
+                    tryNativeFallback(playbackUrl, meta);
                 });
                 
                 mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
-                    console.warn("mpegts error, current status:", infoBar.dataset.status);
+                    console.warn("mpegts error, status:", infoBar.dataset.status);
                     if (infoBar.dataset.status === 'checking') {
-                         console.log("Still checking, suppressing early MPEG-TS error UI.");
+                         console.log("Still checking, skipping early TS error.");
                     } else {
-                         tryBridgeFallback(realUrl, meta);
+                         tryBridgeFallback(playbackUrl, meta);
                     }
                 });
             } catch (e) {
                 console.error("MPEG-TS Init failed:", e);
-                tryNativeFallback(realUrl);
+                tryNativeFallback(playbackUrl, meta);
             }
         } else {
-            tryNativeFallback(realUrl);
+            tryNativeFallback(playbackUrl, meta);
         }
     }
 
@@ -1002,31 +1008,27 @@
         console.log("Activating Auto-Bridge (Proxy) Fallback for link...");
         const bridgeUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}`;
         
-        // Show specific feedback
         overlay.innerHTML = '<div class="spinner-border text-info" role="status"></div><div class="mt-3 fw-bold text-white letter-spacing-1">ACTIVATING BRIDGE...</div>';
         
-        // Re-run playStream with the bridged URL but keep the meta
-        // We use a small timeout to let previous players fully die
         setTimeout(() => {
-            // We use a modified version of playStream that doesn't reset fallbackTriggered
-            // or we just call the internals. For simplicity, let's just use the proxy URL.
             currentStreamUrl = bridgeUrl;
-            
-            // Re-detect types for the proxied URL
             const isHls = url.toLowerCase().includes('m3u8');
-            if (isHls) {
-                if (Hls.isSupported()) {
-                    if (hls) hls.destroy();
-                    hls = new Hls();
-                    hls.attachMedia(video);
-                    hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(bridgeUrl));
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
-                } else {
-                    video.src = bridgeUrl;
-                    video.play().catch(()=>{});
-                }
+            const isTS = url.toLowerCase().includes('.ts') || url.toLowerCase().includes('mpegts');
+
+            if (isHls && Hls.isSupported()) {
+                if (hls) hls.destroy();
+                hls = new Hls();
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(bridgeUrl));
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+                hls.on(Hls.Events.ERROR, (e, d) => { if(d.fatal) tryNativeFallback(bridgeUrl, meta); });
+            } else if (isTS && mpegts.getFeatureList().mseLivePlayback) {
+                if (mpegtsPlayer) mpegtsPlayer.destroy();
+                mpegtsPlayer = mpegts.createPlayer({ type: 'mse', isLive: true, url: bridgeUrl });
+                mpegtsPlayer.attachMediaElement(video);
+                mpegtsPlayer.load();
+                mpegtsPlayer.play().then(() => overlay.classList.add('d-none')).catch(() => tryNativeFallback(bridgeUrl, meta));
             } else {
-                // Direct or MPEG-TS
                 video.src = bridgeUrl;
                 video.load();
                 video.play().then(() => overlay.classList.add('d-none')).catch(() => {
@@ -1234,14 +1236,22 @@
     let stuckTimer = null;
     video.addEventListener('waiting', () => {
         if (stuckTimer) clearTimeout(stuckTimer);
+        const formatBadge = document.getElementById('formatBadge');
+        const isLiveTS = formatBadge && formatBadge.innerText === 'TS' && (!video.duration || video.duration === Infinity);
+
         stuckTimer = setTimeout(() => {
             if (video.paused || video.readyState < 3) { // 3 = HAVE_FUTURE_DATA
-                console.log("Stream stuck, attempting auto-resume...");
-                // Try to nudge the video by jumping 0.1s or just playing
-                if (video.currentTime > 0) video.currentTime += 0.1;
-                video.play().catch(() => {});
+                if (isLiveTS) {
+                    console.log("Live TS stream stuck, performing full REFRESH...");
+                    // A full playStream call will recreate the player and reconnect to the source
+                    playStream(currentStreamUrl, document.getElementById('channelInfo'));
+                } else {
+                    console.log("Stream stuck, attempting auto-resume...");
+                    if (video.currentTime > 0) video.currentTime += 0.1;
+                    video.play().catch(() => {});
+                }
             }
-        }, 5000); // Wait 5s before nudging
+        }, isLiveTS ? 8000 : 5000); // Wait 8s for TS, 5s for others
     });
 
     video.addEventListener('playing', () => {
@@ -1286,14 +1296,15 @@
                     setTimeout(() => {
                         const item = document.querySelector(`.channel-item[data-id="${initialChannelId}"]`);
                         if (item) item.classList.add('active');
-                    }, 500);
-                    return;
+                    }, 800);
+                    return; // EXIT - Do not proceed to fallback!
                 }
             } catch (err) { console.error("Auto-load failed:", err); }
         }
         
+        // No initial ID or fetch failed: load first playlist and auto-play first channel
         if (playlistSelector.value) {
-            loadPlaylist(playlistSelector.value, true);
+            await loadPlaylist(playlistSelector.value, true);
         }
     }
 
