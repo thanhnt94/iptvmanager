@@ -16,37 +16,31 @@ class HealthCheckService:
         try:
             # Measure latency
             start_time = datetime.utcnow()
-            response = requests.head(channel.stream_url, timeout=5, allow_redirects=True)
-            latency = (datetime.utcnow() - start_time).total_seconds() * 1000
-            
-            if response.status_code < 400:
-                channel.status = 'live'
-                channel.latency = latency
-                # Determine quality based on latency
-                if latency < 500:
-                    channel.quality = 'excellent'
-                elif latency < 1500:
-                    channel.quality = 'good'
-                else:
-                    channel.quality = 'poor'
-                
-                # Tech specs
-                HealthCheckService._update_stream_specs(channel)
-            else:
-                # Fallback to GET for deeper check
-                start_time = datetime.utcnow()
-                response = requests.get(channel.stream_url, timeout=5, stream=True)
+            # Try a quick HEAD first to see if it pings
+            try:
+                response = requests.head(channel.stream_url, timeout=5, allow_redirects=True)
                 latency = (datetime.utcnow() - start_time).total_seconds() * 1000
+                ping_ok = response.status_code < 400
+            except:
+                ping_ok = False
+                latency = None
+
+            if ping_ok:
+                channel.latency = latency
+                if latency < 500: channel.quality = 'excellent'
+                elif latency < 1500: channel.quality = 'good'
+                else: channel.quality = 'poor'
+            
+            # Use ffprobe as the source of truth for "Live" (must have actual media)
+            success = HealthCheckService._update_stream_specs(channel)
+            
+            if success:
+                channel.status = 'live'
+            else:
+                channel.status = 'die'
+                channel.quality = None
+                channel.latency = None
                 
-                if response.status_code < 400:
-                    channel.status = 'live'
-                    channel.latency = latency
-                    channel.quality = 'good' # Fallback usually means slower
-                    HealthCheckService._update_stream_specs(channel)
-                else:
-                    channel.status = 'die'
-                    channel.quality = None
-                    channel.latency = None
         except Exception as e:
             print(f"Check error for {channel.name}: {e}")
             channel.status = 'die'
@@ -56,7 +50,8 @@ class HealthCheckService:
 
     @staticmethod
     def _update_stream_specs(channel):
-        """Uses ffprobe to extract resolution, audio info, and detect VOD vs LIVE."""
+        """Uses ffprobe to extract resolution, audio info, and detect VOD vs LIVE.
+        Returns True if at least one stream is found, False otherwise."""
         cmd = [
             'ffprobe', '-v', 'quiet', 
             '-print_format', 'json', 
@@ -71,6 +66,9 @@ class HealthCheckService:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
             if result.returncode == 0:
                 data = json.loads(result.stdout)
+                streams = data.get('streams', [])
+                if not streams:
+                    return False
                 
                 # Check Duration for VOD vs LIVE
                 format_info = data.get('format', {})
@@ -83,7 +81,7 @@ class HealthCheckService:
                 except:
                     channel.stream_type = 'live'
 
-                for stream in data.get('streams', []):
+                for stream in streams:
                     if stream.get('codec_type') == 'video':
                         w = stream.get('width')
                         h = stream.get('height')
@@ -91,8 +89,11 @@ class HealthCheckService:
                             channel.resolution = f"{w}x{h}"
                     elif stream.get('codec_type') == 'audio':
                         channel.audio_codec = stream.get('codec_name', '').upper()
+                return True
+            return False
         except Exception as e:
             print(f"FFprobe specs error for {channel.name}: {e}")
+            return False
 
     _scan_state = {
         'is_running': False,
