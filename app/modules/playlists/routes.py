@@ -133,16 +133,27 @@ def publish_m3u8(slug):
 
 @playlists_bp.route('/publish/<slug>.xml')
 def publish_xml(slug):
-    token = request.args.get('token')
     profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
     
-    if profile.security_token and token != profile.security_token:
-        abort(403, description="Invalid security token")
-        
-    if profile.allowed_ips:
-        client_ip = request.remote_addr
-        if client_ip not in profile.allowed_ips:
-            abort(403, description="IP address not allowed")
+    # 1. Check for User API Token
+    token = request.args.get('token')
+    if token:
+        from app.modules.auth.models import User, UserPlaylist
+        user = User.query.filter_by(api_token=token).first()
+        if user:
+            if user.role == 'admin':
+                return Response(PlaylistService.generate_xml(profile.id), mimetype='text/xml')
+            
+            access = UserPlaylist.query.filter_by(user_id=user.id, playlist_id=profile.id).first()
+            if access:
+                return Response(PlaylistService.generate_xml(profile.id), mimetype='text/xml')
+        abort(403)
 
-    xml_content = PlaylistService.generate_xmltv(profile.id)
-    return Response(xml_content, mimetype='text/xml')
+    # 2. Legacy Security Token Check (Fallback)
+    security_token = request.args.get('token') or request.args.get('security_token')
+    if profile.security_token and security_token != profile.security_token:
+        abort(403)
+        
+    from app.modules.channels.services import EPGService
+    epg_content = EPGService.generate_xmltv(profile.id)
+    return Response(epg_content, mimetype='text/xml')

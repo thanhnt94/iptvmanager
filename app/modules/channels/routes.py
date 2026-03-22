@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
-from flask_login import login_required
+from flask_login import login_required, current_user
 import requests
 from app.modules.channels.models import Channel, EPGSource
 from app.modules.channels.services import ChannelService, EPGService
@@ -144,8 +144,111 @@ def delete_channel(id):
     channel = Channel.query.get_or_404(id)
     db.session.delete(channel)
     db.session.commit()
-    flash('Channel deleted!')
+    flash('Channel deleted successfully.', 'success')
     return redirect(url_for('channels.index'))
+
+@channels_bp.route('/web-player')
+@login_required
+def web_player():
+    from app.modules.playlists.models import PlaylistProfile
+    from app.modules.auth.services import AuthService
+    
+    if current_user.role == 'admin':
+        playlists = PlaylistProfile.query.all()
+    else:
+        playlists = AuthService.get_user_playlists(current_user.id)
+        
+    return render_template('channels/player.html', playlists=playlists)
+
+@channels_bp.route('/web-player/channels/<int:playlist_id>')
+@login_required
+def player_playlist_channels(playlist_id):
+    from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
+    from app.modules.auth.models import UserPlaylist
+    
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 100, type=int)
+    group_filter = request.args.get('group')
+    offset = (page - 1) * limit
+    
+    profile = PlaylistProfile.query.get_or_404(playlist_id)
+    
+    # Permission Check
+    if current_user.role != 'admin':
+        access = UserPlaylist.query.filter_by(user_id=current_user.id, playlist_id=playlist_id).first()
+        if not access:
+            return jsonify({'status': 'error', 'message': 'Access denied'}), 403
+            
+    channels_data = []
+    total_count = 0
+
+    if profile.is_system:
+        # For system "All Channels" playlist
+        query = Channel.query
+        if group_filter:
+            query = query.filter(Channel.group_name == group_filter)
+            
+        total_count = query.count()
+        channels = query.order_by(Channel.name).offset(offset).limit(limit).all()
+        for channel in channels:
+            channels_data.append({
+                'id': channel.id,
+                'name': channel.name,
+                'logo': channel.logo_url,
+                'group': channel.group_name or 'Uncategorized',
+                'status': channel.status,
+                'quality': channel.quality or 'N/A',
+                'resolution': channel.resolution or 'SD',
+                'play_url': url_for('channels.play_channel', id=channel.id)
+            })
+    else:
+        # Fetch Channels ordered by index for custom playlists
+        query = db.session.query(PlaylistEntry, Channel, PlaylistGroup.name.label('group_name'))\
+            .join(Channel, PlaylistEntry.channel_id == Channel.id)\
+            .outerjoin(PlaylistGroup, PlaylistEntry.group_id == PlaylistGroup.id)\
+            .filter(PlaylistEntry.playlist_id == playlist_id)
+        
+        if group_filter:
+            query = query.filter(PlaylistGroup.name == group_filter)
+        
+        total_count = query.count()
+        entries = query.order_by(PlaylistEntry.order_index).offset(offset).limit(limit).all()
+            
+        for entry, channel, group_name in entries:
+            channels_data.append({
+                'id': channel.id,
+                'name': channel.name,
+                'logo': channel.logo_url,
+                'group': group_name or 'Uncategorized',
+                'status': channel.status,
+                'quality': channel.quality or 'N/A',
+                'resolution': channel.resolution or 'SD',
+                'play_url': url_for('channels.play_channel', id=channel.id)
+            })
+        
+    return jsonify({
+        'status': 'ok', 
+        'channels': channels_data,
+        'has_more': (offset + limit) < total_count,
+        'page': page,
+        'total': total_count
+    })
+
+@channels_bp.route('/web-player/categories/<int:playlist_id>')
+@login_required
+def player_playlist_categories(playlist_id):
+    from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
+    
+    profile = PlaylistProfile.query.get_or_404(playlist_id)
+    
+    if profile.is_system:
+        categories = db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()
+        categories = [c[0] for c in categories]
+    else:
+        categories = db.session.query(PlaylistGroup.name).filter_by(playlist_id=playlist_id).distinct().all()
+        categories = [c[0] for c in categories]
+        
+    return jsonify({'status': 'ok', 'categories': sorted(categories)})
 
 @channels_bp.route('/check/<int:id>', methods=['POST'])
 def check_channel(id):

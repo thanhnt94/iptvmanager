@@ -17,17 +17,30 @@ class HealthCheckService:
         if not channel:
             return
             
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
         try:
             # Measure latency
             start_time = datetime.utcnow()
-            # Try a quick HEAD first to see if it pings
+            ping_ok = False
+            latency = None
+            
+            # Try a quick HEAD first
             try:
-                response = requests.head(channel.stream_url, timeout=5, allow_redirects=True)
+                response = requests.head(channel.stream_url, timeout=5, headers=headers, allow_redirects=True)
                 latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                 ping_ok = response.status_code < 400
             except:
-                ping_ok = False
-                latency = None
+                # Fallback to a tiny GET
+                try:
+                    response = requests.get(channel.stream_url, timeout=5, headers=headers, stream=True)
+                    latency = (datetime.utcnow() - start_time).total_seconds() * 1000
+                    ping_ok = response.status_code < 400
+                    response.close()
+                except:
+                    ping_ok = False
 
             if ping_ok:
                 channel.latency = latency
@@ -40,6 +53,9 @@ class HealthCheckService:
             
             if success:
                 channel.status = 'live'
+                # Fallback quality if latency check was blocked but stream is live
+                if not channel.quality:
+                    channel.quality = 'excellent'
             else:
                 channel.status = 'die'
                 channel.quality = None

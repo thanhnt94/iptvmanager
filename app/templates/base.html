@@ -25,11 +25,17 @@
                         <a class="nav-link" href="{{ url_for('index') }}">Home</a>
                     </li>
                     {% if current_user.is_authenticated %}
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ingestion.import_channels') }}">Import</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.index') }}">Channels</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.extractor_page') }}">Link Grabber</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('playlists.index') }}">Playlists</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.epg_management') }}">EPG</a></li>
+                        <li class="nav-item"><a class="nav-link fw-bold text-warning" href="{{ url_for('channels.web_player') }}"><i class="bi bi-play-circle-fill me-1"></i>Web Player</a></li>
+                        {% if current_user.role == 'admin' %}
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('ingestion.import_channels') }}">Import</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.index') }}">Channels</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.extractor_page') }}">Link Grabber</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('playlists.index') }}">Playlists</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.epg_management') }}">EPG</a></li>
+                        <li class="nav-item"><a class="nav-link fw-bold text-info" href="{{ url_for('auth.admin_users') }}"><i class="bi bi-people-fill me-1"></i>Users</a></li>
+                        {% else %}
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.dashboard') }}">Dashboard</a></li>
+                        {% endif %}
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav ms-auto">
