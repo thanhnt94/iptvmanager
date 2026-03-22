@@ -119,6 +119,12 @@ def check_channel(id):
     flash('Channel check completed!')
     return redirect(url_for('channels.index'))
 
+@channels_bp.route('/play_vlc/<int:id>', methods=['POST'])
+def play_vlc(id):
+    channel = Channel.query.get_or_404(id)
+    success = ChannelService.play_with_vlc(channel.stream_url)
+    return jsonify({'success': success})
+
 @channels_bp.route('/epg/sources')
 def epg_sources():
     sources = EPGSource.query.all()

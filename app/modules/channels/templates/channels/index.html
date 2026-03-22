@@ -150,7 +150,10 @@
                                     </small>
                                 </td>
                                 <td>
-                                    <button class="btn btn-sm btn-info play-btn" data-url="{{ channel.stream_url }}" data-name="{{ channel.name }}">Play</button>
+                                    <button class="btn btn-sm btn-info play-btn" 
+                                            data-url="{{ channel.stream_url }}" 
+                                            data-name="{{ channel.name }}"
+                                            data-id="{{ channel.id }}">Play</button>
                                     <button type="button" class="btn btn-sm btn-outline-success ajax-check-btn" 
                                             data-id="{{ channel.id }}" 
                                             data-url="{{ url_for('channels.check_channel', id=channel.id) }}">Check</button>
@@ -229,9 +232,12 @@
 <div class="modal fade" id="playerModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content bg-dark text-white">
-      <div class="modal-header border-0">
+      <div class="modal-header border-0 d-flex justify-content-between">
         <h5 class="modal-title" id="playerTitle">Player</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <div>
+            <button id="vlcBtn" class="btn btn-sm btn-outline-warning me-2">Play with VLC</button>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
       </div>
       <div class="modal-body p-0">
         <video id="videoPlayer" controls class="w-100" style="max-height: 500px;"></video>
@@ -359,12 +365,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const video = document.getElementById('videoPlayer');
     let hls;
 
+    let currentChannelId = null;
+
     // Use Event Delegation for Buttons
     document.addEventListener('click', function(e) {
         const playBtn = e.target.closest('.play-btn');
         if (playBtn) {
             const url = playBtn.getAttribute('data-url');
             const name = playBtn.getAttribute('data-name');
+            // Find the ID from the row or add it to the button? 
+            // Better to add data-id to the play button in the template.
+            currentChannelId = playBtn.getAttribute('data-id'); 
+            
             document.getElementById('playerTitle').textContent = 'Playing: ' + name;
             
             if (Hls.isSupported()) {
@@ -423,6 +435,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 checkBtn.innerHTML = originalText;
             });
         }
+    });
+
+    document.getElementById('vlcBtn').addEventListener('click', function() {
+        if (!currentChannelId) return;
+        const btn = this;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        
+        fetch(`/channels/play_vlc/${currentChannelId}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Optionally show a small toast or just close the modal?
+                // For now, just keep modal open but change button color
+                btn.classList.replace('btn-outline-warning', 'btn-success');
+                setTimeout(() => btn.classList.replace('btn-success', 'btn-outline-warning'), 2000);
+            } else {
+                alert('Could not launch VLC. Please make sure it is installed.');
+            }
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
     });
 
     document.getElementById('playerModal').addEventListener('hidden.bs.modal', function () {

@@ -1,4 +1,4 @@
-import requests
+import subprocess
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from app.modules.channels.models import Channel, EPGSource
@@ -61,3 +61,25 @@ class ChannelService:
         
         db.session.commit()
         return channel
+
+    @staticmethod
+    def play_with_vlc(url):
+        """Attempts to open the URL in VLC on a Windows system."""
+        # Common VLC installation paths on Windows
+        vlc_paths = [
+            'vlc', 
+            r'C:\Program Files\VideoLAN\VLC\vlc.exe',
+            r'C:\Program Files (x86)\VideoLAN\VLC\vlc.exe'
+        ]
+        
+        for path in vlc_paths:
+            try:
+                # Use Popen with flags to ensure it plays immediately in the same/new instance
+                subprocess.Popen([path, '--one-instance', '--started-from-file', url])
+                return True
+            except FileNotFoundError:
+                continue
+            except Exception as e:
+                print(f"VLC error: {e}")
+                continue
+        return False
