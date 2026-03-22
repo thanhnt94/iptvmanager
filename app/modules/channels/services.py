@@ -27,8 +27,25 @@ class EPGService:
 
 class ChannelService:
     @staticmethod
-    def get_all_channels(page=1, per_page=50):
-        return Channel.query.paginate(page=page, per_page=per_page, error_out=False)
+    def get_all_channels(page=1, per_page=50, search=None, group_filter=None, stream_type_filter=None):
+        query = Channel.query
+        if search:
+            # Try to search by ID if it's a number
+            if search.isdigit():
+                query = query.filter(db.or_(Channel.name.ilike(f'%{search}%'), Channel.id == int(search)))
+            else:
+                query = query.filter(Channel.name.ilike(f'%{search}%'))
+        if group_filter:
+            query = query.filter(Channel.group_name == group_filter)
+        if stream_type_filter:
+            query = query.filter(Channel.stream_type == stream_type_filter)
+        return query.paginate(page=page, per_page=per_page, error_out=False)
+
+    @staticmethod
+    def get_distinct_groups():
+        """Returns a list of all unique group names in the database."""
+        groups = db.session.query(Channel.group_name).distinct().all()
+        return [g[0] for g in groups if g[0]]
 
     @staticmethod
     def update_channel(channel_id, data):

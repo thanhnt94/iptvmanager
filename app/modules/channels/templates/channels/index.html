@@ -5,100 +5,213 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Channel Management</h2>
         <div>
-            <button id="scanStatus" class="btn btn-warning me-2">Scan All Status</button>
+            <button id="scanOptionsBtn" class="btn btn-warning me-2">Scan Status...</button>
+            <button id="scanStatus" class="btn btn-warning me-2 d-none"></button>
             <button id="stopScan" class="btn btn-danger me-2 d-none">Stop Scan</button>
             <a href="{{ url_for('ingestion.import_channels') }}" class="btn btn-primary">Import New Channels</a>
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-body">
-            <table class="table table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>Logo</th>
-                        <th>Name</th>
-                        <th>Group</th>
-                        <th>Specs</th>
-                        <th>Status</th>
-                        <th>Signal</th>
-                        <th>Last Checked</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for channel in pagination.items %}
-                    <tr>
-                        <td>
-                            {% if channel.logo_url %}
-                            <img src="{{ channel.logo_url }}" alt="Logo" style="height: 30px; width: auto;">
-                            {% else %}
-                            <span class="badge bg-secondary">No Logo</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ channel.name }}</td>
-                        <td>{{ channel.group_name }}</td>
-                        <td>
-                            {% if channel.resolution %}
-                            <span class="badge bg-dark text-light" style="font-size: 0.75rem;">{{ channel.resolution }}</span>
-                            {% endif %}
-                            {% if channel.audio_codec %}
-                            <span class="badge bg-secondary" style="font-size: 0.75rem;">{{ channel.audio_codec }}</span>
-                            {% endif %}
-                            {% if not channel.resolution and not channel.audio_codec %}
-                            <small class="text-muted">-</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if channel.status == 'live' %}
-                            <span class="badge bg-success">Live</span>
-                            {% elif channel.status == 'die' %}
-                            <span class="badge bg-danger">Die</span>
-                            {% else %}
-                            <span class="badge bg-warning">Unknown</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if channel.quality == 'excellent' %}
-                            <span class="badge bg-success" title="Latency: {{ channel.latency|round(0) if channel.latency else 0 }}ms">Excellent</span>
-                            {% elif channel.quality == 'good' %}
-                            <span class="badge bg-info" title="Latency: {{ channel.latency|round(1) if channel.latency else 0 }}ms">Good</span>
-                            {% elif channel.quality == 'poor' %}
-                            <span class="badge bg-danger" title="Latency: {{ channel.latency|round(0) if channel.latency else 0 }}ms">Poor</span>
-                            {% else %}
-                            <span class="badge bg-secondary">N/A</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <small class="text-muted">
-                                {{ channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never' }}
-                            </small>
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-info play-btn" data-url="{{ channel.stream_url }}" data-name="{{ channel.name }}">Play</button>
-                            <a href="{{ url_for('channels.edit_channel', id=channel.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
-                            <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure?')">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white text-center p-3">
+                <h5>Total Channels</h5>
+                <h3>{{ stats.total }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white text-center p-3">
+                <h5>Live</h5>
+                <h3>{{ stats.live }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white text-center p-3">
+                <h5>Die</h5>
+                <h3>{{ stats.die }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark text-center p-3">
+                <h5>Unknown</h5>
+                <h3>{{ stats.unknown }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+                    <form method="GET" action="{{ url_for('channels.index') }}" class="row g-3">
+                        <div class="col-md-5">
+                            <input type="text" name="search" class="form-control" placeholder="Search channel name or ID..." value="{{ search or '' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <select name="group" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Groups</option>
+                                {% for g in distinct_groups %}
+                                <option value="{{ g }}" {% if group == g %}selected{% endif %}>{{ g }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="stream_type" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Types</option>
+                                <option value="live" {% if stream_type == 'live' %}selected{% endif %}>Live TV</option>
+                                <option value="vod" {% if stream_type == 'vod' %}selected{% endif %}>VOD</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-secondary w-100">Go</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th style="width: 60px;">Logo</th>
+                                <th>Name</th>
+                                <th>Group</th>
+                                <th>Status</th>
+                                <th>Type</th>
+                                <th>Quality</th>
+                                <th>Resolution</th>
+                                <th>Last Checked</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for channel in channels %}
+                            <tr>
+                                <td>{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
+                                <td>
+                                    {% if channel.logo_url %}
+                                    <img src="{{ channel.logo_url }}" class="img-fluid" style="max-height: 30px;" alt="" loading="lazy">
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="fw-bold">{{ channel.name }}</div>
+                                    <div class="text-muted small">ID: {{ channel.id }}</div>
+                                </td>
+                                <td><span class="badge bg-light text-dark">{{ channel.group_name }}</span></td>
+                                <td>
+                                    {% if channel.status == 'live' %}
+                                    <span class="badge bg-success">Live</span>
+                                    {% elif channel.status == 'die' %}
+                                    <span class="badge bg-danger">Die</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Unknown</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if channel.stream_type == 'vod' %}
+                                    <span class="badge bg-info">VOD</span>
+                                    {% elif channel.stream_type == 'live' %}
+                                    <span class="badge bg-primary">Live TV</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Unknown</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if channel.quality == 'excellent' %}
+                                    <span class="badge bg-success">Excellent</span>
+                                    {% elif channel.quality == 'good' %}
+                                    <span class="badge bg-info">Good</span>
+                                    {% elif channel.quality == 'poor' %}
+                                    <span class="badge bg-danger">Poor</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if channel.resolution %}
+                                    <span class="badge bg-dark text-light" style="font-size: 0.75rem;">{{ channel.resolution }}</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never' }}
+                                    </small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-info play-btn" data-url="{{ channel.stream_url }}" data-name="{{ channel.name }}">Play</button>
+                                    <form action="{{ url_for('channels.check_channel', id=channel.id) }}" method="POST" style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">Check</button>
+                                    </form>
+                                    <a href="{{ url_for('channels.edit_channel', id=channel.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                                    <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure?')">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
                 </tbody>
             </table>
             
-            <nav aria-label="Page navigation" class="mt-4">
-                <ul class="pagination justify-content-center">
-                    {% for page in pagination.iter_pages() %}
-                        {% if page %}
-                            <li class="page-item {% if page == pagination.page %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('channels.index', page=page) }}">{{ page }}</a>
-                            </li>
+            <div class="mt-4 pb-4">
+                <nav aria-label="Page navigation">
+                    <ul class="pagination justify-content-center align-items-center gap-2">
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.prev_num, search=search, group=group, stream_type=stream_type) }}">&laquo; Previous</a>
+                        </li>
                         {% else %}
-                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        <li class="page-item disabled">
+                            <span class="page-link rounded-pill px-3">&laquo; Previous</span>
+                        </li>
                         {% endif %}
-                    {% endfor %}
-                </ul>
-            </nav>
+
+                        <div class="d-none d-md-flex gap-1">
+                            {% for page in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                                {% if page %}
+                                    <li class="page-item {% if page == pagination.page %}active{% endif %}">
+                                        <a class="page-link rounded" href="{{ url_for('channels.index', page=page, search=search, group=group, stream_type=stream_type) }}">{{ page }}</a>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link border-0">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.next_num, search=search, group=group, stream_type=stream_type) }}">Next &raquo;</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link rounded-pill px-3">Next &raquo;</span>
+                        </li>
+                        {% endif %}
+
+                        <div class="ms-3 d-flex align-items-center gap-2">
+                            <span class="text-muted small">Go to:</span>
+                            <div class="input-group input-group-sm" style="width: 100px;">
+                                <input type="number" id="jumpPage" class="form-control text-center" value="{{ pagination.page }}" min="1" max="{{ pagination.pages }}">
+                                <button class="btn btn-primary" type="button" onclick="jumpToPage()">Go</button>
+                            </div>
+                        </div>
+                    </ul>
+                </nav>
+            </div>
+
+            <script>
+                function jumpToPage() {
+                    const pageNum = parseInt(document.getElementById('jumpPage').value);
+                    const totalPages = parseInt("{{ pagination.pages }}");
+                    if (pageNum >= 1 && pageNum <= totalPages) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('page', pageNum);
+                        window.location.href = url.toString();
+                    }
+                }
+            </script>
         </div>
     </div>
 </div>
@@ -118,59 +231,119 @@
   </div>
 </div>
 
+<!-- Scan Options Modal -->
+<div class="modal fade" id="scanModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Scan Options</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">What to scan?</label>
+          <select id="scanMode" class="form-select">
+            <option value="all">Scan All Channels</option>
+            <option value="never">Scan Never Checked Only</option>
+            <option value="die">Scan Die Channels Only</option>
+            <option value="outdated">Scan Outdated Channels</option>
+          </select>
+        </div>
+        <div id="daysFilter" class="mb-3 d-none">
+          <label class="form-label">Not checked since?</label>
+          <select id="scanDays" class="form-select">
+            <option value="365">1 Year</option>
+            <option value="180">6 Months</option>
+            <option value="90">3 Months</option>
+            <option value="30">1 Month</option>
+            <option value="7">1 Week</option>
+            <option value="3">3 Days</option>
+            <option value="1">1 Day</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button id="startScanBtn" type="button" class="btn btn-primary">Start Scan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const scanBtn = document.getElementById('scanStatus');
+    const scanStatusBtn = document.getElementById('scanStatus');
+    const scanOptionsBtn = document.getElementById('scanOptionsBtn');
+    const startScanBtn = document.getElementById('startScanBtn');
     const stopBtn = document.getElementById('stopScan');
+    const scanModal = new bootstrap.Modal(document.getElementById('scanModal'));
     let pollInterval;
 
+    document.getElementById('scanMode').addEventListener('change', function() {
+        document.getElementById('daysFilter').classList.toggle('d-none', this.value !== 'outdated');
+    });
+
     function updateStatusUI() {
-        fetch("/health/status")
+        fetch("{{ url_for('health_status') }}")
         .then(r => r.json())
         .then(data => {
+            console.log('Scan Status:', data);
             if (data.is_running) {
-                scanBtn.disabled = true;
+                scanOptionsBtn.classList.add('d-none');
+                scanStatusBtn.classList.remove('d-none');
+                scanStatusBtn.disabled = true;
                 stopBtn.classList.remove('d-none');
                 let percent = 0;
                 if (data.total > 0) percent = Math.round((data.current / data.total) * 100);
-                scanBtn.textContent = `Scanning... ${percent}% (${data.current}/${data.total})`;
+                scanStatusBtn.textContent = `Scanning... ${percent}% (${data.current}/${data.total})`;
                 
                 if (!pollInterval) {
-                    pollInterval = setInterval(updateStatusUI, 2000);
+                    pollInterval = setInterval(updateStatusUI, 1000); // Poll every second
                 }
             } else {
-                scanBtn.disabled = false;
-                scanBtn.textContent = 'Scan All Status';
+                scanOptionsBtn.classList.remove('d-none');
+                scanStatusBtn.classList.add('d-none');
                 stopBtn.classList.add('d-none');
                 if (pollInterval) {
                     clearInterval(pollInterval);
                     pollInterval = null;
-                    // Auto reload once finished ONLY if we were just running
-                    // alert('Scan Finished!');
-                    // location.reload();
                 }
             }
-        });
+        })
+        .catch(err => console.error('Status fetch error:', err));
     }
 
     // Check status on load
     updateStatusUI();
 
-    scanBtn.addEventListener('click', function() {
-        fetch("{{ url_for('check_now') }}", {method: 'POST'})
+    scanOptionsBtn.addEventListener('click', () => scanModal.show());
+
+    startScanBtn.addEventListener('click', function() {
+        const mode = document.getElementById('scanMode').value;
+        const days = document.getElementById('scanDays').value;
+        
+        fetch("{{ url_for('check_now') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ mode, days })
+        })
         .then(r => r.json())
         .then(d => {
+            scanModal.hide();
+            console.log('Scan started:', d);
             updateStatusUI();
         });
     });
 
     stopBtn.addEventListener('click', function() {
-        fetch("/health/stop", {method: 'POST'})
-        .then(r => r.json())
-        .then(d => {
-            alert('Stopping scan...');
-        });
+        if (confirm('Stop all scanning?')) {
+            fetch("{{ url_for('stop_health_check') }}", {method: 'POST'})
+            .then(r => r.json())
+            .then(d => {
+                console.log('Stop requested:', d);
+            });
+        }
     });
 
     const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));

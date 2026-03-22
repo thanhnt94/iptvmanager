@@ -1,5 +1,5 @@
 import secrets
-from app.modules.playlists.models import PlaylistProfile, PlaylistEntry
+from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
 from app.modules.channels.models import Channel
 from app.core.database import db
 
@@ -13,12 +13,24 @@ class PlaylistService:
         return profile
 
     @staticmethod
-    def add_channel_to_playlist(playlist_id, channel_id):
+    def create_group(playlist_id, name):
+        group = PlaylistGroup(playlist_id=playlist_id, name=name)
+        db.session.add(group)
+        db.session.commit()
+        return group
+
+    @staticmethod
+    def add_channel_to_playlist(playlist_id, channel_id, group_id=None):
         # Get max order_index
         max_order = db.session.query(db.func.max(PlaylistEntry.order_index))\
             .filter_by(playlist_id=playlist_id).scalar() or 0
         
-        entry = PlaylistEntry(playlist_id=playlist_id, channel_id=channel_id, order_index=max_order + 1)
+        entry = PlaylistEntry(
+            playlist_id=playlist_id, 
+            channel_id=channel_id, 
+            group_id=group_id,
+            order_index=max_order + 1
+        )
         db.session.add(entry)
         db.session.commit()
         return entry
@@ -32,11 +44,11 @@ class PlaylistService:
             
         m3u_lines = ["#EXTM3U"]
         
-        # Only export 'live' channels or those with unknown status (depending on policy)
-        # For now, export all entries in the profile
         for entry in profile.entries:
             ch = entry.channel
-            extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch.name}'
+            # Use group name from PlaylistGroup if linked, fallback to channel's original group
+            group_name = entry.group.name if entry.group else ch.group_name or ""
+            extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch.name}'
             m3u_lines.append(extinf)
             m3u_lines.append(ch.stream_url)
             

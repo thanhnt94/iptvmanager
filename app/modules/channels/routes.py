@@ -8,8 +8,37 @@ channels_bp = Blueprint('channels', __name__, template_folder='templates')
 @channels_bp.route('/')
 def index():
     page = request.args.get('page', 1, type=int)
-    pagination = ChannelService.get_all_channels(page=page)
-    return render_template('channels/index.html', pagination=pagination)
+    search = request.args.get('search', '')
+    group = request.args.get('group', '')
+    stream_type = request.args.get('stream_type', '')
+    
+    pagination = ChannelService.get_all_channels(
+        page=page, 
+        search=search, 
+        group_filter=group,
+        stream_type_filter=stream_type
+    )
+    
+    # Calculate stats (filtered by search/group if applied, or keep global?)
+    # User said "có bao nhiêu kênh", usually global is better for the header, 
+    # but let's keep it global for now.
+    stats = {
+        'total': Channel.query.count(),
+        'live': Channel.query.filter_by(status='live').count(),
+        'die': Channel.query.filter_by(status='die').count(),
+        'unknown': Channel.query.filter((Channel.status == None) | (Channel.status == 'unknown')).count()
+    }
+    
+    distinct_groups = ChannelService.get_distinct_groups()
+    
+    return render_template('channels/index.html', 
+                           channels=pagination.items, 
+                           pagination=pagination, 
+                           stats=stats, 
+                           distinct_groups=distinct_groups,
+                           search=search,
+                           group=group,
+                           stream_type=stream_type)
 
 @channels_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit_channel(id):
@@ -26,6 +55,13 @@ def delete_channel(id):
     db.session.delete(channel)
     db.session.commit()
     flash('Channel deleted!')
+    return redirect(url_for('channels.index'))
+
+@channels_bp.route('/check/<int:id>', methods=['POST'])
+def check_channel(id):
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.check_stream(id)
+    flash('Channel check completed!')
     return redirect(url_for('channels.index'))
 
 @channels_bp.route('/epg/sources')

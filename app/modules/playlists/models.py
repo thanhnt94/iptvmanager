@@ -14,6 +14,14 @@ class PlaylistProfile(db.Model):
     
     # Relationship to entries
     entries = db.relationship('PlaylistEntry', backref='playlist', cascade='all, delete-orphan', order_by='PlaylistEntry.order_index')
+    groups = db.relationship('PlaylistGroup', backref='playlist', cascade='all, delete-orphan')
+
+class PlaylistGroup(db.Model):
+    __tablename__ = 'playlist_groups'
+    id = db.Column(db.Integer, primary_key=True)
+    playlist_id = db.Column(db.Integer, db.ForeignKey('playlist_profiles.id'), nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    order_index = db.Column(db.Integer, default=0)
 
 class PlaylistEntry(db.Model):
     __tablename__ = 'playlist_entries'
@@ -21,7 +29,10 @@ class PlaylistEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     playlist_id = db.Column(db.Integer, db.ForeignKey('playlist_profiles.id'), nullable=False)
     channel_id = db.Column(db.Integer, db.ForeignKey('channels.id'), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey('playlist_groups.id'))
+    custom_group = db.Column(db.String(255)) # Keep for migration/compatibility
     order_index = db.Column(db.Integer, default=0)
     
-    # Relationship to channel
+    # Relationships
     channel = db.relationship('Channel')
+    group = db.relationship('PlaylistGroup', backref='entries')

@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, Response, abort, jsonify
-from app.modules.playlists.models import PlaylistProfile, PlaylistEntry
+from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
 from app.modules.playlists.services import PlaylistService
+from app.modules.channels.services import ChannelService
 from app.modules.channels.models import Channel
 from app.core.database import db
 
@@ -21,12 +22,43 @@ def create_profile():
 @playlists_bp.route('/view/<int:id>')
 def view_playlist(id):
     profile = PlaylistProfile.query.get_or_404(id)
-    all_channels = Channel.query.all()
-    return render_template('playlists/view.html', profile=profile, all_channels=all_channels)
+    
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search')
+    group = request.args.get('group')
+    stream_type = request.args.get('stream_type')
+    
+    pagination = ChannelService.get_all_channels(page=page, per_page=100, search=search, group_filter=group, stream_type_filter=stream_type)
+    distinct_groups = ChannelService.get_distinct_groups()
+    
+    return render_template('playlists/view.html', 
+                           profile=profile, 
+                           all_channels=pagination.items,
+                           pagination=pagination,
+                           distinct_groups=distinct_groups,
+                           search=search,
+                           group=group,
+                           stream_type=stream_type)
 
 @playlists_bp.route('/add-channel/<int:playlist_id>/<int:channel_id>', methods=['POST'])
 def add_channel(playlist_id, channel_id):
+    # No longer taking group_id from form here as per user request
     PlaylistService.add_channel_to_playlist(playlist_id, channel_id)
+    return redirect(url_for('playlists.view_playlist', id=playlist_id))
+
+@playlists_bp.route('/update-entry-group/<int:entry_id>', methods=['POST'])
+def update_entry_group(entry_id):
+    data = request.json or {}
+    group_id = data.get('group_id')
+    if group_id == "": group_id = None
+    PlaylistService.update_entry_group(entry_id, group_id)
+    return jsonify({'status': 'ok'})
+
+@playlists_bp.route('/create-group/<int:playlist_id>', methods=['POST'])
+def create_group(playlist_id):
+    name = request.form.get('name')
+    if name:
+        PlaylistService.create_group(playlist_id, name)
     return redirect(url_for('playlists.view_playlist', id=playlist_id))
 
 @playlists_bp.route('/reorder/<int:playlist_id>', methods=['POST'])

@@ -5,40 +5,165 @@
     <h2>Managing Playlist: {{ profile.name }}</h2>
     <div class="row mt-4">
         <!-- Sidebar: All Available Channels -->
-        <div class="col-md-4">
+        <div class="col-md-5">
             <div class="card">
-                <div class="card-header bg-dark text-white">Available Channels</div>
-                <div class="card-body p-0" style="max-height: 70vh; overflow-y: auto;">
-                    <ul class="list-group list-group-flush">
+                <div class="card-header bg-dark text-white p-2">
+                    <form action="{{ url_for('playlists.view_playlist', id=profile.id) }}" method="GET" class="d-flex flex-column gap-2">
+                        <div class="d-flex gap-1">
+                            <input type="text" name="search" class="form-control form-control-sm" placeholder="Name or ID..." value="{{ search or '' }}">
+                            <button type="submit" class="btn btn-sm btn-primary">Go</button>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <select name="group" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">All Groups</option>
+                                {% for gname in distinct_groups %}
+                                <option value="{{ gname }}" {% if group == gname %}selected{% endif %}>{{ gname }}</option>
+                                {% endfor %}
+                            </select>
+                            <select name="stream_type" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">All Types</option>
+                                <option value="live" {% if stream_type == 'live' %}selected{% endif %}>LIVE</option>
+                                <option value="vod" {% if stream_type == 'vod' %}selected{% endif %}>VOD</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-body p-0" style="max-height: 65vh; overflow-y: auto;">
+                    <ul id="availableList" class="list-group list-group-flush">
                         {% for channel in all_channels %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ channel.name }}
-                            <form action="{{ url_for('playlists.add_channel', playlist_id=profile.id, channel_id=channel.id) }}" method="POST">
-                                <button type="submit" class="btn btn-sm btn-outline-success">+</button>
-                            </form>
+                        <li class="list-group-item p-2">
+                            <div class="d-flex align-items-center">
+                                <!-- Logo Section -->
+                                <div class="me-2" style="width: 30px; text-align: center;">
+                                    {% if channel.logo_url %}
+                                    <img src="{{ channel.logo_url }}" alt="" style="max-height: 24px; max-width: 100%;">
+                                    {% else %}
+                                    <span class="text-muted" style="font-size: 0.8rem;">📺</span>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Info Section -->
+                                <div class="flex-grow-1 overflow-hidden">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="text-truncate fw-bold" style="max-width: 180px;">{{ channel.name }}</div>
+                                        <span class="badge bg-secondary rounded-pill" style="font-size: 0.65rem;">#{{ channel.id }}</span>
+                                    </div>
+                                    <div class="d-flex gap-1 align-items-center mt-1">
+                                        {% if channel.status == 'live' %}
+                                        <span class="badge bg-success" style="font-size: 0.5rem; padding: 2px 4px;">LIVE</span>
+                                        {% elif channel.status == 'die' %}
+                                        <span class="badge bg-danger" style="font-size: 0.5rem; padding: 2px 4px;">DIE</span>
+                                        {% endif %}
+                                        
+                                        {% if channel.stream_type == 'vod' %}
+                                        <span class="badge bg-info" style="font-size: 0.5rem; padding: 2px 4px;">VOD</span>
+                                        {% elif channel.stream_type == 'live' %}
+                                        <span class="badge bg-primary" style="font-size: 0.5rem; padding: 2px 4px;">LIVE TV</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary" style="font-size: 0.5rem; padding: 2px 4px;">UNKNOWN</span>
+                                        {% endif %}
+                                        
+                                        {% if channel.resolution %}
+                                        <span class="badge border text-dark" style="font-size: 0.5rem; padding: 1px 3px;">{{ channel.resolution }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <!-- Action Section -->
+                                <div class="ms-2">
+                                    <form action="{{ url_for('playlists.add_channel', playlist_id=profile.id, channel_id=channel.id) }}" method="POST">
+                                        <button type="submit" class="btn btn-sm btn-success py-1 px-2" style="font-size: 0.75rem;">Add</button>
+                                    </form>
+                                </div>
+                            </div>
                         </li>
                         {% endfor %}
                     </ul>
                 </div>
+                <div class="card-footer p-2 bg-light border-top">
+                    <div class="d-flex flex-column gap-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="btn-group">
+                                {% if pagination.has_prev %}
+                                <a href="{{ url_for('playlists.view_playlist', id=profile.id, page=pagination.prev_num, search=search, group=group, stream_type=stream_type) }}" class="btn btn-xs btn-outline-secondary py-0">« Prev</a>
+                                {% else %}
+                                <button class="btn btn-xs btn-outline-secondary py-0 disabled">« Prev</button>
+                                {% endif %}
+                                
+                                <span class="btn btn-xs btn-white disabled border-top border-bottom py-0">P.{{ pagination.page }} / {{ pagination.pages }}</span>
+
+                                {% if pagination.has_next %}
+                                <a href="{{ url_for('playlists.view_playlist', id=profile.id, page=pagination.next_num, search=search, group=group, stream_type=stream_type) }}" class="btn btn-xs btn-outline-secondary py-0">Next »</a>
+                                {% else %}
+                                <button class="btn btn-xs btn-outline-secondary py-0 disabled">Next »</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="input-group input-group-sm mx-auto" style="max-width: 140px;">
+                            <input type="number" id="sidebarJumpPage" class="form-control text-center" placeholder="Page..." min="1" max="{{ pagination.pages }}" value="{{ pagination.page }}">
+                            <button class="btn btn-primary px-2" type="button" onclick="sidebarJumpToPage()">Go</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Main Workspace: Ordered Playlist Channels -->
-        <div class="col-md-8">
+        <script>
+            function sidebarJumpToPage() {
+                const pageNum = parseInt(document.getElementById('sidebarJumpPage').value);
+                const totalPages = parseInt("{{ pagination.pages }}");
+                if (pageNum >= 1 && pageNum <= totalPages) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('page', pageNum);
+                    window.location.href = url.toString();
+                }
+            }
+        </script>
+
+        <!-- Column: Playlist Channels -->
+        <div class="col-md-7">
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">Manage Groups</div>
+                <div class="card-body">
+                    <form action="{{ url_for('playlists.create_group', playlist_id=profile.id) }}" method="POST" class="d-flex gap-2">
+                        <input type="text" name="name" class="form-control" placeholder="New Group Name (e.g., Sports, News)" required>
+                        <button type="submit" class="btn btn-primary">Create Group</button>
+                    </form>
+                    {% if profile.groups %}
+                    <div class="mt-2">
+                        <strong>Existing Groups:</strong>
+                        {% for g in profile.groups %}
+                        <span class="badge bg-info text-dark">{{ g.name }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
             <div class="card">
-                <div class="card-header bg-primary text-white d-flex justify-content-between">
-                    <span>Playlist Channels (Drag to Reorder)</span>
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span>Playlist Arrangement (Drag to Reorder)</span>
                     <button id="saveOrder" class="btn btn-sm btn-light">Save Order</button>
                 </div>
-                <div class="card-body p-0">
+                <div class="card-body p-0" style="max-height: 55vh; overflow-y: auto;">
                     <ul id="sortable-list" class="list-group list-group-flush">
                         {% for entry in profile.entries %}
                         <li class="list-group-item d-flex justify-content-between align-items-center" data-id="{{ entry.id }}">
-                            <div class="d-flex align-items-center">
-                                <span class="me-3 text-muted">⠿</span>
-                                <strong>{{ entry.channel.name }}</strong>
+                            <div class="d-flex align-items-center flex-grow-1">
+                                <span class="me-3 text-muted" style="cursor: move;">⠿</span>
+                                <div>
+                                    <strong>{{ entry.channel.name }}</strong>
+                                    <div class="text-muted small">ID: {{ entry.channel_id }}</div>
+                                </div>
                             </div>
-                            <span class="badge bg-info">{{ entry.channel.group_name }}</span>
+                            <div class="text-end" style="width: 150px;">
+                                <select class="form-select form-select-sm group-selector" data-entry-id="{{ entry.id }}">
+                                    <option value="">(Default)</option>
+                                    {% for g in profile.groups %}
+                                    <option value="{{ g.id }}" {% if entry.group_id == g.id %}selected{% endif %}>{{ g.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
                         </li>
                         {% endfor %}
                     </ul>
@@ -53,6 +178,7 @@
     const el = document.getElementById('sortable-list');
     const sortable = Sortable.create(el, {
         animation: 150,
+        handle: '.text-muted',
         ghostClass: 'bg-light'
     });
 
@@ -67,6 +193,25 @@
         .then(response => response.json())
         .then(data => {
             if(data.status === 'ok') alert('Order saved!');
+        });
+    });
+
+    // Group Selection AJAX
+    document.querySelectorAll('.group-selector').forEach(select => {
+        select.addEventListener('change', function() {
+            const entryId = this.getAttribute('data-entry-id');
+            const groupId = this.value;
+            
+            fetch(`/playlists/update-entry-group/${entryId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({group_id: groupId})
+            })
+            .then(r => r.json())
+            .then(d => {
+                console.log('Group updated:', d);
+                // Optional: show a small toast or temporary visual feedback
+            });
         });
     });
 </script>

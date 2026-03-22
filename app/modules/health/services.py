@@ -56,20 +56,33 @@ class HealthCheckService:
 
     @staticmethod
     def _update_stream_specs(channel):
-        """Uses ffprobe to extract resolution and audio info."""
+        """Uses ffprobe to extract resolution, audio info, and detect VOD vs LIVE."""
         cmd = [
             'ffprobe', '-v', 'quiet', 
             '-print_format', 'json', 
-            '-show_streams', 
-            '-select_streams', 'v:0,a:0',
+            '-show_streams', '-show_format',
+            '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            '-probesize', '5000000', 
+            '-analyzeduration', '5000000',
             channel.stream_url
         ]
         
         try:
-            # We must limit the time here as ffprobe can hang on weak streams
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
             if result.returncode == 0:
                 data = json.loads(result.stdout)
+                
+                # Check Duration for VOD vs LIVE
+                format_info = data.get('format', {})
+                duration = format_info.get('duration')
+                try:
+                    if duration and float(duration) > 0:
+                        channel.stream_type = 'vod'
+                    else:
+                        channel.stream_type = 'live'
+                except:
+                    channel.stream_type = 'live'
+
                 for stream in data.get('streams', []):
                     if stream.get('codec_type') == 'video':
                         w = stream.get('width')
@@ -97,20 +110,35 @@ class HealthCheckService:
         HealthCheckService._scan_state['stop_requested'] = True
 
     @staticmethod
-    def start_background_scan(app):
+    def start_background_scan(app, mode='all', days=None):
         """Starts the scanning process in a background thread."""
         if HealthCheckService._scan_state['is_running']:
             return
             
-        def run_scan(app_context):
+        def run_scan(app_context, mode, days):
             with app_context:
                 HealthCheckService._scan_state['is_running'] = True
                 HealthCheckService._scan_state['stop_requested'] = False
                 HealthCheckService._scan_state['current'] = 0
                 
-                channels = Channel.query.all()
+                query = Channel.query
+                
+                if mode == 'never':
+                    query = query.filter(Channel.last_checked_at == None)
+                elif mode == 'die':
+                    query = query.filter(Channel.status == 'die')
+                elif mode == 'outdated' and days:
+                    from datetime import timedelta
+                    threshold = datetime.utcnow() - timedelta(days=int(days))
+                    query = query.filter((Channel.last_checked_at == None) | (Channel.last_checked_at < threshold))
+                
+                channels = query.all()
                 HealthCheckService._scan_state['total'] = len(channels)
                 
+                if not channels:
+                    HealthCheckService._scan_state['is_running'] = False
+                    return
+
                 for channel in channels:
                     if HealthCheckService._scan_state['stop_requested']:
                         break
@@ -120,7 +148,7 @@ class HealthCheckService:
                 HealthCheckService._scan_state['is_running'] = False
 
         import threading
-        thread = threading.Thread(target=run_scan, args=(app.app_context(),))
+        thread = threading.Thread(target=run_scan, args=(app.app_context(), mode, days))
         thread.daemon = True
         thread.start()
 

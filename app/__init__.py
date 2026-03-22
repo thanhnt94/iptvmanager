@@ -30,15 +30,18 @@ def create_app(config_class=Config):
     @app.route('/health/check-now', methods=['POST'])
     def check_now():
         from app.modules.health.services import HealthCheckService
-        HealthCheckService.start_background_scan(app)
+        data = request.json or {}
+        mode = data.get('mode', 'all')
+        days = data.get('days')
+        HealthCheckService.start_background_scan(app, mode=mode, days=days)
         return jsonify({"status": "started"})
         
-    @app.route('/health/status', methods=['GET'])
+    @app.route('/health/status', methods=['GET'], endpoint='health_status')
     def health_status():
         from app.modules.health.services import HealthCheckService
         return jsonify(HealthCheckService.get_status())
         
-    @app.route('/health/stop', methods=['POST'])
+    @app.route('/health/stop', methods=['POST'], endpoint='stop_health_check')
     def stop_health_check():
         from app.modules.health.services import HealthCheckService
         HealthCheckService.stop_scan()
