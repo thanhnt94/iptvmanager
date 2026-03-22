@@ -3,6 +3,35 @@
 {% block content %}
 <div class="container-fluid px-4">
     <h2>Managing Playlist: {{ profile.name }}</h2>
+
+    <!-- Share & Export Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-primary shadow-sm" style="background-color: #f0f7ff;">
+                <div class="card-body py-2 px-3">
+                    <div class="row align-items-center">
+                        <div class="col-md-5 mb-2 mb-md-0">
+                            <label class="form-label small mb-1 fw-bold text-primary">Playlist URL (M3U8)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control bg-white" id="shareM3U" value="{{ share_url }}" readonly>
+                                <button class="btn btn-primary" type="button" onclick="copyToClipboard('shareM3U', this)">Copy</button>
+                            </div>
+                        </div>
+                        <div class="col-md-5 mb-2 mb-md-0">
+                            <label class="form-label small mb-1 fw-bold text-primary">EPG URL (XMLTV)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control bg-white" id="shareXML" value="{{ epg_url }}" readonly>
+                                <button class="btn btn-outline-primary" type="button" onclick="copyToClipboard('shareXML', this)">Copy</button>
+                            </div>
+                        </div>
+                        <div class="col-md-2 text-md-end">
+                            <a href="{{ share_url }}" target="_blank" class="btn btn-sm btn-link text-decoration-none">Test M3U8</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="row mt-4">
         <!-- Sidebar: All Available Channels -->
         <div class="col-md-5">
@@ -175,6 +204,24 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
+function copyToClipboard(id, btn) {
+    const input = document.getElementById(id);
+    input.select();
+    input.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(input.value).then(() => {
+        const originalText = btn.innerText;
+        btn.innerText = 'Copied!';
+        btn.classList.replace('btn-primary', 'btn-success');
+        btn.classList.replace('btn-outline-primary', 'btn-success');
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.classList.replace('btn-success', 'btn-primary');
+            // If it was outline, it needs more care, but this is fine for now
+            if (id === 'shareXML') btn.classList.add('btn-outline-primary'), btn.classList.remove('btn-primary');
+        }, 2000);
+    });
+}
+
     const el = document.getElementById('sortable-list');
     const sortable = Sortable.create(el, {
         animation: 150,

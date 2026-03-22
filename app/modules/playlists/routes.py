@@ -30,6 +30,14 @@ def view_playlist(id):
     
     pagination = ChannelService.get_all_channels(page=page, per_page=100, search=search, group_filter=group, stream_type_filter=stream_type)
     distinct_groups = ChannelService.get_distinct_groups()
+
+    # Generate external shareable links
+    share_url = url_for('playlists.publish_m3u8', slug=profile.slug, _external=True)
+    epg_url = url_for('playlists.publish_xml', slug=profile.slug, _external=True)
+    
+    if profile.security_token:
+        share_url += f"?token={profile.security_token}"
+        epg_url += f"?token={profile.security_token}"
     
     return render_template('playlists/view.html', 
                            profile=profile, 
@@ -38,7 +46,9 @@ def view_playlist(id):
                            distinct_groups=distinct_groups,
                            search=search,
                            group=group,
-                           stream_type=stream_type)
+                           stream_type=stream_type,
+                           share_url=share_url,
+                           epg_url=epg_url)
 
 @playlists_bp.route('/add-channel/<int:playlist_id>/<int:channel_id>', methods=['POST'])
 def add_channel(playlist_id, channel_id):
