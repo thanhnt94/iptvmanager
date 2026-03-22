@@ -1,0 +1,15 @@
+flask
+flask-sqlalchemy
+flask-migrate
+flask-marshmallow
+marshmallow-sqlalchemy
+pandas
+openpyxl
+requests
+m3u8
+celery
+redis
+python-dotenv
+psycopg2-binary
+sqlalchemy-utils
+flask-apscheduler

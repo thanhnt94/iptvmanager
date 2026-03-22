@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Import IPTV Channels</h2>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">Upload M3U8 File</div>
+                <div class="card-body">
+                    <form action="{{ url_for('ingestion.import_channels') }}" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <input type="file" name="m3u8_file" class="form-control" accept=".m3u, .m3u8">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Import File</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">Import from URL</div>
+                <div class="card-body">
+                    <form action="{{ url_for('ingestion.import_channels') }}" method="post">
+                        <div class="mb-3">
+                            <input type="text" name="m3u8_url" class="form-control" placeholder="http://example.com/playlist.m3u8">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Import URL</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">Import from Excel</div>
+                <div class="card-body">
+                    <form action="{{ url_for('ingestion.import_excel') }}" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <input type="file" name="excel_file" class="form-control" accept=".xlsx, .xls">
+                        </div>
+                        <button type="submit" class="btn btn-success">Import Excel</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">Export Database</div>
+                <div class="card-body">
+                    <a href="{{ url_for('ingestion.export_excel') }}" class="btn btn-info">Export to Excel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

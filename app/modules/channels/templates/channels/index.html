@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Channel Management</h2>
+        <div>
+            <button id="scanStatus" class="btn btn-warning me-2">Scan All Status</button>
+            <button id="stopScan" class="btn btn-danger me-2 d-none">Stop Scan</button>
+            <a href="{{ url_for('ingestion.import_channels') }}" class="btn btn-primary">Import New Channels</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Logo</th>
+                        <th>Name</th>
+                        <th>Group</th>
+                        <th>Specs</th>
+                        <th>Status</th>
+                        <th>Signal</th>
+                        <th>Last Checked</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for channel in pagination.items %}
+                    <tr>
+                        <td>
+                            {% if channel.logo_url %}
+                            <img src="{{ channel.logo_url }}" alt="Logo" style="height: 30px; width: auto;">
+                            {% else %}
+                            <span class="badge bg-secondary">No Logo</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ channel.name }}</td>
+                        <td>{{ channel.group_name }}</td>
+                        <td>
+                            {% if channel.resolution %}
+                            <span class="badge bg-dark text-light" style="font-size: 0.75rem;">{{ channel.resolution }}</span>
+                            {% endif %}
+                            {% if channel.audio_codec %}
+                            <span class="badge bg-secondary" style="font-size: 0.75rem;">{{ channel.audio_codec }}</span>
+                            {% endif %}
+                            {% if not channel.resolution and not channel.audio_codec %}
+                            <small class="text-muted">-</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if channel.status == 'live' %}
+                            <span class="badge bg-success">Live</span>
+                            {% elif channel.status == 'die' %}
+                            <span class="badge bg-danger">Die</span>
+                            {% else %}
+                            <span class="badge bg-warning">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if channel.quality == 'excellent' %}
+                            <span class="badge bg-success" title="Latency: {{ channel.latency|round(0) if channel.latency else 0 }}ms">Excellent</span>
+                            {% elif channel.quality == 'good' %}
+                            <span class="badge bg-info" title="Latency: {{ channel.latency|round(1) if channel.latency else 0 }}ms">Good</span>
+                            {% elif channel.quality == 'poor' %}
+                            <span class="badge bg-danger" title="Latency: {{ channel.latency|round(0) if channel.latency else 0 }}ms">Poor</span>
+                            {% else %}
+                            <span class="badge bg-secondary">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                {{ channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never' }}
+                            </small>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-info play-btn" data-url="{{ channel.stream_url }}" data-name="{{ channel.name }}">Play</button>
+                            <a href="{{ url_for('channels.edit_channel', id=channel.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                            <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure?')">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% for page in pagination.iter_pages() %}
+                        {% if page %}
+                            <li class="page-item {% if page == pagination.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('channels.index', page=page) }}">{{ page }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<!-- Player Modal -->
+<div class="modal fade" id="playerModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-0">
+        <h5 class="modal-title" id="playerTitle">Player</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <video id="videoPlayer" controls class="w-100" style="max-height: 500px;"></video>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const scanBtn = document.getElementById('scanStatus');
+    const stopBtn = document.getElementById('stopScan');
+    let pollInterval;
+
+    function updateStatusUI() {
+        fetch("/health/status")
+        .then(r => r.json())
+        .then(data => {
+            if (data.is_running) {
+                scanBtn.disabled = true;
+                stopBtn.classList.remove('d-none');
+                let percent = 0;
+                if (data.total > 0) percent = Math.round((data.current / data.total) * 100);
+                scanBtn.textContent = `Scanning... ${percent}% (${data.current}/${data.total})`;
+                
+                if (!pollInterval) {
+                    pollInterval = setInterval(updateStatusUI, 2000);
+                }
+            } else {
+                scanBtn.disabled = false;
+                scanBtn.textContent = 'Scan All Status';
+                stopBtn.classList.add('d-none');
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                    // Auto reload once finished ONLY if we were just running
+                    // alert('Scan Finished!');
+                    // location.reload();
+                }
+            }
+        });
+    }
+
+    // Check status on load
+    updateStatusUI();
+
+    scanBtn.addEventListener('click', function() {
+        fetch("{{ url_for('check_now') }}", {method: 'POST'})
+        .then(r => r.json())
+        .then(d => {
+            updateStatusUI();
+        });
+    });
+
+    stopBtn.addEventListener('click', function() {
+        fetch("/health/stop", {method: 'POST'})
+        .then(r => r.json())
+        .then(d => {
+            alert('Stopping scan...');
+        });
+    });
+
+    const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));
+    const video = document.getElementById('videoPlayer');
+    let hls;
+
+    // Use Event Delegation for Play Buttons
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.play-btn');
+        if (btn) {
+            const url = btn.getAttribute('data-url');
+            const name = btn.getAttribute('data-name');
+            document.getElementById('playerTitle').textContent = 'Playing: ' + name;
+            
+            console.log('Attempting to play:', url);
+            
+            if (Hls.isSupported()) {
+                if (hls) hls.destroy();
+                hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true
+                });
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+                    hls.loadSource(url);
+                });
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.play().catch(err => {
+                        console.error('Playback failed:', err);
+                        alert('Cannot autoplay. Please click play on the video.');
+                    });
+                });
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        console.error('HLS Fatal Error:', data.type);
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                alert('Fatal error: ' + data.details + '. Stream might be offline или blocked by CORS.');
+                                break;
+                        }
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.play();
+            }
+            playerModal.show();
+        }
+    });
+
+    document.getElementById('playerModal').addEventListener('hidden.bs.modal', function () {
+        video.pause();
+        if (hls) {
+            hls.stopLoad();
+            hls.detachMedia();
+        }
+    });
+});
+</script>
+{% endblock %}

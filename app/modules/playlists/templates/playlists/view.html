@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <h2>Managing Playlist: {{ profile.name }}</h2>
+    <div class="row mt-4">
+        <!-- Sidebar: All Available Channels -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-dark text-white">Available Channels</div>
+                <div class="card-body p-0" style="max-height: 70vh; overflow-y: auto;">
+                    <ul class="list-group list-group-flush">
+                        {% for channel in all_channels %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ channel.name }}
+                            <form action="{{ url_for('playlists.add_channel', playlist_id=profile.id, channel_id=channel.id) }}" method="POST">
+                                <button type="submit" class="btn btn-sm btn-outline-success">+</button>
+                            </form>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace: Ordered Playlist Channels -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white d-flex justify-content-between">
+                    <span>Playlist Channels (Drag to Reorder)</span>
+                    <button id="saveOrder" class="btn btn-sm btn-light">Save Order</button>
+                </div>
+                <div class="card-body p-0">
+                    <ul id="sortable-list" class="list-group list-group-flush">
+                        {% for entry in profile.entries %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center" data-id="{{ entry.id }}">
+                            <div class="d-flex align-items-center">
+                                <span class="me-3 text-muted">⠿</span>
+                                <strong>{{ entry.channel.name }}</strong>
+                            </div>
+                            <span class="badge bg-info">{{ entry.channel.group_name }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+    const el = document.getElementById('sortable-list');
+    const sortable = Sortable.create(el, {
+        animation: 150,
+        ghostClass: 'bg-light'
+    });
+
+    document.getElementById('saveOrder').addEventListener('click', () => {
+        const entryIds = Array.from(el.children).map(li => li.getAttribute('data-id'));
+        
+        fetch("{{ url_for('playlists.reorder', playlist_id=profile.id) }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({entry_ids: entryIds})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'ok') alert('Order saved!');
+        });
+    });
+</script>
+{% endblock %}

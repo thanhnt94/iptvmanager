@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container bg-white p-4 rounded shadow-sm" style="max-width: 600px;">
+    <h3>Edit Channel: {{ channel.name }}</h3>
+    <hr>
+    <form action="{{ url_for('channels.edit_channel', id=channel.id) }}" method="POST">
+        <div class="mb-3">
+            <label class="form-label">Channel Name</label>
+            <input type="text" name="name" class="form-control" value="{{ channel.name }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Stream URL</label>
+            <input type="text" name="stream_url" class="form-control" value="{{ channel.stream_url }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Logo URL</label>
+            <input type="text" name="logo_url" class="form-control" value="{{ channel.logo_url }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Group/Category</label>
+            <input type="text" name="group_name" class="form-control" value="{{ channel.group_name }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">EPG ID</label>
+            <input type="text" name="epg_id" class="form-control" value="{{ channel.epg_id }}">
+        </div>
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('channels.index') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-success">Update Channel</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

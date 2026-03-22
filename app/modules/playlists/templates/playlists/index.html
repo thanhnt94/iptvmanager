@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Playlist Profiles</h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProfileModal">Create New Profile</button>
+    </div>
+
+    <div class="row">
+        {% for profile in profiles %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">{{ profile.name }}</h5>
+                    <p class="text-muted small">Slug: {{ profile.slug }}</p>
+                    <hr>
+                    <p>Channels: {{ profile.entries|length }}</p>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('playlists.view_playlist', id=profile.id) }}" class="btn btn-outline-primary">Manage Channels</a>
+                        <button class="btn btn-outline-info btn-sm copy-link" data-link="{{ url_for('playlists.publish_m3u8', slug=profile.slug, token=profile.security_token, _external=True) }}">Copy M3U8 Link</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="createProfileModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form action="{{ url_for('playlists.create_profile') }}" method="POST" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create Playlist Profile</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Profile Name</label>
+          <input type="text" name="name" class="form-control" placeholder="e.g. My Favorites" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Slug (URL Name)</label>
+          <input type="text" name="slug" class="form-control" placeholder="my-favorites" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-primary">Create Profile</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.copy-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const link = btn.getAttribute('data-link');
+        navigator.clipboard.writeText(link);
+        alert('Copied: ' + link);
+    });
+});
+</script>
+{% endblock %}
