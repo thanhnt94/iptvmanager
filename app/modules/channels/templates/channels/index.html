@@ -106,6 +106,17 @@
                             </select>
                         </div>
                         <div class="col-md-2 mt-2">
+                            <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">Sort: Default</option>
+                                <option value="newest_checked" {% if sort == 'newest_checked' %}selected{% endif %}>Newest Checked</option>
+                                <option value="oldest_checked" {% if sort == 'oldest_checked' %}selected{% endif %}>Oldest Checked</option>
+                                <option value="ping_low" {% if sort == 'ping_low' %}selected{% endif %}>Ping: Low to High</option>
+                                <option value="ping_high" {% if sort == 'ping_high' %}selected{% endif %}>Ping: High to Low</option>
+                                <option value="name_asc" {% if sort == 'name_asc' %}selected{% endif %}>Name: A-Z</option>
+                                <option value="name_desc" {% if sort == 'name_desc' %}selected{% endif %}>Name: Z-A</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 mt-2">
                             <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-danger w-100">Clear All</a>
                         </div>
                     </form>
@@ -205,6 +216,7 @@
                                             data-url="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" 
                                             data-name="{{ channel.name }}"
                                             data-id="{{ channel.id }}">Play</button>
+                                    <button class="btn btn-sm btn-outline-info stats-btn" data-id="{{ channel.id }}">Stats</button>
                                     <button class="btn btn-sm btn-outline-secondary copy-link-btn px-2" onclick="copyChannelLink('{{ channel.id }}', this)" title="Copy Wrapped Link">
                                         <i class="bi bi-link-45deg"></i> URL
                                     </button>
@@ -346,9 +358,61 @@
   </div>
 </div>
 
+<!-- Stats Modal -->
+<div class="modal fade" id="statsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title"><i class="bi bi-graph-up-arrow me-2"></i>Channel Statistics</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="statsLoader" class="text-center py-4">
+            <div class="spinner-border text-info"></div>
+        </div>
+        <div id="statsContent" class="d-none">
+            <h4 id="statsName" class="fw-bold mb-3 text-primary text-truncate"></h4>
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">Total Plays</div>
+                        <div id="statPlays" class="fs-4 fw-bold text-primary">0</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">Watch Time</div>
+                        <div id="statTime" class="fs-4 fw-bold text-success">00:00:00</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">Est. Bandwidth</div>
+                        <div id="statBandwidth" class="fs-4 fw-bold text-warning">0 MB</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">First Added</div>
+                        <div id="statCreated" class="fs-6 fw-bold">N/A</div>
+                    </div>
+                </div>
+            </div>
+            <hr>
+            <div class="text-muted small">
+                <i class="bi bi-info-circle me-1"></i> 
+                Watch time and bandwidth are estimated based on Web Player heartbeats and average bitrates.
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // ... (rest of DOMContentLoaded content will be updated in next step)
     const scanStatusBtn = document.getElementById('scanStatusBtn');
     const scanOptionsBtn = document.getElementById('scanOptionsBtn');
     const startScanBtn = document.getElementById('startScanBtn');
@@ -456,6 +520,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Use Event Delegation for Buttons
     document.addEventListener('click', function(e) {
+        const statsBtn = e.target.closest('.stats-btn');
+        if (statsBtn) {
+            const id = statsBtn.getAttribute('data-id');
+            const modalElem = document.getElementById('statsModal');
+            const modal = new bootstrap.Modal(modalElem);
+            
+            document.getElementById('statsLoader').classList.remove('d-none');
+            document.getElementById('statsContent').classList.add('d-none');
+            modal.show();
+
+            fetch(`/channels/api/stats/${id}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    document.getElementById('statsName').innerText = data.stats.name;
+                    document.getElementById('statPlays').innerText = data.stats.play_count;
+                    document.getElementById('statTime').innerText = data.stats.total_watch_time;
+                    document.getElementById('statBandwidth').innerText = data.stats.bandwidth_mb + ' MB';
+                    document.getElementById('statCreated').innerText = data.stats.created_at;
+                    
+                    document.getElementById('statsLoader').classList.add('d-none');
+                    document.getElementById('statsContent').classList.remove('d-none');
+                }
+            });
+            return;
+        }
+
         const playBtn = e.target.closest('.play-btn');
         if (playBtn) {
             const url = playBtn.getAttribute('data-url');

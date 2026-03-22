@@ -648,6 +648,18 @@
         }
         currentStreamUrl = url;
         
+        // Heartbeat Tracking for Stats
+        if (window.heartbeatInterval) clearInterval(window.heartbeatInterval);
+        window.heartbeatInterval = setInterval(() => {
+            if (!video.paused && !video.ended) {
+                fetch('/channels/api/track', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel_id: meta.id, seconds: 15 })
+                }).catch(err => console.error("Heartbeat failed:", err));
+            }
+        }, 15000); // Send heartbeat every 15 seconds
+        
         const realUrl = meta.stream_url || url;
         const isHls = realUrl.toLowerCase().includes('.m3u8') || realUrl.toLowerCase().includes('m3u8');
         

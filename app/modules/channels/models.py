@@ -17,6 +17,12 @@ class Channel(db.Model):
     resolution = db.Column(db.String(50)) # e.g., 1920x1080
     audio_codec = db.Column(db.String(50)) # e.g., aac, ac3
     last_checked_at = db.Column(db.DateTime)
+    
+    # Stats fields
+    play_count = db.Column(db.Integer, default=0)
+    total_watch_seconds = db.Column(db.Integer, default=0)
+    total_bandwidth_mb = db.Column(db.Float, default=0.0)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

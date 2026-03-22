@@ -16,9 +16,10 @@ def index():
     stream_type = request.args.get('stream_type', '')
     status = request.args.get('status', '')
     quality = request.args.get('quality', '')
-    resolution = request.args.get('resolution', '')
+    res_filter = request.args.get('resolution', '')
     audio = request.args.get('audio', '')
-    
+    sort = request.args.get('sort', '')
+
     pagination = ChannelService.get_all_channels(
         page=page, 
         search=search, 
@@ -26,8 +27,9 @@ def index():
         stream_type_filter=stream_type,
         status_filter=status,
         quality_filter=quality,
-        res_filter=resolution,
-        audio_filter=audio
+        res_filter=res_filter,
+        audio_filter=audio,
+        sort=sort
     )
     
     # Calculate stats
@@ -55,8 +57,9 @@ def index():
                            stream_type_filter=stream_type,
                            status_filter=status,
                            quality_filter=quality,
-                           res_filter=resolution,
+                           res_filter=res_filter,
                            audio_filter=audio,
+                           sort=sort,
                            distinct_groups=distinct_groups,
                            distinct_res=distinct_res,
                            distinct_audio=distinct_audio,
@@ -344,7 +347,6 @@ def sync_epg(id):
     from app.modules.channels.services import EPGService
     result = EPGService.sync_epg(id)
     return jsonify(result)
-
 @channels_bp.route('/play/<int:id>')
 def play_channel(id):
     """
@@ -357,7 +359,11 @@ def play_channel(id):
     
     channel = Channel.query.get_or_404(id)
     
-    # Quick health check (Ping/HEAD only)
+    # 1. Update Play Count
+    channel.play_count += 1
+    db.session.commit()
+    
+    # 2. Quick health check (Ping/HEAD only)
     try:
         response = requests.head(channel.stream_url, timeout=3, allow_redirects=True)
         if response.status_code >= 400:
@@ -382,11 +388,70 @@ def play_channel(id):
             
             threading.Thread(target=_bg_check, args=(current_app._get_current_object(), id)).start()
             
-    except:
+    except Exception as e:
+        logger.error(f"Quick check failed for {channel.name}: {e}")
         channel.status = 'die'
         db.session.commit()
         
     return redirect(channel.stream_url)
+
+@channels_bp.route('/api/stats/<int:id>')
+@login_required
+def get_channel_stats(id):
+    channel = Channel.query.get_or_404(id)
+    
+    # Format duration
+    hours = channel.total_watch_seconds // 3600
+    minutes = (channel.total_watch_seconds % 3600) // 60
+    seconds = channel.total_watch_seconds % 60
+    duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    
+    return jsonify({
+        'status': 'ok',
+        'stats': {
+            'id': channel.id,
+            'name': channel.name,
+            'play_count': channel.play_count,
+            'total_watch_time': duration_str,
+            'bandwidth_mb': round(channel.total_bandwidth_mb, 2),
+            'last_checked': channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never',
+            'created_at': channel.created_at.strftime('%Y-%m-%d %H:%M')
+        }
+    })
+
+@channels_bp.route('/api/track', methods=['POST'])
+def track_usage():
+    """
+    Heartbeat API called by web player every 30s.
+    Estimates bandwidth based on resolution.
+    """
+    data = request.json or {}
+    channel_id = data.get('channel_id')
+    seconds = data.get('seconds', 30) # default heartbeat interval
+    
+    if not channel_id:
+        return jsonify({'error': 'No channel_id'}), 400
+        
+    channel = Channel.query.get(channel_id)
+    if not channel:
+        return jsonify({'error': 'Channel not found'}), 404
+        
+    # Estimated Bitrate in Mbps (conservative estimates)
+    bitrate = 2.0 # default 2Mbps (SD)
+    if channel.resolution:
+        res = channel.resolution.lower()
+        if '3840' in res or '4k' in res: bitrate = 25.0
+        elif '1920' in res or '1080' in res: bitrate = 8.0
+        elif '1280' in res or '720' in res: bitrate = 4.0
+    
+    # MB = (Mbps * seconds) / 8
+    mb_used = (bitrate * seconds) / 8
+    
+    channel.total_watch_seconds += seconds
+    channel.total_bandwidth_mb += mb_used
+    db.session.commit()
+    
+    return jsonify({'status': 'ok'})
 
 @channels_bp.route('/extractor')
 def extractor_page():
@@ -402,4 +467,5 @@ def extract_link():
     
     result = ExtractorService.extract_direct_url(web_url)
     return jsonify(result)
+
 

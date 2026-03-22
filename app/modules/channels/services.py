@@ -34,7 +34,7 @@ class EPGService:
 class ChannelService:
     @staticmethod
     def get_all_channels(page=1, per_page=50, search=None, group_filter=None, stream_type_filter=None, 
-                         status_filter=None, quality_filter=None, res_filter=None, audio_filter=None):
+                         status_filter=None, quality_filter=None, res_filter=None, audio_filter=None, sort=None):
         query = Channel.query
         if search:
             if search.isdigit():
@@ -55,7 +55,23 @@ class ChannelService:
         if audio_filter:
             query = query.filter(Channel.audio_codec == audio_filter)
             
-        return query.order_by(Channel.id.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        # Sorting logic
+        if sort == 'newest_checked':
+            query = query.order_by(Channel.last_checked_at.desc().nullslast())
+        elif sort == 'oldest_checked':
+            query = query.order_by(Channel.last_checked_at.asc().nullslast())
+        elif sort == 'ping_low':
+            query = query.order_by(Channel.latency.asc().nullslast())
+        elif sort == 'ping_high':
+            query = query.order_by(Channel.latency.desc().nullslast())
+        elif sort == 'name_asc':
+            query = query.order_by(Channel.name.asc())
+        elif sort == 'name_desc':
+            query = query.order_by(Channel.name.desc())
+        else:
+            query = query.order_by(Channel.id.desc())
+            
+        return query.paginate(page=page, per_page=per_page, error_out=False)
 
     @staticmethod
     def get_distinct_groups():
