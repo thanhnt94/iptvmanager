@@ -41,9 +41,10 @@
     </div>
 
     <div class="card mb-4">
-                    <form method="GET" action="{{ url_for('channels.index') }}" class="row g-3">
+                    <form method="GET" action="{{ url_for('channels.index') }}" class="row g-2">
+                        <!-- Row 1: Primary -->
                         <div class="col-md-5">
-                            <input type="text" name="search" class="form-control" placeholder="Search channel name or ID..." value="{{ search or '' }}">
+                            <input type="text" name="search" class="form-control" placeholder="Search name or ID..." value="{{ search or '' }}">
                         </div>
                         <div class="col-md-3">
                             <select name="group" class="form-select" onchange="this.form.submit()">
@@ -61,7 +62,44 @@
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <button type="submit" class="btn btn-secondary w-100">Go</button>
+                            <button type="submit" class="btn btn-secondary w-100">Search</button>
+                        </div>
+
+                        <!-- Row 2: Advanced -->
+                        <div class="col-md-2 mt-2">
+                            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">Status: All</option>
+                                <option value="live" {% if status == 'live' %}selected{% endif %}>Status: Live</option>
+                                <option value="die" {% if status == 'die' %}selected{% endif %}>Status: Die</option>
+                                <option value="unknown" {% if status == 'unknown' %}selected{% endif %}>Status: Unknown</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 mt-2">
+                            <select name="quality" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">Quality: All</option>
+                                <option value="excellent" {% if quality == 'excellent' %}selected{% endif %}>Qual: Excellent</option>
+                                <option value="good" {% if quality == 'good' %}selected{% endif %}>Qual: Good</option>
+                                <option value="poor" {% if quality == 'poor' %}selected{% endif %}>Qual: Poor</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mt-2">
+                            <select name="resolution" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">Resolution: All</option>
+                                {% for r in distinct_res %}
+                                <option value="{{ r }}" {% if res_filter == r %}selected{% endif %}>Res: {{ r }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3 mt-2">
+                            <select name="audio" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">Audio: All</option>
+                                {% for a in distinct_audio %}
+                                <option value="{{ a }}" {% if audio_filter == a %}selected{% endif %}>Audio: {{ a }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 mt-2">
+                            <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-danger w-100">Clear All</a>
                         </div>
                     </form>
                 </div>

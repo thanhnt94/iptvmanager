@@ -11,17 +11,23 @@ def index():
     search = request.args.get('search', '')
     group = request.args.get('group', '')
     stream_type = request.args.get('stream_type', '')
+    status = request.args.get('status', '')
+    quality = request.args.get('quality', '')
+    resolution = request.args.get('resolution', '')
+    audio = request.args.get('audio', '')
     
     pagination = ChannelService.get_all_channels(
         page=page, 
         search=search, 
         group_filter=group,
-        stream_type_filter=stream_type
+        stream_type_filter=stream_type,
+        status_filter=status,
+        quality_filter=quality,
+        res_filter=resolution,
+        audio_filter=audio
     )
     
-    # Calculate stats (filtered by search/group if applied, or keep global?)
-    # User said "có bao nhiêu kênh", usually global is better for the header, 
-    # but let's keep it global for now.
+    # Calculate stats
     stats = {
         'total': Channel.query.count(),
         'live': Channel.query.filter_by(status='live').count(),
@@ -30,15 +36,23 @@ def index():
     }
     
     distinct_groups = ChannelService.get_distinct_groups()
+    distinct_res = ChannelService.get_distinct_resolutions()
+    distinct_audio = ChannelService.get_distinct_audio_codecs()
     
     return render_template('channels/index.html', 
                            channels=pagination.items, 
                            pagination=pagination, 
                            stats=stats, 
                            distinct_groups=distinct_groups,
+                           distinct_res=distinct_res,
+                           distinct_audio=distinct_audio,
                            search=search,
                            group=group,
-                           stream_type=stream_type)
+                           stream_type=stream_type,
+                           status=status,
+                           quality=quality,
+                           res_filter=resolution,
+                           audio_filter=audio)
 
 @channels_bp.route('/add', methods=['GET', 'POST'])
 def add_channel():

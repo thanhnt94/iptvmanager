@@ -27,25 +27,45 @@ class EPGService:
 
 class ChannelService:
     @staticmethod
-    def get_all_channels(page=1, per_page=50, search=None, group_filter=None, stream_type_filter=None):
+    def get_all_channels(page=1, per_page=50, search=None, group_filter=None, stream_type_filter=None, 
+                         status_filter=None, quality_filter=None, res_filter=None, audio_filter=None):
         query = Channel.query
         if search:
-            # Try to search by ID if it's a number
             if search.isdigit():
                 query = query.filter(db.or_(Channel.name.ilike(f'%{search}%'), Channel.id == int(search)))
             else:
                 query = query.filter(Channel.name.ilike(f'%{search}%'))
+        
         if group_filter:
             query = query.filter(Channel.group_name == group_filter)
         if stream_type_filter:
             query = query.filter(Channel.stream_type == stream_type_filter)
-        return query.paginate(page=page, per_page=per_page, error_out=False)
+        if status_filter:
+            query = query.filter(Channel.status == status_filter)
+        if quality_filter:
+            query = query.filter(Channel.quality == quality_filter)
+        if res_filter:
+            query = query.filter(Channel.resolution == res_filter)
+        if audio_filter:
+            query = query.filter(Channel.audio_codec == audio_filter)
+            
+        return query.order_by(Channel.id.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
     @staticmethod
     def get_distinct_groups():
         """Returns a list of all unique group names in the database."""
         groups = db.session.query(Channel.group_name).distinct().all()
-        return [g[0] for g in groups if g[0]]
+        return sorted([g[0] for g in groups if g[0]])
+
+    @staticmethod
+    def get_distinct_resolutions():
+        res = db.session.query(Channel.resolution).distinct().all()
+        return sorted([r[0] for r in res if r[0]])
+
+    @staticmethod
+    def get_distinct_audio_codecs():
+        aud = db.session.query(Channel.audio_codec).distinct().all()
+        return sorted([a[0] for a in aud if a[0]])
 
     @staticmethod
     def update_channel(channel_id, data):
