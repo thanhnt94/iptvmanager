@@ -53,6 +53,15 @@
                 <div id="videoContainer" class="w-100 h-100 position-relative d-none">
                     <video id="video" class="w-100 h-100" controls crossorigin playsinline style="object-fit: contain;"></video>
                     
+                    <!-- Custom Top Controls -->
+                    <div id="topControls" class="position-absolute top-0 start-0 w-100 p-2 d-flex justify-content-between align-items-center transition-all opacity-0" style="z-index: 1010; background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);">
+                        <div class="d-flex gap-3">
+                            <button id="customPlayPause" class="btn btn-link text-white p-0 fs-4"><i class="bi bi-pause-fill"></i></button>
+                            <button id="customMute" class="btn btn-link text-white p-0 fs-4"><i class="bi bi-volume-up-fill"></i></button>
+                        </div>
+                        <div id="streamClock" class="text-white small fw-bold opacity-75">LIVE</div>
+                    </div>
+
                     <div id="playbackOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none">
                         <div class="spinner-grow text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
                         <h5 class="fw-bold text-white letter-spacing-1">BUFFERING...</h5>
@@ -74,9 +83,10 @@
                             <img id="currentLogo" src="" alt="" class="rounded-3 position-relative bg-white p-2 shadow-lg" style="height: 100px; width: 100px; object-fit: contain; border: 4px solid rgba(255,255,255,0.15);">
                         </div>
                         <div class="flex-grow-1 info-text-container">
-                            <div class="d-flex align-items-baseline gap-4 mb-2 name-group-container">
+                            <div class="d-flex align-items-center gap-2 mb-2 name-group-container flex-wrap">
                                 <h1 id="currentName" class="mb-0 fw-bold text-white display-5"></h1>
-                                <span id="currentGroup" class="badge rounded-pill bg-primary text-white border-0 px-4 py-2 shadow-sm" style="font-size: 1rem; letter-spacing: 1px;"></span>
+                                <span id="currentGroup" class="badge rounded-pill bg-primary text-white border-0 px-3 py-1 shadow-sm" style="font-size: 0.85rem; letter-spacing: 1px;"></span>
+                                <span id="streamTypeBadge" class="badge rounded-pill bg-info text-dark border-0 px-3 py-1 shadow-sm fw-bold" style="font-size: 0.75rem; display: none;">IPTV</span>
                             </div>
                             <div class="d-flex align-items-center gap-4 badges-container">
                                 <span id="statusContainer" class="d-flex align-items-center gap-2 px-3 py-2 rounded-2 bg-success text-white fw-bold shadow-sm" style="font-size: 0.85rem; letter-spacing: 1px;">
@@ -94,6 +104,7 @@
                             </div>
                         </div>
                         <div class="d-flex gap-4 action-buttons-container">
+                            <button id="vlcBtn" class="btn btn-outline-warning border-opacity-25 rounded-circle hvr-push shadow-lg action-btn" title="Play with VLC" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;"><i class="bi bi-play-btn-fill"></i></button>
                             <button class="btn btn-outline-light border-opacity-25 rounded-circle hvr-push shadow-lg action-btn" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;"><i class="bi bi-heart-fill"></i></button>
                             <button class="btn btn-outline-light border-opacity-25 rounded-circle hvr-push shadow-lg action-btn" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;"><i class="bi bi-share-fill"></i></button>
                         </div>
@@ -142,10 +153,11 @@
     .blur-20 { filter: blur(20px); }
     
     @media (max-width: 768px) {
-        .navbar { display: none !important; }
+        .navbar { padding: 4px 0 !important; }
+        .navbar-brand { font-size: 1rem !important; }
         body { overflow: hidden !important; }
         .player-container { 
-            height: 100vh !important; 
+            height: calc(100vh - 40px) !important; 
             margin-top: 0 !important; 
             top: 0 !important;
             padding: 0 !important;
@@ -184,13 +196,15 @@
         }
         .glass-footer {
             position: absolute !important;
-            bottom: 0;
+            bottom: 0 !important;
+            top: auto !important;
             left: 0;
             right: 0;
             padding: 4px 8px !important;
             min-height: auto !important;
             background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.9) 100%) !important;
-            border: none !important;
+            border-top: 1px solid rgba(255,255,255,0.1) !important;
+            border-bottom: none !important;
             z-index: 10;
         }
         .info-flex-container {
@@ -203,19 +217,24 @@
             padding: 1px !important;
         }
         #currentName {
-            font-size: 0.8rem !important;
+            font-size: 0.85rem !important;
             -webkit-line-clamp: 1;
             line-clamp: 1;
+            max-width: 60%;
         }
-        #currentGroup { font-size: 0.55rem !important; }
-        .badges-container { gap: 4px !important; }
-        #statusContainer { font-size: 0.5rem !important; }
-        .tech-details-badge { font-size: 0.5rem !important; padding: 1px 4px !important; }
+        #currentGroup { font-size: 0.55rem !important; padding: 2px 6px !important; }
+        #streamTypeBadge { font-size: 0.55rem !important; padding: 2px 6px !important; }
+        .badges-container { gap: 4px !important; flex-wrap: nowrap !important; }
+        #statusContainer { font-size: 0.5rem !important; padding: 2px 6px !important; }
+        .tech-details-badge { font-size: 0.55rem !important; padding: 2px 6px !important; border-radius: 4px !important; }
+        .quality-span { padding-right: 4px !important; margin-right: 4px !important; font-size: 0.55rem !important; }
+        .res-span { letter-spacing: 1px !important; font-size: 0.55rem !important; }
         .time-span { display: none !important; }
         
+        .action-buttons-container { gap: 8px !important; }
         .action-btn {
-            width: 28px !important;
-            height: 28px !important;
+            width: 32px !important;
+            height: 32px !important;
             font-size: 0.8rem !important;
         }
 
@@ -338,6 +357,8 @@
     let currentPlaylistId = null;
     let currentCategory = "";
     let lastGroup = null;
+    let currentStreamUrl = null;
+    const initialChannelId = {{ initial_id|tojson if initial_id else 'null' }};
 
     // Sidebar Toggling
     function toggleSidebarUI(show) {
@@ -411,6 +432,8 @@
 
         let url = `/channels/web-player/channels/${currentPlaylistId}?page=${page}&limit=100`;
         if (currentCategory) url += `&group=${encodeURIComponent(currentCategory)}`;
+        const q = channelSearch.value.trim();
+        if (q) url += `&q=${encodeURIComponent(q)}`;
 
         try {
             const resp = await fetch(url);
@@ -466,7 +489,7 @@
                         <div class="d-flex align-items-center gap-2 mt-1">
                             <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${statusColor};" title="${ch.status}"></span>
                             <span class="text-light text-truncate" style="font-size: 0.75rem;">
-                                ${ch.quality} • ${ch.resolution}
+                                ${ch.quality && ch.quality !== 'N/A' ? ch.quality + ' • ' : ''}${ch.resolution && ch.resolution !== 'N/A' ? ch.resolution : ''}
                             </span>
                         </div>
                     </div>
@@ -508,6 +531,25 @@
         }
     });
 
+    function updateStatusToLive(id) {
+        if (!id) return;
+        const item = document.querySelector(`.channel-item[data-id="${id}"]`);
+        if (item) {
+            const dot = item.querySelector('span[style*="border-radius: 50%"]');
+            if (dot) dot.style.backgroundColor = '#2ecc71';
+        }
+        
+        const infoBar = document.getElementById('channelInfo');
+        if (infoBar.dataset.currentId == id) {
+            const statusContainer = document.getElementById('statusContainer');
+            const statusLabel = document.getElementById('statusLabel');
+            if (statusContainer) {
+                statusContainer.className = `d-flex align-items-center gap-2 px-3 py-2 rounded-2 bg-success text-white fw-bold shadow-sm`;
+            }
+            if (statusLabel) statusLabel.innerText = 'LIVE';
+        }
+    }
+
     async function fetchChannelStatus(id, retry = true) {
         try {
             const resp = await fetch(`/channels/check/${id}?ajax=1`, { method: 'POST' });
@@ -525,7 +567,12 @@
                     const text = item.querySelector('span.text-light');
                     const statusColor = data.status === 'live' ? '#2ecc71' : (data.status === 'die' ? '#e74c3c' : '#95a5a6');
                     if (dot) dot.style.backgroundColor = statusColor;
-                    if (text) text.innerText = `${data.quality || 'N/A'} • ${data.resolution || 'SD'}`;
+                    if (text) {
+                        let info = [];
+                        if (data.quality && data.quality !== 'N/A') info.push(data.quality);
+                        if (data.resolution && data.resolution !== 'N/A') info.push(data.resolution);
+                        text.innerText = info.join(' • ');
+                    }
                 }
 
                 // Update Bottom Bar
@@ -540,7 +587,10 @@
 
                     const qualityLabel = document.getElementById('qualityLabel');
                     if (qualityLabel) {
-                        qualityLabel.innerText = `${data.quality ? data.quality.toUpperCase() : 'N/A'} • ${data.latency}MS`;
+                        const q = data.quality && data.quality !== 'N/A' ? data.quality.toUpperCase() : '';
+                        qualityLabel.innerText = q ? `${q} • ${data.latency}MS` : `${data.latency}MS`;
+                        if (!q && !data.latency) qualityLabel.parentElement.classList.add('d-none');
+                        else qualityLabel.parentElement.classList.remove('d-none');
                     }
                     
                     const resBadge = document.getElementById('resBadge');
@@ -557,18 +607,33 @@
 
     function playStream(url, meta) {
         if (hls) hls.destroy();
+        currentStreamUrl = url;
         
+        // Update URL for sticky refresh
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('id', meta.id);
+        window.history.replaceState({}, '', newUrl);
+
         idleScreen.classList.add('d-none');
         videoContainer.classList.remove('d-none');
         overlay.classList.remove('d-none');
         
         // Update Info
         const infoBar = document.getElementById('channelInfo');
+        const streamTypeBadge = document.getElementById('streamTypeBadge');
         infoBar.classList.remove('d-none');
         infoBar.dataset.currentId = meta.id;
         document.getElementById('currentName').innerText = meta.name;
         document.getElementById('currentGroup').innerText = meta.group;
         document.getElementById('currentLogo').src = meta.logo || 'https://via.placeholder.com/64';
+
+        if (meta.stream_type) {
+            streamTypeBadge.innerText = meta.stream_type.toUpperCase();
+            streamTypeBadge.style.display = 'inline-block';
+            streamTypeBadge.className = `badge rounded-pill ${meta.stream_type === 'vod' ? 'bg-warning text-dark' : 'bg-info text-dark'} border-0 px-3 py-1 shadow-sm fw-bold`;
+        } else {
+            streamTypeBadge.style.display = 'none';
+        }
 
         // Trigger Real-time Check
         fetchChannelStatus(meta.id);
@@ -586,6 +651,14 @@
                     console.log("Autoplay blocked, user interaction required");
                 });
                 overlay.classList.add('d-none');
+                
+                // Hide native controls on mobile to avoid overlap, or at least try to move HUD
+                if (window.innerWidth <= 768) {
+                    video.removeAttribute('controls'); // Disable native controls if custom controls exist
+                }
+                
+                const activeId = document.getElementById('channelInfo').dataset.currentId;
+                updateStatusToLive(activeId);
             });
             hls.on(Hls.Events.ERROR, function (event, data) {
                  if (data.fatal) {
@@ -597,6 +670,9 @@
             video.addEventListener('loadedmetadata', () => {
                 video.play();
                 overlay.classList.add('d-none');
+                
+                const activeId = document.getElementById('channelInfo').dataset.currentId;
+                updateStatusToLive(activeId);
             });
         }
     }
@@ -605,20 +681,16 @@
     const clearSearch = document.getElementById('clearSearch');
     const searchBtn = document.getElementById('searchBtn');
 
+    let searchTimeout;
     function performSearch() {
-        const q = channelSearch.value.trim().toLowerCase();
-        const isSearching = q.length > 0;
-        
-        // Hide/Show headers
-        document.querySelectorAll('.group-header').forEach(h => {
-            h.classList.toggle('d-none', isSearching);
-        });
-
-        // Toggle channels
-        document.querySelectorAll('.channel-item').forEach(item => {
-            const text = item.dataset.name.toLowerCase();
-            item.classList.toggle('d-none', !text.includes(q));
-        });
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            currentPage = 1;
+            hasMore = true;
+            lastGroup = null;
+            channelList.innerHTML = '';
+            fetchChannels(1);
+        }, 300);
     }
 
     channelSearch.addEventListener('input', performSearch);
@@ -636,30 +708,120 @@
         if (!infoBar.dataset.currentId) return; // Don't show if nothing playing
         infoBar.classList.remove('hud-hidden');
         infoBar.classList.add('hud-visible');
+        topControls.classList.remove('opacity-0');
         clearTimeout(hudTimeout);
-        hudTimeout = setTimeout(hideHUD, 3000);
+        hudTimeout = setTimeout(hideHUD, 2000);
     }
     
     function hideHUD() {
-        if (infoBar.matches(':hover')) {
+        if (infoBar.matches(':hover') || topControls.matches(':hover')) {
             hudTimeout = setTimeout(hideHUD, 1000);
             return;
         }
         infoBar.classList.remove('hud-visible');
         infoBar.classList.add('hud-hidden');
+        topControls.classList.add('opacity-0');
     }
     
     playerArea.addEventListener('mousemove', showHUD);
+    playerArea.addEventListener('touchstart', showHUD);
+    playerArea.addEventListener('mouseleave', hideHUD);
+    
     infoBar.addEventListener('mouseenter', () => {
         clearTimeout(hudTimeout);
         infoBar.classList.add('hud-visible');
         infoBar.classList.remove('hud-hidden');
     });
 
+    // Custom Controls Logic
+    const topControls = document.getElementById('topControls');
+    const customPlayPause = document.getElementById('customPlayPause');
+    const customMute = document.getElementById('customMute');
+    
+    video.addEventListener('play', () => {
+        customPlayPause.innerHTML = '<i class="bi bi-pause-fill"></i>';
+    });
+    video.addEventListener('pause', () => {
+        customPlayPause.innerHTML = '<i class="bi bi-play-fill"></i>';
+    });
+    video.addEventListener('volumechange', () => {
+        if (video.muted || video.volume === 0) {
+            customMute.innerHTML = '<i class="bi bi-volume-mute-fill"></i>';
+        } else {
+            customMute.innerHTML = '<i class="bi bi-volume-up-fill"></i>';
+        }
+    });
+    
+    customPlayPause.addEventListener('click', () => {
+        if (video.paused) video.play();
+        else video.pause();
+    });
+    
+    customMute.addEventListener('click', () => {
+        video.muted = !video.muted;
+    });
+
+    document.getElementById('vlcBtn').addEventListener('click', () => {
+        const activeId = document.getElementById('channelInfo').dataset.currentId;
+        if (!activeId) return;
+        
+        // 1. Attempt Server-side launch (for local usage)
+        fetch(`/channels/play_vlc/${activeId}`, { method: 'POST' })
+            .then(resp => resp.json())
+            .then(data => {
+                if (!data.success) {
+                    // 2. Fallback: Browser-side launch (for mobile/remote)
+                    const absUrl = new URL(currentStreamUrl, window.location.origin).href;
+                    const vlcIntent = `intent://${absUrl.replace(/^https?:\/\//, '')}#Intent;scheme=http;type=video/*;package=org.videolan.vlc;end`;
+                    const schemes = [vlcIntent, `vlc://${absUrl}`, `vnd.vlc://${absUrl}`];
+                    
+                    let index = 0;
+                    function tryNext() {
+                        if (index >= schemes.length) return;
+                        const link = document.createElement('a');
+                        link.href = schemes[index];
+                        link.click();
+                        index++;
+                        setTimeout(tryNext, 500);
+                    }
+                    tryNext();
+                }
+            })
+            .catch(err => {
+                console.error("VLC remote launch failed:", err);
+            });
+    });
+
+
     // Initial Load
     playlistSelector.addEventListener('change', (e) => loadPlaylist(e.target.value, false));
-    if (playlistSelector.value) {
-        loadPlaylist(playlistSelector.value, true);
+    
+    async function initPlayer() {
+        if (initialChannelId) {
+            try {
+                const resp = await fetch(`/channels/api/channel/${initialChannelId}`);
+                const data = await resp.json();
+                if (data.status === 'ok') {
+                    const plId = data.channel.playlist_id || playlistSelector.value;
+                    playlistSelector.value = plId;
+                    await loadPlaylist(plId, false);
+                    playStream(data.channel.play_url, data.channel);
+                    
+                    // Highlight in list after a delay
+                    setTimeout(() => {
+                        const item = document.querySelector(`.channel-item[data-id="${initialChannelId}"]`);
+                        if (item) item.classList.add('active');
+                    }, 500);
+                    return;
+                }
+            } catch (err) { console.error("Auto-load failed:", err); }
+        }
+        
+        if (playlistSelector.value) {
+            loadPlaylist(playlistSelector.value, true);
+        }
     }
+
+    initPlayer();
 </script>
 {% endblock %}

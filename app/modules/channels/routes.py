@@ -158,7 +158,31 @@ def web_player():
     else:
         playlists = AuthService.get_user_playlists(current_user.id)
         
-    return render_template('channels/player.html', playlists=playlists)
+    initial_id = request.args.get('id', type=int)
+    return render_template('channels/player.html', playlists=playlists, initial_id=initial_id)
+
+@channels_bp.route('/api/channel/<int:id>')
+@login_required
+def get_channel_info(id):
+    from app.modules.playlists.models import PlaylistEntry
+    channel = Channel.query.get_or_404(id)
+    
+    # Try to find which playlist this channel belongs to
+    entry = PlaylistEntry.query.filter_by(channel_id=id).first()
+    playlist_id = entry.playlist_id if entry else None
+    
+    return jsonify({
+        'status': 'ok',
+        'channel': {
+            'id': channel.id,
+            'name': channel.name,
+            'logo': channel.logo_url,
+            'group': channel.group_name or 'Uncategorized',
+            'play_url': url_for('channels.play_channel', id=channel.id),
+            'playlist_id': playlist_id,
+            'stream_type': channel.stream_type or 'live'
+        }
+    })
 
 @channels_bp.route('/web-player/channels/<int:playlist_id>')
 @login_required
@@ -169,6 +193,7 @@ def player_playlist_channels(playlist_id):
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 100, type=int)
     group_filter = request.args.get('group')
+    q = request.args.get('q', '')
     offset = (page - 1) * limit
     
     profile = PlaylistProfile.query.get_or_404(playlist_id)
@@ -187,6 +212,8 @@ def player_playlist_channels(playlist_id):
         query = Channel.query
         if group_filter:
             query = query.filter(Channel.group_name == group_filter)
+        if q:
+            query = query.filter(Channel.name.ilike(f'%{q}%'))
             
         total_count = query.count()
         channels = query.order_by(Channel.name).offset(offset).limit(limit).all()
@@ -210,6 +237,8 @@ def player_playlist_channels(playlist_id):
         
         if group_filter:
             query = query.filter(PlaylistGroup.name == group_filter)
+        if q:
+            query = query.filter(Channel.name.ilike(f'%{q}%'))
         
         total_count = query.count()
         entries = query.order_by(PlaylistEntry.order_index).offset(offset).limit(limit).all()
