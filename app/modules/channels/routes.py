@@ -453,6 +453,125 @@ def track_usage():
     
     return jsonify({'status': 'ok'})
 
+
+@channels_bp.route('/api/proxy')
+@login_required
+def proxy_stream():
+    """
+    Lightweight stream proxy to bypass CORS and fix fragile connections.
+    """
+    url = request.args.get('url')
+    if not url:
+        return "No URL provided", 400
+    
+    # Common headers to mimic a real player
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Connection': 'keep-alive',
+        'Referer': f'http://{domain}/'
+    }
+    
+    try:
+        session = requests.Session()
+        
+        # Parse an incoming Range header from the browser
+        client_range = request.headers.get('Range')
+        start_byte = 0
+        if client_range and client_range.startswith('bytes='):
+            try:
+                # Extract starting byte (e.g. 1000 from bytes=1000-)
+                parts = client_range.split('=')[1].split('-')
+                if parts[0]:
+                    start_byte = int(parts[0])
+            except (IndexError, ValueError):
+                pass
+
+        # Define the generator with an "Initial Burst Buffer" + "Resume" logic
+        def generate():
+            error_count = 0
+            max_errors = 10
+            bytes_sent = start_byte # Initialize with client's requested offset
+            
+            # Initial Buffer target (e.g., 512KB for VOD) to provide a "head start"
+            # (Reducing to 512KB for faster seek response)
+            INITIAL_BURST_SIZE = 1024 * 512 
+            
+            CHUNK_SIZE = 131072 # 128KB chunks
+            
+            while error_count < max_errors:
+                try:
+                    # Current local headers for this attempt
+                    current_headers = headers.copy()
+                    current_headers['Range'] = f'bytes={bytes_sent}-'
+                        
+                    # Mimic a persistent connection that reconnects if source ends
+                    with session.get(url, headers=current_headers, stream=True, timeout=30, allow_redirects=True) as r:
+                         # 416 = Range Not Satisfiable (already at end)
+                        if r.status_code == 416:
+                            return
+                            
+                        if r.status_code >= 400 and r.status_code != 206 and (r.status_code != 200 or bytes_sent == 0):
+                            error_count += 1
+                            import time
+                            time.sleep(1)
+                            continue
+
+                        # Pipe chunks as they arrive
+                        burst_buffer = b""
+                        for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
+                            if chunk:
+                                error_count = 0 
+                                bytes_sent += len(chunk)
+                                
+                                # Initial burst phase
+                                if (bytes_sent - start_byte) < INITIAL_BURST_SIZE:
+                                    burst_buffer += chunk
+                                    continue
+                                
+                                if burst_buffer:
+                                    yield burst_buffer
+                                    burst_buffer = b""
+                                    
+                                yield chunk
+                                
+                        if burst_buffer:
+                            yield burst_buffer
+                        
+                        import time
+                        time.sleep(0.1)
+                        continue 
+
+                except (requests.exceptions.RequestException, Exception) as f:
+                    error_count += 1
+                    import time
+                    time.sleep(0.5)
+                    continue
+            return
+        
+        # Determine mimetype from URL
+        mimetype = 'video/mp2t'
+        if '.m3u8' in url.lower():
+            mimetype = 'application/vnd.apple.mpegurl'
+        elif '.mp4' in url.lower():
+            mimetype = 'video/mp4'
+            
+        status_code = 206 if client_range else 200
+        response = current_app.response_class(generate(), status=status_code, mimetype=mimetype)
+        response.headers['Accept-Ranges'] = 'bytes' # Enable seeking
+        if client_range:
+            response.headers['Content-Range'] = client_range # Pass-through basic info
+            
+        # Add basic CORS and caching headers
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+        
+    except Exception as e:
+        return f"Proxy error: {str(e)}", 500
+
 @channels_bp.route('/extractor')
 def extractor_page():
     return render_template('channels/extractor.html')
@@ -469,3 +588,36 @@ def extract_link():
     return jsonify(result)
 
 
+@channels_bp.route('/api/playlists_with_groups')
+@login_required
+def get_playlists_with_groups():
+    from app.modules.playlists.models import PlaylistProfile
+    playlists = PlaylistProfile.query.filter_by(is_system=False).all()
+    
+    result = []
+    for pl in playlists:
+        groups = [{"id": g.id, "name": g.name} for g in pl.groups]
+        result.append({
+            "id": pl.id,
+            "name": pl.name,
+            "groups": groups
+        })
+    return jsonify({"status": "ok", "playlists": result})
+
+@channels_bp.route('/api/quick_add', methods=['POST'])
+@login_required
+def quick_add():
+    data = request.get_json()
+    channel_id = data.get('channel_id')
+    playlist_id = data.get('playlist_id')
+    group_id = data.get('group_id')
+    
+    if not channel_id or not playlist_id:
+        return jsonify({"status": "error", "message": "Missing required fields"}), 400
+        
+    from app.modules.playlists.services import PlaylistService
+    try:
+        PlaylistService.add_channel_to_playlist(playlist_id, channel_id, group_id)
+        return jsonify({"status": "ok", "message": "Added successfully"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500

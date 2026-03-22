@@ -105,6 +105,7 @@
                                     <i class="bi bi-broadcast"></i> <span id="statusLabel">LIVE</span>
                                 </span>
                                 <div class="d-flex align-items-center text-white gap-4 bg-white bg-opacity-10 px-4 py-2 rounded-pill shadow-inner tech-details-badge">
+                                    <span id="formatBadge" class="badge bg-white bg-opacity-25 text-white border-0 px-2 py-1" style="font-size: 0.65rem; min-width: 45px;">TYPE</span>
                                     <span class="small fw-bold border-end border-white border-opacity-25 pe-4 quality-span">
                                         <i class="bi bi-speedometer2 me-2"></i> <span id="qualityLabel">Checking...</span>
                                     </span>
@@ -122,6 +123,32 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="quickAddModal" class="modal fade" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-0 shadow-lg" style="border-radius: 1rem; backdrop-filter: blur(10px); background: rgba(30, 30, 30, 0.95) !important;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Add to Playlist</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small text-white-50">Target Playlist</label>
+                    <select id="qaPlaylist" class="form-select bg-dark border border-white border-opacity-10 text-white shadow-none" style="border-radius: 0.5rem;">
+                        <option value="" class="bg-dark">Select Playlist...</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label small text-white-50">Category (Group)</label>
+                    <select id="qaGroup" class="form-select bg-dark border border-white border-opacity-10 text-white shadow-none" style="border-radius: 0.5rem;">
+                        <option value="" class="bg-dark">Default/No Group</option>
+                    </select>
+                </div>
+                <button id="qaConfirm" class="btn btn-primary w-100 fw-bold py-2" style="border-radius: 0.5rem;">CONFIRM ADD</button>
             </div>
         </div>
     </div>
@@ -299,6 +326,34 @@
         .channel-item .channel-name {
             font-size: 0.75rem !important;
         }
+        .quick-add-btn {
+            width: 24px !important;
+            height: 24px !important;
+            font-size: 0.7rem !important;
+            padding: 0 !important;
+        }
+    }
+    
+    .quick-add-btn {
+        opacity: 0.4;
+        transition: all 0.2s;
+        border-radius: 6px;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .channel-item:hover .quick-add-btn {
+        opacity: 1;
+        background: rgba(13, 110, 253, 0.2);
+        border-color: #0d6efd;
+    }
+    .quick-add-btn:hover {
+        background: #0d6efd !important;
+        color: white !important;
+        transform: scale(1.1);
     }
     
     .custom-scrollbar::-webkit-scrollbar { width: 4px; }
@@ -371,7 +426,16 @@
     const toggleSidebar = document.getElementById('toggleSidebar');
     const openSidebar = document.getElementById('openSidebar');
     const overlay = document.getElementById('playbackOverlay');
-    
+    const infoBar = document.getElementById('channelInfo');
+    const streamTypeBadge = document.getElementById('streamTypeBadge');
+    const vodControl = document.getElementById('vodControl');
+    const seekBar = document.getElementById('seekBar');
+    const currentTimeText = document.getElementById('currentTime');
+    const durationText = document.getElementById('duration');
+    const topControls = document.getElementById('topControls');
+    const customPlayPause = document.getElementById('customPlayPause');
+    const customMute = document.getElementById('customMute');
+    const customFullscreen = document.getElementById('customFullscreen');
     let hls = null;
     let mpegtsPlayer = null;
     let allChannels = [];
@@ -382,17 +446,20 @@
     let currentCategory = "";
     let lastGroup = null;
     let currentStreamUrl = null;
+    let currentStatusController = null;
+    let fallbackTriggered = false;
     const initialChannelId = {{ initial_id|tojson if initial_id else 'null' }};
 
     // Sidebar Toggling
     function toggleSidebarUI(show) {
         if (window.innerWidth <= 768) {
+            const mOverlay = document.getElementById('mobileOverlay');
             if (show) {
                 sidebar.classList.add('mobile-active');
-                document.getElementById('mobileOverlay').classList.add('active');
+                if (mOverlay) mOverlay.classList.add('active');
             } else {
                 sidebar.classList.remove('mobile-active');
-                document.getElementById('mobileOverlay').classList.remove('active');
+                if (mOverlay) mOverlay.classList.remove('active');
             }
         } else {
             if (show) {
@@ -504,7 +571,7 @@
             
             html += `
                 <div class="channel-item p-2 d-flex align-items-center gap-3 transition-all" 
-                     data-id="${ch.id}" data-url="${ch.play_url}" data-name="${ch.name}" data-logo="${ch.logo}" data-group="${ch.group}">
+                     data-id="${ch.id}" data-url="${ch.play_url}" data-stream-url="${ch.stream_url || ''}" data-name="${ch.name}" data-logo="${ch.logo}" data-group="${ch.group}" data-status="${ch.status}" data-stream-type="${ch.stream_type || 'iptv'}">
                     <div class="logo-container">
                         <img src="${ch.logo || 'https://via.placeholder.com/40'}" class="w-100 h-100" style="object-fit: contain;">
                     </div>
@@ -517,6 +584,10 @@
                             </span>
                         </div>
                     </div>
+                    <button class="btn btn-sm btn-outline-primary quick-add-btn border-0 text-white-50" 
+                            data-id="${ch.id}" data-name="${ch.name}" title="Quick Add to Playlist">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
                 </div>
             `;
         });
@@ -529,8 +600,18 @@
                 child.addEventListener('click', () => {
                     document.querySelectorAll('.channel-item').forEach(i => i.classList.remove('active'));
                     child.classList.add('active');
-                    playStream(child.dataset.url, child.dataset);
+                    playStream(child.dataset.url, child);
                 });
+                
+                // Quick Add Event
+                const qBtn = child.querySelector('.quick-add-btn');
+                if (qBtn) {
+                    qBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openQuickAdd(qBtn.dataset.id, qBtn.dataset.name);
+                    });
+                }
             }
             channelList.appendChild(child);
         }
@@ -575,9 +656,23 @@
     }
 
     async function fetchChannelStatus(id, retry = true) {
+        if (currentStatusController) {
+            currentStatusController.abort();
+        }
+        currentStatusController = new AbortController();
+        const signal = currentStatusController.signal;
+
         try {
-            const resp = await fetch(`/channels/check/${id}?ajax=1`, { method: 'POST' });
+            const resp = await fetch(`/channels/check/${id}?ajax=1`, { 
+                method: 'POST',
+                signal: signal
+            });
             const data = await resp.json();
+            
+            // Only update if it's still the active ID
+            const activeId = infoBar.dataset.currentId;
+            if (parseInt(activeId) !== parseInt(id)) return;
+            
             if (data.success) {
                 // If live but no quality, retry once after 1s
                 if (data.status === 'live' && (!data.quality || data.quality === 'N/A' || data.quality === 'null') && retry) {
@@ -600,21 +695,28 @@
                 }
 
                 // Update Bottom Bar
-                const infoBar = document.getElementById('channelInfo');
                 if (infoBar.dataset.currentId == id) {
+                    infoBar.dataset.status = data.status; // STORE STATUS
                     const statusContainer = document.getElementById('statusContainer');
                     const statusLabel = document.getElementById('statusLabel');
                     if (statusContainer) {
                         statusContainer.className = `d-flex align-items-center gap-2 px-3 py-2 rounded-2 ${data.status === 'live' ? 'bg-success' : 'bg-danger'} text-white fw-bold shadow-sm`;
                     }
                     if (statusLabel) statusLabel.innerText = data.status.toUpperCase();
+                    if (data.status === 'die') {
+                        // CRITICAL: Only show OFFLINE if video is NOT playing
+                        if (video.paused || video.readyState < 2) {
+                            overlay.classList.remove('d-none');
+                            overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE</h5><p class="small opacity-75">This channel is currently down.</p></div>';
+                        }
+                    }
 
                     const qualityLabel = document.getElementById('qualityLabel');
                     if (qualityLabel) {
                         const q = data.quality && data.quality !== 'N/A' ? data.quality.toUpperCase() : '';
                         qualityLabel.innerText = q ? `${q} • ${data.latency}MS` : `${data.latency}MS`;
-                        if (!q && !data.latency) qualityLabel.parentElement.classList.add('d-none');
-                        else qualityLabel.parentElement.classList.remove('d-none');
+                        if (!q && !data.latency) qualityLabel.innerText = 'LIVE';
+                        qualityLabel.parentElement.classList.remove('d-none');
                     }
                     
                     const resBadge = document.getElementById('resBadge');
@@ -626,13 +728,12 @@
                     }
                 }
             }
-        } catch (err) { console.error("Check failed:", err); }
+        } catch (err) { 
+            if (err.name === 'AbortError') return;
+            console.error("Check failed:", err); 
+        }
     }
 
-    const vodControl = document.getElementById('vodControl');
-    const seekBar = document.getElementById('seekBar');
-    const currentTimeText = document.getElementById('currentTime');
-    const durationText = document.getElementById('duration');
 
     function formatTime(seconds) {
         if (!seconds) return "00:00";
@@ -643,18 +744,39 @@
         return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
     }
 
-    function playStream(url, meta) {
-        // Destroy existing players
-        if (hls) {
-            hls.destroy();
-            hls = null;
-        }
-        if (mpegtsPlayer) {
-            mpegtsPlayer.destroy();
-            mpegtsPlayer.detachMediaElement();
-            mpegtsPlayer = null;
-        }
-        video.src = ""; // Clear native src
+
+    function playStream(url, metaInput) {
+        // Convert dataset (DOMStringMap) to a plain object for safe serialization/persistence
+        const meta = metaInput && metaInput.dataset ? {...metaInput.dataset} : {...metaInput};
+        fallbackTriggered = false; // Reset fallback on new play
+        
+        // Immediate UI Reset for feedback
+        idleScreen.classList.add('d-none');
+        videoContainer.classList.remove('d-none');
+        overlay.classList.remove('d-none');
+        overlay.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><div class="mt-3 fw-bold text-white letter-spacing-2">CONNECTING...</div>';
+        
+        // Stop current playback
+        video.pause();
+        video.src = "";
+        video.load();
+        
+        // Destroy existing players with error handling to avoid transition freeze
+        try {
+            if (hls) {
+                hls.stopLoad(); // Stop loading immediately
+                hls.destroy();
+            }
+        } catch (e) { console.warn("HLS destroy failed:", e); }
+        hls = null;
+        
+        try {
+            if (mpegtsPlayer) {
+                mpegtsPlayer.destroy();
+                mpegtsPlayer.detachMediaElement();
+            }
+        } catch (e) { console.warn("MPEG-TS destroy failed:", e); }
+        mpegtsPlayer = null;
         
         currentStreamUrl = url;
         
@@ -670,37 +792,82 @@
             }
         }, 15000); // Send heartbeat every 15 seconds
         
-        const realUrl = meta.stream_url || url;
+        let realUrl = meta.streamUrl || meta.stream_url || url;
         const lowUrl = realUrl.toLowerCase();
+        
+        let sType = meta.stream_type || meta.streamType || 'iptv';
+        
+        // Smart VOD Detection: If it's labeled IPTV but has a movie extension, treat as VOD
+        const movieExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv'];
+        const isMovieFile = movieExtensions.some(ext => lowUrl.includes(ext));
+        
+        if (sType === 'iptv' && isMovieFile) {
+            sType = 'vod';
+        }
         const isHls = lowUrl.includes('.m3u8') || lowUrl.includes('m3u8');
-        const isMpegTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || (meta.stream_type === 'iptv' && !isHls);
+        const isMpegTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || (sType === 'iptv' && !isHls);
         
-        // Show/Hide VOD controls
-        if (isHls || (isMpegTS && meta.stream_type === 'iptv')) vodControl.classList.add('d-none');
-        else vodControl.classList.remove('d-none');
+        // Show/Hide VOD controls: ONLY hide for IPTV, ALWAYS show for VOD
+        if (sType === 'vod') {
+            vodControl.classList.remove('d-none');
+        } else {
+            vodControl.classList.add('d-none');
+        }
         
-        // Update URL for sticky refresh
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('id', meta.id);
-        window.history.replaceState({}, '', newUrl);
+        // Update URL for sticky refresh without full URL object manipulation
+        const currentId = meta.id || meta.id_ || '';
+        if (currentId) {
+            window.history.replaceState({}, '', `?id=${currentId}`);
+        }
 
-        idleScreen.classList.add('d-none');
-        videoContainer.classList.remove('d-none');
-        overlay.classList.remove('d-none');
         
-        // Update Info
-        const infoBar = document.getElementById('channelInfo');
-        const streamTypeBadge = document.getElementById('streamTypeBadge');
+        // Update Info - Force status to checking for the new attempt
         infoBar.classList.remove('d-none');
         infoBar.dataset.currentId = meta.id;
+        infoBar.dataset.status = 'checking'; 
+        
+        const statusLabel = document.getElementById('statusLabel');
+        if (statusLabel) {
+            statusLabel.innerText = 'CHECKING...';
+            statusLabel.className = 'badge bg-secondary';
+        }
+        
+        // Reset Bottom Bar status UI
+        const statusContainer = document.getElementById('statusContainer');
+        // statusLabel already declared above
+        if (statusContainer) {
+            statusContainer.className = `d-flex align-items-center gap-2 px-3 py-2 rounded-2 bg-secondary text-white fw-bold shadow-sm`;
+        }
+        if (statusLabel) statusLabel.innerText = 'CHECKING...';
+        
         document.getElementById('currentName').innerText = meta.name;
         document.getElementById('currentGroup').innerText = meta.group;
         document.getElementById('currentLogo').src = meta.logo || 'https://via.placeholder.com/64';
 
-        if (meta.stream_type) {
-            streamTypeBadge.innerText = meta.stream_type.toUpperCase();
+        // Reset Tech Badges
+        const qualityLabel = document.getElementById('qualityLabel');
+        const resBadge = document.getElementById('resBadge');
+        if (qualityLabel) qualityLabel.innerText = 'CALCULATING...';
+        if (resBadge) resBadge.innerText = 'WAIT';
+
+        const formatBadge = document.getElementById('formatBadge');
+        if (formatBadge) {
+            let extension = realUrl.split('?')[0].split('.').pop().toUpperCase();
+            if (extension.length > 5 || extension.includes('/')) extension = isHls ? 'HLS' : (isMpegTS ? 'TS' : 'LINK');
+            if (extension === 'M3U8') extension = 'HLS';
+            formatBadge.innerText = extension;
+            
+            // Special color for types
+            if (extension === 'HLS' || extension === 'M3U8') formatBadge.className = 'badge bg-primary text-white';
+            else if (extension === 'TS') formatBadge.className = 'badge bg-warning text-dark';
+            else if (['MP4', 'MKV', 'AVI', 'MOV'].includes(extension)) formatBadge.className = 'badge bg-success text-white';
+            else formatBadge.className = 'badge bg-secondary text-white';
+        }
+
+        if (sType) {
+            streamTypeBadge.innerText = sType.toUpperCase();
             streamTypeBadge.style.display = 'inline-block';
-            streamTypeBadge.className = `badge rounded-pill ${meta.stream_type === 'vod' ? 'bg-warning text-dark' : 'bg-info text-dark'} border-0 px-3 py-1 shadow-sm fw-bold`;
+            streamTypeBadge.className = `badge rounded-pill ${sType === 'vod' ? 'bg-warning text-dark' : 'bg-info text-dark'} border-0 px-3 py-1 shadow-sm fw-bold`;
         } else {
             streamTypeBadge.style.display = 'none';
         }
@@ -711,12 +878,19 @@
         if (isHls) {
             if (Hls.isSupported()) {
                 hls = new Hls({
-                    maxBufferLength: 30,
+                    maxBufferLength: 30, // 30s buffer
                     maxMaxBufferLength: 60,
-                    enableWorker: true
+                    enableWorker: true,
+                    liveSyncDurationCount: 3,
+                    liveMaxLatencyDurationCount: 10,
+                    manifestLoadingMaxRetry: 10,
+                    levelLoadingMaxRetry: 10,
+                    backStep: 0.2
                 });
-                hls.loadSource(url);
                 hls.attachMedia(video);
+                hls.on(Hls.Events.MEDIA_ATTACHED, function () {
+                    hls.loadSource(realUrl);
+                });
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     video.play().catch(() => {
                         customPlayPause.innerHTML = '<i class="bi bi-play-fill"></i>';
@@ -727,12 +901,18 @@
                     updateStatusToLive(activeId);
                 });
                 hls.on(Hls.Events.ERROR, function (event, data) {
-                     if (data.fatal) {
-                         overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE (HLS)</h5></div>';
-                     }
+                    if (data.fatal) {
+                        console.warn("HLS fatal error, current status:", infoBar.dataset.status);
+                        // If still checking, just wait for the check to finish or try fallback
+                        if (infoBar.dataset.status === 'checking') {
+                             console.log("Still checking, suppressing early HLS error UI.");
+                        } else {
+                             tryBridgeFallback(realUrl, meta);
+                        }
+                    }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = url;
+                video.src = realUrl;
                 video.addEventListener('loadedmetadata', () => {
                     video.play();
                     overlay.classList.add('d-none');
@@ -745,8 +925,15 @@
             try {
                 mpegtsPlayer = mpegts.createPlayer({
                     type: 'mse',
-                    isLive: meta.stream_type === 'iptv',
-                    url: url
+                    isLive: sType === 'iptv',
+                    url: realUrl,
+                    enableWorker: true,
+                    enableStashBuffer: true,
+                    stashInitialSize: 128 * 1024, // 128KB initial buffer
+                }, {
+                    liveBufferLatencyChasing: true,
+                    liveBufferLatencyMaxLatency: 10,
+                    liveBufferLatencyMinLatency: 2
                 });
                 mpegtsPlayer.attachMediaElement(video);
                 mpegtsPlayer.load();
@@ -756,39 +943,97 @@
                     updateStatusToLive(activeId);
                 }).catch(e => {
                     console.warn("MPEG-TS Play failed, trying fallback:", e);
-                    tryNativeFallback(url);
+                    tryNativeFallback(realUrl);
                 });
                 
                 mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
-                    console.error("mpegts error", type, detail, info);
-                    if (mpegtsPlayer) {
-                        mpegtsPlayer.destroy();
-                        mpegtsPlayer = null;
-                        tryNativeFallback(url);
+                    console.warn("mpegts error, current status:", infoBar.dataset.status);
+                    if (infoBar.dataset.status === 'checking') {
+                         console.log("Still checking, suppressing early MPEG-TS error UI.");
+                    } else {
+                         tryBridgeFallback(realUrl, meta);
                     }
                 });
             } catch (e) {
                 console.error("MPEG-TS Init failed:", e);
-                tryNativeFallback(url);
+                tryNativeFallback(realUrl);
             }
         } else {
-            tryNativeFallback(url);
+            tryNativeFallback(realUrl);
         }
     }
 
-    function tryNativeFallback(url) {
+    function tryNativeFallback(url, meta = {}) {
         // NATIVE DIRECT PLAYBACK (For MP4/VOD or TS fallback)
         video.src = url;
         video.load();
+        
+        // Internal Error listener for Native Fallback
+        const onNativeError = () => {
+            video.removeEventListener('error', onNativeError);
+            console.warn("Native playback failed, current status:", infoBar.dataset.status);
+            
+            if (infoBar.dataset.status === 'checking') {
+                 console.log("Still checking, suppressing early Native error UI.");
+            } else {
+                 tryBridgeFallback(url, meta);
+            }
+        };
+        video.addEventListener('error', onNativeError);
+
         video.play().then(() => {
+            video.removeEventListener('error', onNativeError);
             overlay.classList.add('d-none');
             const activeId = document.getElementById('channelInfo').dataset.currentId;
             updateStatusToLive(activeId);
         }).catch(e => {
-            console.error("Native Playback Error:", e);
-            overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM OFFLINE</h5><p class="small opacity-75">Try "Play with VLC" if this continues.</p></div>';
-            customPlayPause.innerHTML = '<i class="bi bi-play-fill"></i>';
+            // Already handled by onNativeError or will be
         });
+    }
+
+    function tryBridgeFallback(url, meta) {
+        if (fallbackTriggered) {
+             console.error("Fallback already tried and failed.");
+             overlay.innerHTML = '<div class="text-warning"><i class="bi bi-patch-question display-4 mb-3"></i><h5>INCOMPATIBLE FORMAT</h5><p class="small opacity-75">Try "Play with VLC" for maximum compatibility.</p></div>';
+             return;
+        }
+        fallbackTriggered = true;
+        
+        console.log("Activating Auto-Bridge (Proxy) Fallback for link...");
+        const bridgeUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}`;
+        
+        // Show specific feedback
+        overlay.innerHTML = '<div class="spinner-border text-info" role="status"></div><div class="mt-3 fw-bold text-white letter-spacing-1">ACTIVATING BRIDGE...</div>';
+        
+        // Re-run playStream with the bridged URL but keep the meta
+        // We use a small timeout to let previous players fully die
+        setTimeout(() => {
+            // We use a modified version of playStream that doesn't reset fallbackTriggered
+            // or we just call the internals. For simplicity, let's just use the proxy URL.
+            currentStreamUrl = bridgeUrl;
+            
+            // Re-detect types for the proxied URL
+            const isHls = url.toLowerCase().includes('m3u8');
+            if (isHls) {
+                if (Hls.isSupported()) {
+                    if (hls) hls.destroy();
+                    hls = new Hls();
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(bridgeUrl));
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+                } else {
+                    video.src = bridgeUrl;
+                    video.play().catch(()=>{});
+                }
+            } else {
+                // Direct or MPEG-TS
+                video.src = bridgeUrl;
+                video.load();
+                video.play().then(() => overlay.classList.add('d-none')).catch(() => {
+                    overlay.innerHTML = '<div class="text-warning"><i class="bi bi-patch-question display-4 mb-3"></i><h5>INCOMPATIBLE FORMAT</h5><p class="small opacity-75">Try "Play with VLC" for maximum compatibility.</p></div>';
+                });
+            }
+        }, 500);
     }
 
     // Search Logic
@@ -816,7 +1061,6 @@
 
     // Smart HUD Control
     let hudTimeout;
-    const infoBar = document.getElementById('channelInfo');
     
     function showHUD() {
         if (!infoBar.dataset.currentId) return; // Don't show if nothing playing
@@ -857,9 +1101,6 @@
     });
 
     // Custom Controls Logic
-    const topControls = document.getElementById('topControls');
-    const customPlayPause = document.getElementById('customPlayPause');
-    const customMute = document.getElementById('customMute');
     
     video.addEventListener('play', () => {
         customPlayPause.innerHTML = '<i class="bi bi-pause-fill"></i>';
@@ -884,7 +1125,7 @@
         video.muted = !video.muted;
     });
 
-    const customFullscreen = document.getElementById('customFullscreen');
+
     customFullscreen.addEventListener('click', () => {
         if (!document.fullscreenElement) {
             if (playerArea.requestFullscreen) {
@@ -974,6 +1215,42 @@
     });
 
 
+
+
+
+    // Ensure overlay is hidden once video actually starts
+    video.addEventListener('playing', () => {
+        overlay.classList.add('d-none');
+        // If it was die, force update to live since it's playing
+        const statusLabel = document.getElementById('statusLabel');
+        const statusContainer = document.getElementById('statusContainer');
+        if (statusLabel && statusLabel.innerText === 'DIE') {
+            statusLabel.innerText = 'LIVE';
+            if (statusContainer) statusContainer.className = 'd-flex align-items-center gap-2 px-3 py-2 rounded-2 bg-success text-white fw-bold shadow-sm';
+        }
+    });
+
+    // Stuck/Stalled Detection
+    let stuckTimer = null;
+    video.addEventListener('waiting', () => {
+        if (stuckTimer) clearTimeout(stuckTimer);
+        stuckTimer = setTimeout(() => {
+            if (video.paused || video.readyState < 3) { // 3 = HAVE_FUTURE_DATA
+                console.log("Stream stuck, attempting auto-resume...");
+                // Try to nudge the video by jumping 0.1s or just playing
+                if (video.currentTime > 0) video.currentTime += 0.1;
+                video.play().catch(() => {});
+            }
+        }, 5000); // Wait 5s before nudging
+    });
+
+    video.addEventListener('playing', () => {
+        if (stuckTimer) {
+            clearTimeout(stuckTimer);
+            stuckTimer = null;
+        }
+    });
+
     // VOD Seek Bar Events
     video.addEventListener('timeupdate', () => {
         if (!video.duration) return;
@@ -1019,6 +1296,91 @@
             loadPlaylist(playlistSelector.value, true);
         }
     }
+
+    // Quick Add Logic
+    const qaModal = new bootstrap.Modal(document.getElementById('quickAddModal'));
+    const qaPlaylistSelect = document.getElementById('qaPlaylist');
+    const qaGroupSelect = document.getElementById('qaGroup');
+    const qaConfirmBtn = document.getElementById('qaConfirm');
+    let qaChannelId = null;
+    let playlistsCache = null;
+
+    async function openQuickAdd(channelId, channelName) {
+        qaChannelId = channelId;
+        qaModal.show();
+        
+        if (!playlistsCache) {
+            try {
+                const resp = await fetch('/channels/api/playlists_with_groups');
+                const data = await resp.json();
+                if (data.status === 'ok') {
+                    playlistsCache = data.playlists;
+                    renderQAPlaylists();
+                }
+            } catch (err) { console.error(err); }
+        } else {
+            renderQAPlaylists();
+        }
+    }
+
+    function renderQAPlaylists() {
+        let html = '<option value="" class="bg-dark">Select Playlist...</option>';
+        playlistsCache.forEach(pl => {
+            html += `<option value="${pl.id}" class="bg-dark">${pl.name}</option>`;
+        });
+        qaPlaylistSelect.innerHTML = html;
+        qaGroupSelect.innerHTML = '<option value="" class="bg-dark">Default/No Group</option>';
+    }
+
+    qaPlaylistSelect.addEventListener('change', () => {
+        const plId = qaPlaylistSelect.value;
+        if (!plId) {
+            qaGroupSelect.innerHTML = '<option value="" class="bg-dark">Default/No Group</option>';
+            return;
+        }
+        
+        const pl = playlistsCache.find(p => p.id == plId);
+        if (pl && pl.groups) {
+            let html = '<option value="" class="bg-dark">Default/No Group</option>';
+            pl.groups.forEach(g => {
+                html += `<option value="${g.id}" class="bg-dark">${g.name}</option>`;
+            });
+            qaGroupSelect.innerHTML = html;
+        }
+    });
+
+    qaConfirmBtn.addEventListener('click', async () => {
+        const plId = qaPlaylistSelect.value;
+        const gId = qaGroupSelect.value;
+        
+        if (!plId) return alert('Please select a playlist');
+        
+        qaConfirmBtn.disabled = true;
+        qaConfirmBtn.innerText = 'ADDING...';
+        
+        try {
+            const resp = await fetch('/channels/api/quick_add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    channel_id: qaChannelId,
+                    playlist_id: plId,
+                    group_id: gId
+                })
+            });
+            const data = await resp.json();
+            if (data.status === 'ok') {
+                qaModal.hide();
+                alert('Channel added successfully!');
+            } else {
+                alert('Error: ' + data.message);
+            }
+        } catch (err) { alert('Request failed'); }
+        finally {
+            qaConfirmBtn.disabled = false;
+            qaConfirmBtn.innerText = 'CONFIRM ADD';
+        }
+    });
 
     initPlayer();
 </script>
