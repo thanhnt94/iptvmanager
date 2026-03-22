@@ -60,7 +60,22 @@ def delete_channel(id):
 @channels_bp.route('/check/<int:id>', methods=['POST'])
 def check_channel(id):
     from app.modules.health.services import HealthCheckService
+    from datetime import datetime
+    
     HealthCheckService.check_stream(id)
+    channel = Channel.query.get(id)
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('ajax'):
+        return jsonify({
+            'success': True,
+            'status': channel.status,
+            'stream_type': channel.stream_type,
+            'quality': channel.quality,
+            'resolution': channel.resolution,
+            'latency': round(channel.latency, 1) if channel.latency else 0,
+            'last_checked': channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never'
+        })
+        
     flash('Channel check completed!')
     return redirect(url_for('channels.index'))
 

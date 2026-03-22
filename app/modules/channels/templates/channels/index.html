@@ -85,7 +85,7 @@
                         </thead>
                         <tbody>
                             {% for channel in channels %}
-                            <tr>
+                            <tr id="channel-row-{{ channel.id }}">
                                 <td>{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
                                 <td>
                                     {% if channel.logo_url %}
@@ -99,7 +99,7 @@
                                     <div class="text-muted small">ID: {{ channel.id }}</div>
                                 </td>
                                 <td><span class="badge bg-light text-dark">{{ channel.group_name }}</span></td>
-                                <td>
+                                <td class="status-cell">
                                     {% if channel.status == 'live' %}
                                     <span class="badge bg-success">Live</span>
                                     {% elif channel.status == 'die' %}
@@ -108,7 +108,7 @@
                                     <span class="badge bg-secondary">Unknown</span>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="type-cell">
                                     {% if channel.stream_type == 'vod' %}
                                     <span class="badge bg-info">VOD</span>
                                     {% elif channel.stream_type == 'live' %}
@@ -117,7 +117,7 @@
                                     <span class="badge bg-secondary">Unknown</span>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="quality-cell">
                                     {% if channel.quality == 'excellent' %}
                                     <span class="badge bg-success">Excellent</span>
                                     {% elif channel.quality == 'good' %}
@@ -128,23 +128,23 @@
                                     -
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="res-cell">
                                     {% if channel.resolution %}
                                     <span class="badge bg-dark text-light" style="font-size: 0.75rem;">{{ channel.resolution }}</span>
                                     {% else %}
                                     -
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="checked-cell">
                                     <small class="text-muted">
                                         {{ channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never' }}
                                     </small>
                                 </td>
                                 <td>
                                     <button class="btn btn-sm btn-info play-btn" data-url="{{ channel.stream_url }}" data-name="{{ channel.name }}">Play</button>
-                                    <form action="{{ url_for('channels.check_channel', id=channel.id) }}" method="POST" style="display:inline;">
-                                        <button type="submit" class="btn btn-sm btn-outline-success">Check</button>
-                                    </form>
+                                    <button type="button" class="btn btn-sm btn-outline-success ajax-check-btn" 
+                                            data-id="{{ channel.id }}" 
+                                            data-url="{{ url_for('channels.check_channel', id=channel.id) }}">Check</button>
                                     <a href="{{ url_for('channels.edit_channel', id=channel.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
                                     <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" style="display:inline;">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure?')">Delete</button>
@@ -350,64 +350,74 @@ document.addEventListener('DOMContentLoaded', function() {
     const video = document.getElementById('videoPlayer');
     let hls;
 
-    // Use Event Delegation for Play Buttons
+    // Use Event Delegation for Buttons
     document.addEventListener('click', function(e) {
-        const btn = e.target.closest('.play-btn');
-        if (btn) {
-            const url = btn.getAttribute('data-url');
-            const name = btn.getAttribute('data-name');
+        const playBtn = e.target.closest('.play-btn');
+        if (playBtn) {
+            const url = playBtn.getAttribute('data-url');
+            const name = playBtn.getAttribute('data-name');
             document.getElementById('playerTitle').textContent = 'Playing: ' + name;
-            
-            console.log('Attempting to play:', url);
             
             if (Hls.isSupported()) {
                 if (hls) hls.destroy();
-                hls = new Hls({
-                    debug: false,
-                    enableWorker: true,
-                    lowLatencyMode: true
-                });
+                hls = new Hls({ debug: false, enableWorker: true, lowLatencyMode: true });
                 hls.attachMedia(video);
-                hls.on(Hls.Events.MEDIA_ATTACHED, function() {
-                    hls.loadSource(url);
-                });
-                hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    video.play().catch(err => {
-                        console.error('Playback failed:', err);
-                        alert('Cannot autoplay. Please click play on the video.');
-                    });
-                });
-                hls.on(Hls.Events.ERROR, function(event, data) {
-                    if (data.fatal) {
-                        console.error('HLS Fatal Error:', data.type);
-                        switch (data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                hls.destroy();
-                                alert('Fatal error: ' + data.details + '. Stream might be offline или blocked by CORS.');
-                                break;
-                        }
-                    }
-                });
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(err => console.error(err)));
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = url;
                 video.play();
             }
             playerModal.show();
+            return;
+        }
+
+        const checkBtn = e.target.closest('.ajax-check-btn');
+        if (checkBtn) {
+            e.preventDefault();
+            const id = checkBtn.getAttribute('data-id');
+            const url = checkBtn.getAttribute('data-url');
+            const row = document.getElementById(`channel-row-${id}`);
+            
+            const originalText = checkBtn.innerHTML;
+            checkBtn.disabled = true;
+            checkBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            fetch(url + '?ajax=1', { 
+                method: 'POST', 
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const statusB = data.status === 'live' ? '<span class="badge bg-success">Live</span>' : (data.status === 'die' ? '<span class="badge bg-danger">Die</span>' : '<span class="badge bg-secondary">Unknown</span>');
+                    row.querySelector('.status-cell').innerHTML = statusB;
+                    
+                    const typeB = data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>');
+                    row.querySelector('.type-cell').innerHTML = typeB;
+                    
+                    let qB = '-';
+                    if (data.quality === 'excellent') qB = '<span class="badge bg-success">Excellent</span>';
+                    else if (data.quality === 'good') qB = '<span class="badge bg-info">Good</span>';
+                    else if (data.quality === 'poor') qB = '<span class="badge bg-danger">Poor</span>';
+                    row.querySelector('.quality-cell').innerHTML = qB;
+                    
+                    row.querySelector('.res-cell').innerHTML = data.resolution ? `<span class="badge bg-dark text-light" style="font-size: 0.75rem;">${data.resolution}</span>` : '-';
+                    row.querySelector('.checked-cell').innerHTML = `<small class="text-muted">${data.last_checked}</small>`;
+                    row.classList.add('table-success');
+                    setTimeout(() => row.classList.remove('table-success'), 1500);
+                }
+            })
+            .finally(() => {
+                checkBtn.disabled = false;
+                checkBtn.innerHTML = originalText;
+            });
         }
     });
 
     document.getElementById('playerModal').addEventListener('hidden.bs.modal', function () {
         video.pause();
-        if (hls) {
-            hls.stopLoad();
-            hls.detachMedia();
-        }
+        if (hls) { hls.stopLoad(); hls.detachMedia(); }
     });
 });
 </script>
