@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Add New Channel Manually</h5>
+                <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-light">Back to List</a>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="name" class="form-label fw-bold">Channel Name</label>
+                            <input type="text" name="name" id="name" class="form-control" placeholder="e.g., HBO HD" value="{{ form_data.name if form_data else '' }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="group_name" class="form-label fw-bold">Group / Category</label>
+                            <input type="text" name="group_name" id="group_name" class="form-control" list="group_list" placeholder="Select or type new group" value="{{ form_data.group_name if form_data else '' }}">
+                            <datalist id="group_list">
+                                {% for g in distinct_groups %}
+                                <option value="{{ g }}">
+                                {% endfor %}
+                            </datalist>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="stream_url" class="form-label fw-bold">Stream URL (M3U8 / MP4)</label>
+                        <input type="url" name="stream_url" id="stream_url" class="form-control" placeholder="http://..." value="{{ form_data.stream_url if form_data else '' }}" required>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="logo_url" class="form-label fw-bold">Logo URL (Optional)</label>
+                            <input type="url" name="logo_url" id="logo_url" class="form-control" placeholder="http://...png" value="{{ form_data.logo_url if form_data else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="epg_id" class="form-label fw-bold">EPG ID (Optional)</label>
+                            <input type="text" name="epg_id" id="epg_id" class="form-control" placeholder="hbo.us" value="{{ form_data.epg_id if form_data else '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">Add Channel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

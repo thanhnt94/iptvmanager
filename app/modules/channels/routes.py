@@ -40,6 +40,45 @@ def index():
                            group=group,
                            stream_type=stream_type)
 
+@channels_bp.route('/add', methods=['GET', 'POST'])
+def add_channel():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        stream_url = request.form.get('stream_url')
+        logo_url = request.form.get('logo_url')
+        epg_id = request.form.get('epg_id')
+        group_name = request.form.get('group_name', 'Manual')
+        
+        # Check for duplication
+        existing = Channel.query.filter_by(stream_url=stream_url).first()
+        if existing:
+            flash(f'Error: This stream URL already exists in channel "{existing.name}" (ID: {existing.id})', 'danger')
+            return render_template('channels/add.html', 
+                                   form_data=request.form,
+                                   distinct_groups=ChannelService.get_distinct_groups())
+
+        new_channel = Channel(
+            name=name,
+            stream_url=stream_url,
+            logo_url=logo_url,
+            epg_id=epg_id,
+            group_name=group_name,
+            status='unknown',
+            stream_type='unknown'
+        )
+        db.session.add(new_channel)
+        db.session.commit()
+        
+        # Optionally trigger immediate check
+        from app.modules.health.services import HealthCheckService
+        HealthCheckService.check_stream(new_channel.id)
+        
+        flash('Channel added successfully!', 'success')
+        return redirect(url_for('channels.index'))
+        
+    return render_template('channels/add.html', 
+                           distinct_groups=ChannelService.get_distinct_groups())
+
 @channels_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit_channel(id):
     channel = Channel.query.get_or_404(id)
@@ -72,6 +111,7 @@ def check_channel(id):
             'stream_type': channel.stream_type,
             'quality': channel.quality,
             'resolution': channel.resolution,
+            'audio_codec': channel.audio_codec,
             'latency': round(channel.latency, 1) if channel.latency else 0,
             'last_checked': channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never'
         })
