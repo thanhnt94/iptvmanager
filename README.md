@@ -1,44 +1,44 @@
-# IPTV Playlist Manager (M3U8)
+# IPTV Manager (M3U8)
 
-A robust IPTV Playlist Manager built with Flask, featuring health checks, technical stream analysis (FFmpeg/ffprobe), and an integrated HLS video player.
+Hệ thống quản lý Playlist IPTV toàn diện dựa trên Flask, hỗ trợ kiểm tra sức khỏe luồng (Health Check), phân tích kỹ thuật (FFmpeg/ffprobe) và trình phát video HLS tích hợp.
 
-## Features
+## 🚀 Tính năng chính
 
-- **M3U/M3U8 Parsing**: Robust manual parsing using regex to handle various IPTV metadata formats (tvg-id, logo, group-title).
-- **Background Health Check**: Asynchronous scanning of large playlists with status tracking (Live/Die).
-- **QoS Monitoring**: Measures stream latency and assigns quality ratings (Excellent, Good, Poor).
-- **Technical Inspection**: Uses `ffprobe` to extract resolution and audio codec information from live streams.
-- **Embedded Player**: Integrated HLS.js player for instant channel preview within the dashboard.
-- **Progressive UI**: Real-time progress percentage and "Stop" control for long-running scans.
-- **Deduplication**: Automatically prevents duplicate channels during import based on stream URL.
+- **Quản lý Playlist**: Nhập/Xuất M3U8, quản lý nhóm (Groups) và sắp xếp kênh.
+- **Health Check Thông minh**: Quét trạng thái Live/Die không đồng bộ, đo lường QoS (độ trễ, chất lượng).
+- **Phân tích kỹ thuật**: Sử dụng `ffprobe` để lấy độ phân giải, codec âm thanh và video.
+- **Trình phát HLS tích hợp**: Xem trước kênh trực tiếp trên trình duyệt bằng HLS.js.
+- **Quản lý EPG**: Tích hợp nguồn EPG, tự động đồng bộ hóa lịch phát sóng.
+- **Bảo mật**: Hệ thống User/Admin, mã thông báo API (API Token) cho từng Playlist.
 
-## Prerequisites
+## 📚 Tài liệu chi tiết
 
-- Python 3.10+
-- FFmpeg (for technical specs/ffprobe)
+Vui lòng tham khảo bộ tài liệu chi tiết trong thư mục `/docs`:
 
-## Installation
+1.  [**Hướng dẫn cài đặt**](docs/INSTALLATION.md) - Cài đặt Python, FFmpeg và các thư viện cần thiết.
+2.  [**Kiến trúc hệ thống**](docs/ARCHITECTURE.md) - Chi tiết về Database, Module và Luồng dữ liệu.
+3.  [**Hướng dẫn sử dụng & Tính năng**](docs/FEATURES.md) - Cách sử dụng Health Check, Ingestion và Player.
+4.  [**Tài liệu API**](docs/API_REFERENCE.md) - Các endpoint để xuất Playlist cho Smart TV/Ứng dụng.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/iptv-manager.git
-   cd iptv-manager
-   ```
+## 🛠️ Tech Stack
 
-2. Install dependencies:
+- **Backend**: Flask, SQLAlchemy, SQLite (hoặc PostgreSQL), APScheduler.
+- **Công cụ**: FFmpeg/ffprobe (xử lý luồng stream).
+- **Frontend**: Bootstrap 5, HLS.js, Chart.js.
+- **Hàng đợi (Tùy chọn)**: Redis/Celery (cho các tác vụ quét lớn).
+
+## ⚡ Bắt đầu nhanh
+
+1. **Cài đặt dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Run the application:
+2. **Cài đặt FFmpeg**: (Bắt buộc để phân tích luồng).
+
+3. **Khởi chạy ứng dụng**:
    ```bash
    python run.py
    ```
 
-4. Access at `http://127.0.0.1:5000`
-
-## Tech Stack
-
-- **Backend**: Flask, SQLAlchemy, SQLite, APScheduler
-- **Tools**: FFmpeg/ffprobe (subprocess integration)
-- **Frontend**: Bootstrap 5, HLS.js
+4. Truy cập: `http://127.0.0.1:5000`
