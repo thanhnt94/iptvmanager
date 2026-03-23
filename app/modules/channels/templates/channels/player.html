@@ -450,6 +450,7 @@
     let currentStatusController = null;
     let fallbackTriggered = false;
     const initialChannelId = {{ initial_id|tojson if initial_id else 'null' }};
+    const userApiToken = "{{ current_user.api_token }}";
 
     // Sidebar Toggling
     function toggleSidebarUI(show) {
@@ -657,6 +658,8 @@
     }
 
     async function fetchChannelStatus(id, retry = true) {
+        if (!id || id === 'null') return; // Prevents 404
+        
         if (currentStatusController) {
             currentStatusController.abort();
         }
@@ -797,7 +800,22 @@
         const hasTsSign = lowSourceUrl.includes('.ts') || lowSourceUrl.includes('mpegts') || lowSourceUrl.includes('type=ts');
         const isHls = hasHlsSign;
         const isMpegTS = hasTsSign || (isIPTV && !isHls);
-        const playbackUrl = url || sourceUrl;
+        
+        // SMART PROXY WRAPPING: 
+        // Always wrap .ts links with our high-performance proxy to prevent "3-second cutoff"
+        let playbackUrl = url || sourceUrl;
+        
+        // Prevent double proxying
+        const isAlreadyProxied = playbackUrl.includes('/channels/api/proxy');
+        
+        if (isMpegTS && !isAlreadyProxied) {
+            console.log("MPEG-TS detected: Forcing Proxy Relay for stability...");
+            // Use encodeURIComponent to safely wrap the original URL and include the token
+            playbackUrl = `/channels/api/proxy?url=${encodeURIComponent(playbackUrl)}&token=${userApiToken}`;
+            const shieldIcon = document.getElementById('shieldIcon');
+            if (shieldIcon) shieldIcon.classList.remove('d-none'); // Show shield
+        }
+        
         currentStreamUrl = playbackUrl; // Global tracking for refresh
         
         // UI Updates

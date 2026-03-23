@@ -419,15 +419,15 @@ def get_channel_stats(id):
         }
     })
 
-@channels_bp.route('/api/track', methods=['POST'])
+@channels_bp.route('/api/heartbeat', methods=['POST'])
 def track_usage():
     """
-    Heartbeat API called by web player every 30s.
+    Heartbeat API called by web player every 15s-30s.
     Estimates bandwidth based on resolution.
     """
     data = request.json or {}
     channel_id = data.get('channel_id')
-    seconds = data.get('seconds', 30) # default heartbeat interval
+    seconds = data.get('seconds', 30)
     
     if not channel_id:
         return jsonify({'error': 'No channel_id'}), 400
@@ -436,141 +436,78 @@ def track_usage():
     if not channel:
         return jsonify({'error': 'Channel not found'}), 404
         
-    # Estimated Bitrate in Mbps (conservative estimates)
-    bitrate = 2.0 # default 2Mbps (SD)
+    bitrate = 2.0 
     if channel.resolution:
         res = channel.resolution.lower()
         if '3840' in res or '4k' in res: bitrate = 25.0
         elif '1920' in res or '1080' in res: bitrate = 8.0
         elif '1280' in res or '720' in res: bitrate = 4.0
     
-    # MB = (Mbps * seconds) / 8
     mb_used = (bitrate * seconds) / 8
-    
     channel.total_watch_seconds += seconds
     channel.total_bandwidth_mb += mb_used
     db.session.commit()
-    
     return jsonify({'status': 'ok'})
 
-
 @channels_bp.route('/api/proxy')
-@login_required
 def proxy_stream():
     """
-    Lightweight stream proxy to bypass CORS and fix fragile connections.
+    TVHeadend-style Singleton Proxy Gateway.
+    Uses StreamManager to share a single source connection among clients.
+    Secured by token to prevent Auth Redirect loops in media players.
     """
+    from app.modules.channels.services import StreamManager
+    from app.modules.auth.models import User
+    import requests
+    from flask import Response, stream_with_context, request
+    
+    # 1. Token-based Security (Prevents 302 Login Redirects)
+    token = request.args.get('token')
+    user = User.query.filter_by(api_token=token).first()
+    if not user and not current_user.is_authenticated:
+        return "Unauthorized", 401
+    
     url = request.args.get('url')
     if not url:
         return "No URL provided", 400
     
-    # Common headers to mimic a real player
-    from urllib.parse import urlparse
-    domain = urlparse(url).netloc
+    if url.startswith('/'):
+        url = f"{request.scheme}://{request.host}{url}"
+    
+    # 2. Resolve Redirects to get the canonical URL
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18',
         'Accept': '*/*',
         'Connection': 'keep-alive',
-        'Referer': f'http://{domain}/'
     }
     
     try:
-        session = requests.Session()
-        
-        # Parse an incoming Range header from the browser
-        client_range = request.headers.get('Range')
-        start_byte = 0
-        if client_range and client_range.startswith('bytes='):
-            try:
-                # Extract starting byte (e.g. 1000 from bytes=1000-)
-                parts = client_range.split('=')[1].split('-')
-                if parts[0]:
-                    start_byte = int(parts[0])
-            except (IndexError, ValueError):
-                pass
+        # We need the final URL to ensure singleton mapping works correctly
+        with requests.head(url, headers=headers, allow_redirects=True, timeout=5) as r:
+            final_url = r.url
+    except:
+        final_url = url
 
-        # Define the generator with an "Initial Burst Buffer" + "Resume" logic
-        def generate():
-            error_count = 0
-            max_errors = 10
-            bytes_sent = start_byte # Initialize with client's requested offset
-            
-            # Initial Buffer target (e.g., 512KB for VOD) to provide a "head start"
-            # (Reducing to 512KB for faster seek response)
-            INITIAL_BURST_SIZE = 1024 * 512 
-            
-            CHUNK_SIZE = 131072 # 128KB chunks
-            
-            while error_count < max_errors:
+    # 3. Get the stream queue from the Singleton Manager
+    q = StreamManager.get_source_stream(final_url, headers)
+
+    def generate():
+        try:
+            while True:
+                # Wait for data from the singleton worker
+                # timeout ensures we don't hang if the worker dies
                 try:
-                    # Current local headers for this attempt
-                    current_headers = headers.copy()
-                    current_headers['Range'] = f'bytes={bytes_sent}-'
-                        
-                    # Mimic a persistent connection that reconnects if source ends
-                    with session.get(url, headers=current_headers, stream=True, timeout=30, allow_redirects=True) as r:
-                         # 416 = Range Not Satisfiable (already at end)
-                        if r.status_code == 416:
-                            return
-                            
-                        if r.status_code >= 400 and r.status_code != 206 and (r.status_code != 200 or bytes_sent == 0):
-                            error_count += 1
-                            import time
-                            time.sleep(1)
-                            continue
+                    chunk = q.get(timeout=20) 
+                    if chunk is None: break
+                    yield chunk
+                except:
+                    # Timeout - source might be slow, keep trying or exit if active flag is off
+                    break
+        finally:
+            # Clean up: remove this client queue from the manager
+            StreamManager.remove_client(final_url, q)
 
-                        # Pipe chunks as they arrive
-                        burst_buffer = b""
-                        for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
-                            if chunk:
-                                error_count = 0 
-                                bytes_sent += len(chunk)
-                                
-                                # Initial burst phase
-                                if (bytes_sent - start_byte) < INITIAL_BURST_SIZE:
-                                    burst_buffer += chunk
-                                    continue
-                                
-                                if burst_buffer:
-                                    yield burst_buffer
-                                    burst_buffer = b""
-                                    
-                                yield chunk
-                                
-                        if burst_buffer:
-                            yield burst_buffer
-                        
-                        import time
-                        time.sleep(0.1)
-                        continue 
-
-                except (requests.exceptions.RequestException, Exception) as f:
-                    error_count += 1
-                    import time
-                    time.sleep(0.5)
-                    continue
-            return
-        
-        # Determine mimetype from URL
-        mimetype = 'video/mp2t'
-        if '.m3u8' in url.lower():
-            mimetype = 'application/vnd.apple.mpegurl'
-        elif '.mp4' in url.lower():
-            mimetype = 'video/mp4'
-            
-        status_code = 206 if client_range else 200
-        response = current_app.response_class(generate(), status=status_code, mimetype=mimetype)
-        response.headers['Accept-Ranges'] = 'bytes' # Enable seeking
-        if client_range:
-            response.headers['Content-Range'] = client_range # Pass-through basic info
-            
-        # Add basic CORS and caching headers
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        return response
-        
-    except Exception as e:
-        return f"Proxy error: {str(e)}", 500
+    return Response(stream_with_context(generate()), content_type='video/mp2t')
 
 @channels_bp.route('/extractor')
 def extractor_page():

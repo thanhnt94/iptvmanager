@@ -10,6 +10,79 @@ from app.core.database import db
 
 logger = logging.getLogger('iptv')
 
+import time
+import threading
+import queue
+
+class StreamManager:
+    """
+    TVHeadend-style Singleton Stream Manager.
+    Ensures one connection per source URL and manages broadcast to multiple clients.
+    """
+    _streams = {} # { url: { thread, clients: [queues], last_active } }
+    _lock = threading.Lock()
+
+    @classmethod
+    def get_source_stream(cls, url, headers=None):
+        with cls._lock:
+            if url not in cls._streams:
+                print(f"StreamManager: [NEW] Opening source link for {url}")
+                cls._streams[url] = {
+                    'clients': [],
+                    'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers), daemon=True),
+                    'active': True
+                }
+                cls._streams[url]['thread'].start()
+            
+            # Create a dedicated queue for THIS browser client
+            q = queue.Queue(maxsize=100) # ~6.4MB buffer
+            cls._streams[url]['clients'].append(q)
+            return q
+
+    @classmethod
+    def _run_source_pipe(cls, url, headers):
+        session = requests.Session()
+        while True:
+            # Cleanup check: Any clients left?
+            with cls._lock:
+                if not cls._streams[url]['clients']:
+                    print(f"StreamManager: [CLEANUP] No clients left for {url}. Closing source.")
+                    del cls._streams[url]
+                    return
+
+            try:
+                # Use stream=True to get a real-time stream
+                with session.get(url, headers=headers, stream=True, timeout=15) as r:
+                    if r.status_code >= 400:
+                        time.sleep(2)
+                        continue
+                    
+                    for chunk in r.iter_content(chunk_size=64 * 1024):
+                        if not chunk: break
+                        
+                        # Dispatch chunk to ALL active clients
+                        with cls._lock:
+                            if url not in cls._streams: return
+                            
+                            # Broadcast
+                            for q in cls._streams[url]['clients'][:]:
+                                try:
+                                    # If queue is full, drop chunk for THIS client to prevent memory leak
+                                    if not q.full():
+                                        q.put_nowait(chunk)
+                                except:
+                                    pass
+            except Exception as e:
+                print(f"StreamManager Error for {url}: {e}")
+                time.sleep(1)
+
+    @classmethod
+    def remove_client(cls, url, q):
+        with cls._lock:
+            if url in cls._streams:
+                if q in cls._streams[url]['clients']:
+                    cls._streams[url]['clients'].remove(q)
+
 class EPGService:
     @staticmethod
     def sync_epg(source_id):
@@ -215,6 +288,79 @@ class ExtractorService:
         if results:
             return {'success': True, 'links': results}
         return {'success': False, 'error': 'No media streams found on this page.'}
+
+import time
+import threading
+import queue
+
+class StreamManager:
+    """
+    TVHeadend-style Singleton Stream Manager.
+    Ensures one connection per source URL and manages broadcast to multiple clients.
+    """
+    _streams = {} # { url: { thread, clients: [queues], last_active } }
+    _lock = threading.Lock()
+
+    @classmethod
+    def get_source_stream(cls, url, headers=None):
+        with cls._lock:
+            if url not in cls._streams:
+                print(f"StreamManager: [NEW] Opening source link for {url}")
+                cls._streams[url] = {
+                    'clients': [],
+                    'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers), daemon=True),
+                    'active': True
+                }
+                cls._streams[url]['thread'].start()
+            
+            # Create a dedicated queue for THIS browser client
+            q = queue.Queue(maxsize=100) # ~6.4MB buffer
+            cls._streams[url]['clients'].append(q)
+            return q
+
+    @classmethod
+    def _run_source_pipe(cls, url, headers):
+        session = requests.Session()
+        while True:
+            # Cleanup check: Any clients left?
+            with cls._lock:
+                if not cls._streams[url]['clients']:
+                    print(f"StreamManager: [CLEANUP] No clients left for {url}. Closing source.")
+                    del cls._streams[url]
+                    return
+
+            try:
+                # Use stream=True to get a real-time stream
+                with session.get(url, headers=headers, stream=True, timeout=15) as r:
+                    if r.status_code >= 400:
+                        time.sleep(2)
+                        continue
+                    
+                    for chunk in r.iter_content(chunk_size=64 * 1024):
+                        if not chunk: break
+                        
+                        # Dispatch chunk to ALL active clients
+                        with cls._lock:
+                            if url not in cls._streams: return
+                            
+                            # Broadcast
+                            for q in cls._streams[url]['clients'][:]:
+                                try:
+                                    # If queue is full, drop chunk for THIS client to prevent memory leak
+                                    if not q.full():
+                                        q.put_nowait(chunk)
+                                except:
+                                    pass
+            except Exception as e:
+                print(f"StreamManager Error for {url}: {e}")
+                time.sleep(1)
+
+    @classmethod
+    def remove_client(cls, url, q):
+        with cls._lock:
+            if url in cls._streams:
+                if q in cls._streams[url]['clients']:
+                    cls._streams[url]['clients'].remove(q)
 
 class EPGService:
     @staticmethod
