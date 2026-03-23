@@ -48,6 +48,7 @@
     </div>
 
     <div class="card mb-4">
+        <div class="card-body">
                     <form method="GET" action="{{ url_for('channels.index') }}" class="row g-2">
                         <!-- Row 1: Primary -->
                         <div class="col-md-5">
@@ -139,7 +140,12 @@
                                 <th>Resolution</th>
                                 <th>Audio</th>
                                 <th>Last Checked</th>
-                                <th>Actions</th>
+                                <th style="min-width: 150px;">
+                                    <div class="d-flex align-items-center gap-1">
+                                        Actions
+                                        <button id="checkAllBtn" class="btn btn-xs btn-outline-warning py-0" title="Check all visible channels on this page">Check All</button>
+                                    </div>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -223,6 +229,7 @@
                                     <button class="btn btn-sm btn-info play-btn" 
                                             data-url="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" 
                                             data-name="{{ channel.name }}"
+                                            data-format="{{ channel.stream_format or '' }}"
                                             data-id="{{ channel.id }}">Play</button>
                                     <button class="btn btn-sm btn-outline-info stats-btn" data-id="{{ channel.id }}">Stats</button>
                                     <button class="btn btn-sm btn-outline-secondary copy-link-btn px-2" onclick="copyChannelLink('{{ channel.id }}', '{{ current_user.api_token }}', this)" title="Copy Wrapped Link">
@@ -305,16 +312,35 @@
 <!-- Player Modal -->
 <div class="modal fade" id="playerModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
-    <div class="modal-content bg-dark text-white">
-      <div class="modal-header border-0 d-flex justify-content-between">
-        <h5 class="modal-title" id="playerTitle">Player</h5>
-        <div>
-            <button id="vlcBtn" class="btn btn-sm btn-outline-warning me-2">Play with VLC</button>
+    <div class="modal-content bg-dark text-white border-0 shadow-lg">
+      <div class="modal-header border-0 d-flex justify-content-between align-items-center bg-black bg-opacity-50">
+        <h5 class="modal-title fw-bold" id="playerTitle">Player</h5>
+        <div class="d-flex gap-2">
+            <button id="vlcBtn" class="btn btn-sm btn-warning fw-bold px-3">VLC</button>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
       </div>
-      <div class="modal-body p-0">
-        <video id="videoPlayer" controls class="w-100" style="max-height: 500px;"></video>
+      <div class="modal-body p-0 bg-black position-relative overflow-hidden" style="min-height: 400px;">
+        <div id="playerWrapper" class="w-100 h-100 d-flex align-items-center justify-content-center">
+            <video id="videoPlayer" playsinline class="w-100 h-100" style="max-height: 500px; object-fit: contain;"></video>
+            
+            <!-- Buffering Overlay -->
+            <div id="playerOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="mt-2 small fw-bold text-white-50">BUFFERING...</div>
+            </div>
+
+            <!-- Custom Controls (HUD) -->
+            <div id="playerHUD" class="position-absolute bottom-0 start-0 w-100 p-3 transition-all opacity-0" style="background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex gap-3">
+                        <button id="modalPlayPause" class="btn btn-link text-white p-0 fs-5"><i class="bi bi-play-fill"></i></button>
+                        <button id="modalMute" class="btn btn-link text-white p-0 fs-5"><i class="bi bi-volume-up-fill"></i></button>
+                    </div>
+                    <div id="modalStatus" class="small fw-bold opacity-75">LIVE</div>
+                </div>
+            </div>
+        </div>
       </div>
     </div>
   </div>
@@ -418,9 +444,9 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/mpegts.js@latest/dist/mpegts.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // ... (rest of DOMContentLoaded content will be updated in next step)
     const scanStatusBtn = document.getElementById('scanStatusBtn');
     const scanOptionsBtn = document.getElementById('scanOptionsBtn');
     const startScanBtn = document.getElementById('startScanBtn');
@@ -428,126 +454,240 @@ document.addEventListener('DOMContentLoaded', function() {
     const scanModal = new bootstrap.Modal(document.getElementById('scanModal'));
     let pollInterval;
 
-    document.getElementById('scanMode').addEventListener('change', function() {
-        document.getElementById('daysFilter').classList.toggle('d-none', this.value !== 'outdated');
-    });
+    // Player Elements
+    const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));
+    const video = document.getElementById('videoPlayer');
+    const overlay = document.getElementById('playerOverlay');
+    const hud = document.getElementById('playerHUD');
+    const playPauseBtn = document.getElementById('modalPlayPause');
+    const muteBtn = document.getElementById('modalMute');
+    const statusLabel = document.getElementById('modalStatus');
+    
+    let hls = null;
+    let mpegtsPlayer = null;
+    let currentChannelId = null;
+    let currentStreamUrl = null;
+    const userApiToken = "{{ current_user.api_token }}";
 
     function updateStatusUI() {
         fetch("{{ url_for('health_status') }}")
         .then(r => r.json())
         .then(data => {
-            console.log('Scan Status:', data);
             if (data.is_running) {
                 scanOptionsBtn.classList.add('d-none');
                 scanStatusBtn.classList.remove('d-none');
                 stopBtn.classList.remove('d-none');
-                
                 let percent = 0;
                 if (data.total > 0) percent = Math.round((data.current / data.total) * 100);
                 document.getElementById('scanProgressText').textContent = `${percent}% (${data.current}/${data.total})`;
-                
                 const container = document.getElementById('scanStatusContainer');
                 const info = document.getElementById('currentChannelInfo');
                 if (container && info && data.current_name) {
                     container.classList.remove('d-none');
                     info.textContent = `Processing: ${data.current_name} (ID: ${data.current_id})`;
                 }
-
-                // Update Big Stats Counters
                 if (data.live_count !== undefined) {
                     document.getElementById('stat-live').textContent = data.live_count;
                     document.getElementById('stat-die').textContent = data.die_count;
                     document.getElementById('stat-unknown').textContent = data.unknown_count;
                 }
-
-                if (!pollInterval) {
-                    pollInterval = setInterval(updateStatusUI, 3000);
-                }
+                if (!pollInterval) pollInterval = setInterval(updateStatusUI, 3000);
             } else {
                 scanOptionsBtn.classList.remove('d-none');
                 scanStatusBtn.classList.add('d-none');
                 stopBtn.classList.add('d-none');
                 const container = document.getElementById('scanStatusContainer');
                 if (container) container.classList.add('d-none');
-                
-                if (pollInterval) {
-                    clearInterval(pollInterval);
-                    pollInterval = null;
-                }
+                if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
             }
-        })
-        .catch(err => console.error('Status fetch error:', err));
+        });
     }
 
-    // Check status on load
     updateStatusUI();
-
     scanOptionsBtn.addEventListener('click', () => scanModal.show());
 
     startScanBtn.addEventListener('click', function() {
         const mode = document.getElementById('scanMode').value;
         const days = document.getElementById('scanDays').value;
         const playlist_id = document.getElementById('scanPlaylist').value;
-        
         fetch("{{ url_for('check_now') }}", {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ mode, days, playlist_id })
-        })
-        .then(r => r.json())
-        .then(d => {
-            scanModal.hide();
-            console.log('Scan started:', d);
-            updateStatusUI();
-        });
-    });
-
-    document.getElementById('scanMode').addEventListener('change', function() {
-        if (this.value === 'outdated') {
-            document.getElementById('daysFilter').classList.remove('d-none');
-        } else {
-            document.getElementById('daysFilter').classList.add('d-none');
-        }
+        }).then(() => { scanModal.hide(); updateStatusUI(); });
     });
 
     stopBtn.addEventListener('click', function() {
         if (confirm('Stop all scanning?')) {
-            fetch("{{ url_for('stop_health_check') }}", {method: 'POST'})
-            .then(r => r.json())
-            .then(d => {
-                console.log('Stop requested:', d);
-            });
+            fetch("{{ url_for('check_now') }}", {method: 'DELETE'}).then(() => updateStatusUI());
         }
     });
 
-    const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));
-    const video = document.getElementById('videoPlayer');
-    let hls;
+    // Smart HUD
+    let hudTimeout;
+    function showHUD() {
+        hud.classList.remove('opacity-0');
+        clearTimeout(hudTimeout);
+        hudTimeout = setTimeout(() => hud.classList.add('opacity-0'), 3000);
+    }
+    video.parentElement.addEventListener('mousemove', showHUD);
+    video.parentElement.addEventListener('click', showHUD);
 
-    let currentChannelId = null;
+    playPauseBtn.addEventListener('click', () => {
+        if (video.paused) video.play(); else video.pause();
+    });
+    muteBtn.addEventListener('click', () => {
+        video.muted = !video.muted;
+        muteBtn.innerHTML = video.muted ? '<i class="bi bi-volume-mute-fill"></i>' : '<i class="bi bi-volume-up-fill"></i>';
+    });
 
-    // Use Event Delegation for Buttons
+    video.addEventListener('play', () => playPauseBtn.innerHTML = '<i class="bi bi-pause-fill"></i>');
+    video.addEventListener('pause', () => playPauseBtn.innerHTML = '<i class="bi bi-play-fill"></i>');
+    video.addEventListener('waiting', () => overlay.classList.remove('d-none'));
+    video.addEventListener('playing', () => overlay.classList.add('d-none'));
+
+    // Helper to update Row UI dynamically
+    function updateRowUI(id, data) {
+        const row = document.getElementById(`channel-row-${id}`);
+        if (!row) return;
+
+        // 1. Status Badge
+        const statusCell = row.querySelector('.status-cell');
+        let statusHtml = '<span class="badge bg-secondary">Unknown</span>';
+        if (data.status === 'live') statusHtml = '<span class="badge bg-success">Live</span>';
+        else if (data.status === 'die') statusHtml = '<span class="badge bg-danger">Die</span>';
+        statusCell.innerHTML = statusHtml;
+
+        // 2. Type Badge
+        const typeCell = row.querySelector('.type-cell');
+        let typeHtml = '-';
+        if (data.status !== 'die') {
+            if (data.stream_type === 'vod') typeHtml = '<span class="badge bg-info">VOD</span>';
+            else if (data.stream_type === 'live') typeHtml = '<span class="badge bg-primary">Live TV</span>';
+        }
+        typeCell.innerHTML = typeHtml;
+
+        // 3. Format Badge
+        const formatCell = row.querySelector('.format-cell');
+        if (formatCell) {
+            formatCell.innerHTML = (data.status === 'die' || !data.stream_format) ? '-' : `<span class="badge bg-secondary text-light">${data.stream_format.toUpperCase()}</span>`;
+        }
+
+        // 4. Quality Badge
+        const qualityCell = row.querySelector('.quality-cell');
+        let qualityHtml = '-';
+        if (data.status !== 'die' && data.quality) {
+            const q = data.quality.toLowerCase();
+            if (q === 'excellent') qualityHtml = '<span class="badge bg-success">Excellent</span>';
+            else if (q === 'good') qualityHtml = '<span class="badge bg-info">Good</span>';
+            else if (q === 'poor') qualityHtml = '<span class="badge bg-danger">Poor</span>';
+        }
+        qualityCell.innerHTML = qualityHtml;
+
+        // 5. Resolution & Audio
+        const resCell = row.querySelector('.res-cell');
+        resCell.innerHTML = (data.status !== 'die' && data.resolution) ? `<span class="badge bg-dark text-light" style="font-size: 0.75rem;">${data.resolution}</span>` : '-';
+        
+        const audioCell = row.querySelector('.audio-cell');
+        audioCell.innerHTML = (data.status !== 'die' && data.audio_codec) ? `<span class="badge bg-info text-dark" style="font-size: 0.75rem;">${data.audio_codec}</span>` : '-';
+
+        // 6. Last Checked Time
+        const checkedCell = row.querySelector('.checked-cell');
+        checkedCell.innerHTML = `<small class="text-muted">${data.last_checked || 'Just now'}</small>`;
+
+        // Visual feedback
+        row.classList.add('table-success');
+        setTimeout(() => row.classList.remove('table-success'), 2000);
+    }
+
+    function playStream(url, name, id) {
+        currentChannelId = id;
+        currentStreamUrl = url;
+        document.getElementById('playerTitle').textContent = 'Playing: ' + name;
+        overlay.classList.remove('d-none');
+        
+        // Cleanup
+        if (hls) { hls.destroy(); hls = null; }
+        if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
+        video.pause();
+        video.src = "";
+
+        const lowUrl = url.toLowerCase();
+        const isHls = lowUrl.includes('.m3u8') || lowUrl.includes('playlist');
+        const isTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts');
+
+        // Logic Fallback Proxy
+        let playbackUrl = url;
+        if (isTS && !url.includes('/api/proxy')) {
+            playbackUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`;
+        }
+
+        if (isHls && Hls.isSupported()) {
+            hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(playbackUrl));
+            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+            hls.on(Hls.Events.ERROR, (e, data) => {
+                if (data.fatal) {
+                    console.log("HLS Fatal, trying Proxy fallback...");
+                    playStream(`/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`, name, id);
+                }
+            });
+        } else if (isTS && mpegts.getFeatureList().mseLivePlayback) {
+            mpegtsPlayer = mpegts.createPlayer({
+                type: 'mse',
+                isLive: true,
+                url: playbackUrl,
+                enableStashBuffer: false,
+                stashInitialSize: 128
+            }, {
+                enableWorker: true,
+                lazyLoad: false,
+                liveBufferLatencyChasing: true,
+                liveBufferLatencyChasingOnPause: true
+            });
+            mpegtsPlayer.attachMediaElement(video);
+            mpegtsPlayer.load();
+            mpegtsPlayer.play().then(() => overlay.classList.add('d-none')).catch(() => {
+                video.src = playbackUrl;
+                video.play().catch(()=>{});
+            });
+        } else {
+            video.src = playbackUrl;
+            video.play().catch(()=>{});
+        }
+        playerModal.show();
+
+        // SMART AUTO-UPDATE: After 8 seconds, fetch the metadata that was updated in background
+        setTimeout(() => {
+            fetch(`/channels/check/${id}?ajax=1`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json()).then(data => {
+                if (data.success) updateRowUI(id, data);
+            });
+        }, 8000);
+    }
+
     document.addEventListener('click', function(e) {
+        const playBtn = e.target.closest('.play-btn');
+        if (playBtn) {
+            playStream(playBtn.dataset.url, playBtn.dataset.name, playBtn.dataset.id);
+            return;
+        }
+
         const statsBtn = e.target.closest('.stats-btn');
         if (statsBtn) {
-            const id = statsBtn.getAttribute('data-id');
-            const modalElem = document.getElementById('statsModal');
-            const modal = new bootstrap.Modal(modalElem);
-            
+            const id = statsBtn.dataset.id;
+            const modal = new bootstrap.Modal(document.getElementById('statsModal'));
             document.getElementById('statsLoader').classList.remove('d-none');
             document.getElementById('statsContent').classList.add('d-none');
             modal.show();
-
-            fetch(`/channels/api/stats/${id}`)
-            .then(r => r.json())
-            .then(data => {
+            fetch(`/channels/api/stats/${id}`).then(r => r.json()).then(data => {
                 if (data.status === 'ok') {
                     document.getElementById('statsName').innerText = data.stats.name;
                     document.getElementById('statPlays').innerText = data.stats.play_count;
                     document.getElementById('statTime').innerText = data.stats.total_watch_time;
                     document.getElementById('statBandwidth').innerText = data.stats.bandwidth_mb + ' MB';
                     document.getElementById('statCreated').innerText = data.stats.created_at;
-                    
                     document.getElementById('statsLoader').classList.add('d-none');
                     document.getElementById('statsContent').classList.remove('d-none');
                 }
@@ -555,116 +695,19 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const playBtn = e.target.closest('.play-btn');
-        if (playBtn) {
-            const url = playBtn.getAttribute('data-url');
-            const name = playBtn.getAttribute('data-name');
-            // Find the ID from the row or add it to the button? 
-            // Better to add data-id to the play button in the template.
-            currentChannelId = playBtn.getAttribute('data-id'); 
-            
-            document.getElementById('playerTitle').textContent = 'Playing: ' + name;
-            
-            const isHls = url.toLowerCase().includes('.m3u8');
-            
-            if (isHls && Hls.isSupported()) {
-                if (hls) hls.destroy();
-                hls = new Hls({ debug: false, enableWorker: true, lowLatencyMode: true });
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
-                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(err => console.error(err)));
-            } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = url;
-                video.play();
-            } else {
-                // Direct MP4 / YouTube
-                if (hls) { hls.destroy(); hls = null; }
-                video.src = url;
-                video.play().catch(e => console.error("Playback error:", e));
-            }
-            playerModal.show();
-            
-            // Auto-refresh status in UI after 10 seconds to allow background ffprobe check to complete
-            setTimeout(() => {
-                const row = document.getElementById(`channel-row-${currentChannelId}`);
-                const checkBtn = row.querySelector('.ajax-check-btn');
-                if (checkBtn) {
-                    const url = checkBtn.getAttribute('data-url');
-                    fetch(url + '?ajax=1', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Unified row update
-                            const statusB = data.status === 'live' ? '<span class="badge bg-success">Live</span>' : (data.status === 'die' ? '<span class="badge bg-danger">Die</span>' : '<span class="badge bg-secondary">Unknown</span>');
-                            row.querySelector('.status-cell').innerHTML = statusB;
-                            
-                            const typeB = data.status === 'die' ? '-' : (data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>'));
-                            row.querySelector('.type-cell').innerHTML = typeB;
-
-                            const formatB = (data.status === 'die' || !data.stream_format) ? '-' : `<span class="badge bg-secondary text-light">${data.stream_format.toUpperCase()}</span>`;
-                            row.querySelector('.format-cell').innerHTML = formatB;
-                            
-                            let qB = '-';
-                            if (data.status !== 'die' && data.quality) {
-                                if (data.quality === 'excellent') qB = '<span class="badge bg-success">Excellent</span>';
-                                else if (data.quality === 'good') qB = '<span class="badge bg-info">Good</span>';
-                                else if (data.quality === 'poor') qB = '<span class="badge bg-danger">Poor</span>';
-                            }
-                            row.querySelector('.quality-cell').innerHTML = qB;
-                            
-                            row.querySelector('.res-cell').innerHTML = (data.status !== 'die' && data.resolution) ? `<span class="badge bg-dark text-light" style="font-size: 0.75rem;">${data.resolution}</span>` : '-';
-                            row.querySelector('.audio-cell').innerHTML = (data.status !== 'die' && data.audio_codec) ? `<span class="badge bg-info text-dark" style="font-size: 0.75rem;">${data.audio_codec}</span>` : '-';
-                            row.querySelector('.checked-cell').innerHTML = `<small class="text-muted">${data.last_checked}</small>`;
-                        }
-                    });
-                }
-            }, 10000); 
-            return;
-        }
-
         const checkBtn = e.target.closest('.ajax-check-btn');
         if (checkBtn) {
-            e.preventDefault();
-            const id = checkBtn.getAttribute('data-id');
-            const url = checkBtn.getAttribute('data-url');
-            const row = document.getElementById(`channel-row-${id}`);
-            
+            const id = checkBtn.dataset.id;
+            const url = checkBtn.dataset.url;
             const originalText = checkBtn.innerHTML;
             checkBtn.disabled = true;
             checkBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-            
-            fetch(url + '?ajax=1', { 
-                method: 'POST', 
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            })
-            .then(r => r.json())
-            .then(data => {
+            fetch(url + '?ajax=1', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json()).then(data => {
                 if (data.success) {
-                    const statusB = data.status === 'live' ? '<span class="badge bg-success">Live</span>' : (data.status === 'die' ? '<span class="badge bg-danger">Die</span>' : '<span class="badge bg-secondary">Unknown</span>');
-                    row.querySelector('.status-cell').innerHTML = statusB;
-                    
-                    const typeB = data.status === 'die' ? '-' : (data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>'));
-                    row.querySelector('.type-cell').innerHTML = typeB;
-                    
-                    const formatB = (data.status === 'die' || !data.stream_format) ? '-' : `<span class="badge bg-secondary text-light">${data.stream_format.toUpperCase()}</span>`;
-                    if (row.querySelector('.format-cell')) row.querySelector('.format-cell').innerHTML = formatB;
-                    
-                    let qB = '-';
-                    if (data.status !== 'die' && data.quality) {
-                        if (data.quality === 'excellent') qB = '<span class="badge bg-success">Excellent</span>';
-                        else if (data.quality === 'good') qB = '<span class="badge bg-info">Good</span>';
-                        else if (data.quality === 'poor') qB = '<span class="badge bg-danger">Poor</span>';
-                    }
-                    row.querySelector('.quality-cell').innerHTML = qB;
-                    
-                    row.querySelector('.res-cell').innerHTML = (data.status !== 'die' && data.resolution) ? `<span class="badge bg-dark text-light" style="font-size: 0.75rem;">${data.resolution}</span>` : '-';
-                    row.querySelector('.audio-cell').innerHTML = (data.status !== 'die' && data.audio_codec) ? `<span class="badge bg-info text-dark" style="font-size: 0.75rem;">${data.audio_codec}</span>` : '-';
-                    row.querySelector('.checked-cell').innerHTML = `<small class="text-muted">${data.last_checked}</small>`;
-                    row.classList.add('table-success');
-                    setTimeout(() => row.classList.remove('table-success'), 1500);
+                    updateRowUI(id, data); // NO location.reload()!
                 }
-            })
-            .finally(() => {
+            }).finally(() => {
                 checkBtn.disabled = false;
                 checkBtn.innerHTML = originalText;
             });
@@ -673,63 +716,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('vlcBtn').addEventListener('click', function() {
         if (!currentChannelId) return;
-        const btn = this;
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        
         fetch(`/channels/play_vlc/${currentChannelId}`, { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
+        .then(r => r.json()).then(data => {
             if (data.success) {
-                btn.classList.replace('btn-outline-warning', 'btn-success');
-                setTimeout(() => btn.classList.replace('btn-success', 'btn-outline-warning'), 2000);
-                
-                // Auto-refresh row after 10s to allow background ffprobe (triggered by wrapper) to finish
-                setTimeout(() => {
-                    const row = document.getElementById(`channel-row-${currentChannelId}`);
-                    const checkBtn = row.querySelector('.ajax-check-btn');
-                    if (checkBtn) {
-                        const url = checkBtn.getAttribute('data-url');
-                        fetch(url + '?ajax=1', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                        .then(r => r.json())
-                        .then(data => {
-                            if (data.success) {
-                                // Unified row update
-                                const statusB = data.status === 'live' ? '<span class="badge bg-success">Live</span>' : (data.status === 'die' ? '<span class="badge bg-danger">Die</span>' : '<span class="badge bg-secondary">Unknown</span>');
-                                row.querySelector('.status-cell').innerHTML = statusB;
-                                
-                                const typeB = data.status === 'die' ? '-' : (data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>'));
-                                row.querySelector('.type-cell').innerHTML = typeB;
-                                
-                                let qB = '-';
-                                if (data.status !== 'die' && data.quality) {
-                                    if (data.quality === 'excellent') qB = '<span class="badge bg-success">Excellent</span>';
-                                    else if (data.quality === 'good') qB = '<span class="badge bg-info">Good</span>';
-                                    else if (data.quality === 'poor') qB = '<span class="badge bg-danger">Poor</span>';
-                                }
-                                row.querySelector('.quality-cell').innerHTML = qB;
-                                
-                                row.querySelector('.res-cell').innerHTML = (data.status !== 'die' && data.resolution) ? `<span class="badge bg-dark text-light" style="font-size: 0.75rem;">${data.resolution}</span>` : '-';
-                                row.querySelector('.audio-cell').innerHTML = (data.status !== 'die' && data.audio_codec) ? `<span class="badge bg-info text-dark" style="font-size: 0.75rem;">${data.audio_codec}</span>` : '-';
-                                row.querySelector('.checked-cell').innerHTML = `<small class="text-muted">${data.last_checked}</small>`;
-                            }
-                        });
-                    }
-                }, 10000);
-            } else {
-                alert('Could not launch VLC. Please make sure it is installed.');
+                this.classList.replace('btn-warning', 'btn-success');
+                setTimeout(() => this.classList.replace('btn-success', 'btn-warning'), 2000);
             }
-        })
-        .finally(() => {
-            btn.disabled = false;
-            btn.innerHTML = originalText;
         });
     });
 
     document.getElementById('playerModal').addEventListener('hidden.bs.modal', function () {
         video.pause();
-        if (hls) { hls.stopLoad(); hls.detachMedia(); }
+        if (hls) { hls.destroy(); hls = null; }
+        if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
     });
 });
 

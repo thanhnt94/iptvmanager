@@ -25,15 +25,45 @@
                     {% else %}
                     <p class="mb-2">Channels: {{ profile.entries|length }}</p>
                     {% endif %}
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted mb-1">Playlist Links</label>
+                        <div class="input-group input-group-sm mb-2">
+                            {% set m3u_url = url_for('playlists.publish_m3u8', slug=profile.slug, _external=True) %}
+                            {% if profile.security_token %}{% set m3u_url = m3u_url ~ '?token=' ~ profile.security_token %}{% endif %}
+                            <input type="text" class="form-control bg-light border-end-0" value="{{ m3u_url }}" readonly>
+                            <button class="btn btn-outline-secondary copy-link" data-link="{{ m3u_url }}" title="Copy Selection">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <a href="{{ m3u_url }}" download="{{ profile.slug }}.m3u8" class="btn btn-outline-info btn-sm w-100 shadow-sm hvr-push" title="Download M3U8 File">
+                                    <i class="bi bi-download me-1"></i> Download
+                                </a>
+                            </div>
+                            <div class="col-6">
+                                <a href="vlc://{{ m3u_url }}" class="btn btn-outline-warning btn-sm w-100 shadow-sm hvr-push" title="Open with VLC Protocol">
+                                    <i class="bi bi-play-btn-fill me-1"></i> VLC Player
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="d-grid gap-2">
-                        <a href="{{ url_for('playlists.view_playlist', id=profile.id) }}" class="btn btn-primary">
-                            {% if profile.is_system %}View & Test{% else %}Manage Channels{% endif %}
-                        </a>
-                        {% if not profile.is_system %}
-                        <form action="{{ url_for('playlists.delete_profile', id=profile.id) }}" method="POST" onsubmit="return confirm('Delete this playlist?')">
-                            <button type="submit" class="btn btn-outline-danger btn-sm w-100">Delete</button>
-                        </form>
-                        {% endif %}
+                        <div class="row g-2">
+                            <div class="col-{% if not profile.is_system %}8{% else %}12{% endif %}">
+                                <a href="{{ url_for('playlists.view_playlist', id=profile.id) }}" class="btn btn-primary w-100 shadow-sm hvr-grow">
+                                    {% if profile.is_system %}<i class="bi bi-eye-fill"></i> View & Test{% else %}<i class="bi bi-gear-fill"></i> Manage{% endif %}
+                                </a>
+                            </div>
+                            {% if not profile.is_system %}
+                            <div class="col-4">
+                                <form action="{{ url_for('playlists.delete_profile', id=profile.id) }}" method="POST" onsubmit="return confirm('Delete this playlist?')">
+                                    <button type="submit" class="btn btn-outline-danger w-100 shadow-sm"><i class="bi bi-trash-fill"></i></button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -72,8 +102,21 @@
 document.querySelectorAll('.copy-link').forEach(btn => {
     btn.addEventListener('click', () => {
         const link = btn.getAttribute('data-link');
-        navigator.clipboard.writeText(link);
-        alert('Copied: ' + link);
+        const icon = btn.querySelector('i');
+        
+        navigator.clipboard.writeText(link).then(() => {
+            // Visual feedback
+            const originalClass = icon.className;
+            icon.className = 'bi bi-check-lg text-success';
+            btn.classList.add('btn-success');
+            btn.classList.remove('btn-outline-secondary');
+            
+            setTimeout(() => {
+                icon.className = originalClass;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-secondary');
+            }, 2000);
+        });
     });
 });
 </script>

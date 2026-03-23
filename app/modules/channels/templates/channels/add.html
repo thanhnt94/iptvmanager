@@ -110,13 +110,17 @@
                 </div>
 
                 <!-- Video Player -->
-                <div class="border rounded bg-dark overflow-hidden shadow">
+                <div class="border rounded bg-dark overflow-hidden shadow position-relative">
                     <div class="bg-secondary p-2 d-flex justify-content-between align-items-center">
-                        <span class="text-white small fw-bold">LIVE PLAYER (HLS)</span>
+                        <span class="text-white small fw-bold">LIVE PREVIEW</span>
                         <button class="btn btn-xs btn-outline-light py-0 px-2" id="reloadPlayer" style="font-size: 0.7rem;">Reload</button>
                     </div>
-                    <div class="ratio ratio-16x9">
-                        <video id="videoPlayer" controls></video>
+                    <div class="ratio ratio-16x9 bg-black d-flex align-items-center justify-content-center">
+                        <video id="videoPlayer" class="w-100 h-100" playsinline></video>
+                        <!-- Buffering Overlay -->
+                        <div id="playerOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        </div>
                     </div>
                     <div id="playerStatus" class="p-2 text-center text-white-50 small" style="font-size: 0.75rem;">
                         Waiting for URL...
@@ -125,15 +129,16 @@
                 
                 <div class="mt-3 alert alert-info py-2" style="font-size: 0.8rem;">
                     <i class="bi bi-info-circle me-1"></i>
-                    Enter a stream URL to preview it live before adding.
+                    Enter a stream URL to preview it live. Direct TS links will be proxied automatically.
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Load Hls.js -->
+<!-- Load Player Libraries -->
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/mpegts.js@latest/dist/mpegts.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -142,9 +147,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const logoPreview = document.getElementById('logoPreview');
     const video = document.getElementById('videoPlayer');
     const playerStatus = document.getElementById('playerStatus');
+    const overlay = document.getElementById('playerOverlay');
     const reloadBtn = document.getElementById('reloadPlayer');
+    const userApiToken = "{{ current_user.api_token }}";
     
     let hls = null;
+    let mpegtsPlayer = null;
 
     // 1. Logo Preview Update
     function updateLogo(url) {
@@ -161,29 +169,62 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         playerStatus.textContent = "Loading stream...";
+        overlay.classList.remove('d-none');
         
-        if (Hls.isSupported()) {
-            if (hls) hls.destroy();
-            hls = new Hls();
-            hls.loadSource(url);
+        // Cleanup
+        if (hls) { hls.destroy(); hls = null; }
+        if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
+        video.pause();
+        video.src = "";
+
+        const lowUrl = url.toLowerCase();
+        const isHls = lowUrl.includes('.m3u8') || lowUrl.includes('playlist');
+        const isTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts');
+
+        let playbackUrl = url;
+        // Auto-proxy TS for preview stability
+        if (isTS && !url.includes('/api/proxy')) {
+            playbackUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`;
+        }
+
+        if (isHls && Hls.isSupported()) {
+            hls = new Hls({ enableWorker: true });
             hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                video.play();
-                playerStatus.textContent = "Streaming live...";
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(playbackUrl));
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(()=>{});
+                playerStatus.textContent = "Streaming live (HLS)...";
             });
-            hls.on(Hls.Events.ERROR, function(event, data) {
+            hls.on(Hls.Events.ERROR, (e, data) => {
                 if (data.fatal) {
-                    playerStatus.innerHTML = `<span class="text-danger">Failed to load HLS stream.</span>`;
+                    playerStatus.innerHTML = `<span class="text-danger">Failed to load HLS. Trying Proxy...</span>`;
+                    if (!playbackUrl.includes('/api/proxy')) {
+                        loadStream(`/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`);
+                    }
                 }
             });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = url;
-            video.addEventListener('loadedmetadata', function() {
-                video.play();
-                playerStatus.textContent = "Streaming live (Native)...";
+        } else if (isTS && mpegts.getFeatureList().mseLivePlayback) {
+            mpegtsPlayer = mpegts.createPlayer({ type: 'mse', isLive: true, url: playbackUrl });
+            mpegtsPlayer.attachMediaElement(video);
+            mpegtsPlayer.load();
+            mpegtsPlayer.play().then(() => {
+                playerStatus.textContent = "Streaming live (TS)...";
+            }).catch(() => {
+                video.src = playbackUrl;
+                video.play().catch(()=>{});
+            });
+        } else {
+            video.src = playbackUrl;
+            video.play().then(() => {
+                playerStatus.textContent = "Streaming live (Direct)...";
+            }).catch(()=>{
+                playerStatus.innerHTML = `<span class="text-warning">Format not supported by browser.</span>`;
             });
         }
     }
+
+    video.addEventListener('playing', () => overlay.classList.add('d-none'));
+    video.addEventListener('waiting', () => overlay.classList.remove('d-none'));
 
     if (streamInput.value) loadStream(streamInput.value);
 
@@ -197,7 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(streamTimeout);
         streamTimeout = setTimeout(() => {
             loadStream(this.value);
-        }, 500);
+        }, 1000);
     });
 
     // 3. Playlist Checkbox & Group Select Sync

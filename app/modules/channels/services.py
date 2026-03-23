@@ -34,8 +34,8 @@ class StreamManager:
                 }
                 cls._streams[url]['thread'].start()
             
-            # Create a dedicated queue for THIS browser client
-            q = queue.Queue(maxsize=100) # ~6.4MB buffer
+            # LARGER QUEUE: maxsize=2000 handles ~32MB of data (approx 15-20 seconds of 1080p)
+            q = queue.Queue(maxsize=2000) 
             cls._streams[url]['clients'].append(q)
             return q
 
@@ -57,23 +57,29 @@ class StreamManager:
                         time.sleep(2)
                         continue
                     
-                    for chunk in r.iter_content(chunk_size=64 * 1024):
+                    # 16KB chunk size for efficient broadcast
+                    for chunk in r.iter_content(chunk_size=16384):
                         if not chunk: break
                         
                         # Dispatch chunk to ALL active clients
                         with cls._lock:
-                            if url not in cls._streams: return
+                            if url not in cls._streams: break
                             
-                            # Broadcast
+                            # Broadcast to all client queues
                             for q in cls._streams[url]['clients'][:]:
                                 try:
-                                    # If queue is full, drop chunk for THIS client to prevent memory leak
                                     if not q.full():
+                                        q.put_nowait(chunk)
+                                    else:
+                                        # Queue full? Clear oldest 100 chunks (approx 1.6MB)
+                                        for _ in range(100):
+                                            try: q.get_nowait()
+                                            except: break
                                         q.put_nowait(chunk)
                                 except:
                                     pass
             except Exception as e:
-                print(f"StreamManager Error for {url}: {e}")
+                # Log error but try to reconnect after a short delay
                 time.sleep(1)
 
     @classmethod
@@ -325,8 +331,8 @@ class StreamManager:
                 }
                 cls._streams[url]['thread'].start()
             
-            # Create a dedicated queue for THIS browser client
-            q = queue.Queue(maxsize=100) # ~6.4MB buffer
+            # LARGER QUEUE: maxsize=2000 handles ~32MB of data (approx 15-20 seconds of 1080p)
+            q = queue.Queue(maxsize=2000) 
             cls._streams[url]['clients'].append(q)
             return q
 
@@ -348,23 +354,29 @@ class StreamManager:
                         time.sleep(2)
                         continue
                     
-                    for chunk in r.iter_content(chunk_size=64 * 1024):
+                    # 16KB chunk size for efficient broadcast
+                    for chunk in r.iter_content(chunk_size=16384):
                         if not chunk: break
                         
                         # Dispatch chunk to ALL active clients
                         with cls._lock:
-                            if url not in cls._streams: return
+                            if url not in cls._streams: break
                             
-                            # Broadcast
+                            # Broadcast to all client queues
                             for q in cls._streams[url]['clients'][:]:
                                 try:
-                                    # If queue is full, drop chunk for THIS client to prevent memory leak
                                     if not q.full():
+                                        q.put_nowait(chunk)
+                                    else:
+                                        # Queue full? Clear oldest 100 chunks (approx 1.6MB)
+                                        for _ in range(100):
+                                            try: q.get_nowait()
+                                            except: break
                                         q.put_nowait(chunk)
                                 except:
                                     pass
             except Exception as e:
-                print(f"StreamManager Error for {url}: {e}")
+                # Log error but try to reconnect after a short delay
                 time.sleep(1)
 
     @classmethod

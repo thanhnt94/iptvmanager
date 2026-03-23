@@ -530,27 +530,31 @@ def proxy_stream():
     if url.startswith('/'):
         url = f"{request.scheme}://{request.host}{url}"
     
-    # 2. Proxy the stream using StreamManager
-    # Singleton ensures multiple clients sharing the same source URL
+    # 2. Singleton Proxy Logic (TVHeadend-style)
+    # This ensures only ONE connection to the source IPTV server
     headers = {
         'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18',
         'Accept': '*/*',
         'Connection': 'keep-alive',
     }
     
-    # 3. Get the stream queue from the Singleton Manager
+    # Get the broadcast queue from the manager
+    from app.modules.channels.services import StreamManager
     q = StreamManager.get_source_stream(url, headers)
 
     def generate():
         try:
             while True:
                 try:
+                    # Timeout ensures we don't hang if the source dies
                     chunk = q.get(timeout=20) 
                     if chunk is None: break
                     yield chunk
                 except:
+                    # Source timeout or disconnect
                     break
         finally:
+            # Clean up: remove this client from the broadcast list
             StreamManager.remove_client(url, q)
 
     return Response(stream_with_context(generate()), content_type='video/mp2t')
