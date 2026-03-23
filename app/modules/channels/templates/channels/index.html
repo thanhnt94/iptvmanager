@@ -225,7 +225,7 @@
                                             data-name="{{ channel.name }}"
                                             data-id="{{ channel.id }}">Play</button>
                                     <button class="btn btn-sm btn-outline-info stats-btn" data-id="{{ channel.id }}">Stats</button>
-                                    <button class="btn btn-sm btn-outline-secondary copy-link-btn px-2" onclick="copyChannelLink('{{ channel.id }}', this)" title="Copy Wrapped Link">
+                                    <button class="btn btn-sm btn-outline-secondary copy-link-btn px-2" onclick="copyChannelLink('{{ channel.id }}', '{{ current_user.api_token }}', this)" title="Copy Wrapped Link">
                                         <i class="bi bi-link-45deg"></i> URL
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-success ajax-check-btn" 
@@ -733,8 +733,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function copyChannelLink(channelId, btn) {
-    const link = window.location.origin + "/channels/play/" + channelId;
+function copyChannelLink(channelId, token, btn) {
+    let link = window.location.origin + "/channels/play/" + channelId;
+    if (token && token !== 'None') {
+        link += "?token=" + token;
+    }
     navigator.clipboard.writeText(link).then(() => {
         const originalHtml = btn.innerHTML;
         btn.innerHTML = '<i class="bi bi-check2"></i> Copied!';

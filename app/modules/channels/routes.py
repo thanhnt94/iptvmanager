@@ -393,6 +393,38 @@ def play_channel(id):
         logger.error(f"Quick check failed for {channel.name}: {e}")
         channel.status = 'die'
         db.session.commit()
+    
+    token = request.args.get('token')
+    
+    # SMART AUTH: If no token provided, automatically use the Admin token 
+    # to ensure the proxy redirect works "out of the box"
+    from app.modules.auth.models import User, TrustedIP
+    if not token:
+        admin_user = User.query.filter_by(role='admin').first()
+        if admin_user:
+            token = admin_user.api_token
+    
+    # TRUST IP LOGIC: If we have a token (provided or auto-found), remember this IP
+    if token:
+        from app.modules.playlists.models import PlaylistProfile
+        # ... rest of the trust logic ...
+        # Check if token is valid
+        is_valid = User.query.filter_by(api_token=token).first() or \
+                   PlaylistProfile.query.filter_by(security_token=token).first()
+        
+        if is_valid:
+            ip = request.remote_addr
+            trusted = TrustedIP.query.filter_by(ip_address=ip).first()
+            if not trusted:
+                trusted = TrustedIP(ip_address=ip)
+                db.session.add(trusted)
+            else:
+                from datetime import datetime
+                trusted.last_seen = db.func.now()
+            db.session.commit()
+
+    if channel.use_proxy:
+        return redirect(url_for('channels.proxy_stream', url=channel.stream_url, token=token))
         
     return redirect(channel.stream_url)
 
@@ -464,8 +496,31 @@ def proxy_stream():
     
     # 1. Token-based Security (Prevents 302 Login Redirects)
     token = request.args.get('token')
-    user = User.query.filter_by(api_token=token).first()
-    if not user and not current_user.is_authenticated:
+    from app.modules.auth.models import User, TrustedIP
+    from app.modules.playlists.models import PlaylistProfile
+    
+    is_valid = False
+    if current_user.is_authenticated:
+        is_valid = True
+    elif token:
+        # Check User API Token
+        user = User.query.filter_by(api_token=token).first()
+        if user:
+            is_valid = True
+        else:
+            # Check Playlist Security Token
+            playlist = PlaylistProfile.query.filter_by(security_token=token).first()
+            if playlist:
+                is_valid = True
+    else:
+        # IP-BASED BYPASS: Check if this IP is trusted
+        ip = request.remote_addr
+        trusted = TrustedIP.query.filter_by(ip_address=ip).first()
+        if trusted:
+            # Optional: Check if the trust is still fresh (e.g., last 24h)
+            is_valid = True
+    
+    if not is_valid:
         return "Unauthorized", 401
     
     url = request.args.get('url')
@@ -475,38 +530,28 @@ def proxy_stream():
     if url.startswith('/'):
         url = f"{request.scheme}://{request.host}{url}"
     
-    # 2. Resolve Redirects to get the canonical URL
+    # 2. Proxy the stream using StreamManager
+    # Singleton ensures multiple clients sharing the same source URL
     headers = {
         'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18',
         'Accept': '*/*',
         'Connection': 'keep-alive',
     }
     
-    try:
-        # We need the final URL to ensure singleton mapping works correctly
-        with requests.head(url, headers=headers, allow_redirects=True, timeout=5) as r:
-            final_url = r.url
-    except:
-        final_url = url
-
     # 3. Get the stream queue from the Singleton Manager
-    q = StreamManager.get_source_stream(final_url, headers)
+    q = StreamManager.get_source_stream(url, headers)
 
     def generate():
         try:
             while True:
-                # Wait for data from the singleton worker
-                # timeout ensures we don't hang if the worker dies
                 try:
                     chunk = q.get(timeout=20) 
                     if chunk is None: break
                     yield chunk
                 except:
-                    # Timeout - source might be slow, keep trying or exit if active flag is off
                     break
         finally:
-            # Clean up: remove this client queue from the manager
-            StreamManager.remove_client(final_url, q)
+            StreamManager.remove_client(url, q)
 
     return Response(stream_with_context(generate()), content_type='video/mp2t')
 

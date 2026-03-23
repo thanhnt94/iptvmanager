@@ -51,7 +51,7 @@ class PlaylistService:
         return entry
 
     @staticmethod
-    def generate_m3u(playlist_id, epg_url=None):
+    def generate_m3u(playlist_id, epg_url=None, token=None):
         """Generates M3U8 string for a playlist with wrapped playback URLs."""
         from flask import url_for
         from app.modules.playlists.models import PlaylistProfile
@@ -72,7 +72,9 @@ class PlaylistService:
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch.name}'
                 m3u_lines.append(extinf)
                 # Wrap the stream URL
-                wrapper_url = url_for('channels.play_channel', id=ch.id, _external=True)
+                wrapper_params = {'id': ch.id, '_external': True}
+                if token: wrapper_params['token'] = token
+                wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 m3u_lines.append(wrapper_url)
         else:
             # Regular playlist uses its entries
@@ -84,7 +86,9 @@ class PlaylistService:
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch.name}'
                 m3u_lines.append(extinf)
                 # Wrap the stream URL
-                wrapper_url = url_for('channels.play_channel', id=ch.id, _external=True)
+                wrapper_params = {'id': ch.id, '_external': True}
+                if token: wrapper_params['token'] = token
+                wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 m3u_lines.append(wrapper_url)
             
         return "\n".join(m3u_lines)

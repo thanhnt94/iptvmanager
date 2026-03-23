@@ -34,3 +34,12 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.username} ({self.role})>'
+
+class TrustedIP(db.Model):
+    __tablename__ = 'trusted_ips'
+    id = db.Column(db.Integer, primary_key=True)
+    ip_address = db.Column(db.String(45), unique=True, nullable=False, index=True)
+    last_seen = db.Column(db.DateTime, default=db.func.now())
+    
+    def __repr__(self):
+        return f'<TrustedIP {self.ip_address}>'
