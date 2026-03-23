@@ -298,6 +298,7 @@ def check_channel(id):
             'success': True,
             'status': channel.status,
             'stream_type': channel.stream_type,
+            'stream_format': channel.stream_format,
             'quality': channel.quality,
             'resolution': channel.resolution,
             'audio_codec': channel.audio_codec,

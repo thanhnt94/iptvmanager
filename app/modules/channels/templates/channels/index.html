@@ -134,6 +134,7 @@
                                 <th>Group</th>
                                 <th>Status</th>
                                 <th>Type</th>
+                                <th>Format</th>
                                 <th>Quality</th>
                                 <th>Resolution</th>
                                 <th>Audio</th>
@@ -177,6 +178,13 @@
                                         {% else %}
                                         <span class="badge bg-secondary">Unknown</span>
                                         {% endif %}
+                                    {% endif %}
+                                </td>
+                                <td class="format-cell">
+                                    {% if channel.status == 'die' or not channel.stream_format %}
+                                    -
+                                    {% else %}
+                                    <span class="badge bg-secondary text-light">{{ channel.stream_format|upper }}</span>
                                     {% endif %}
                                 </td>
                                 <td class="quality-cell">
@@ -592,6 +600,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             
                             const typeB = data.status === 'die' ? '-' : (data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>'));
                             row.querySelector('.type-cell').innerHTML = typeB;
+
+                            const formatB = (data.status === 'die' || !data.stream_format) ? '-' : `<span class="badge bg-secondary text-light">${data.stream_format.toUpperCase()}</span>`;
+                            row.querySelector('.format-cell').innerHTML = formatB;
                             
                             let qB = '-';
                             if (data.status !== 'die' && data.quality) {
@@ -634,6 +645,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     const typeB = data.status === 'die' ? '-' : (data.stream_type === 'vod' ? '<span class="badge bg-info">VOD</span>' : (data.stream_type === 'live' ? '<span class="badge bg-primary">Live TV</span>' : '<span class="badge bg-secondary">Unknown</span>'));
                     row.querySelector('.type-cell').innerHTML = typeB;
+                    
+                    const formatB = (data.status === 'die' || !data.stream_format) ? '-' : `<span class="badge bg-secondary text-light">${data.stream_format.toUpperCase()}</span>`;
+                    if (row.querySelector('.format-cell')) row.querySelector('.format-cell').innerHTML = formatB;
                     
                     let qB = '-';
                     if (data.status !== 'die' && data.quality) {

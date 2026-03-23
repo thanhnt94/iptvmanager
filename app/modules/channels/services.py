@@ -172,6 +172,15 @@ class ChannelService:
         if existing:
             return None
             
+        # Quick format detection from extension
+        s_url_lower = stream_url.lower()
+        stream_format = None
+        if '.m3u8' in s_url_lower: stream_format = 'hls'
+        elif '.mp4' in s_url_lower: stream_format = 'mp4'
+        elif '.ts' in s_url_lower: stream_format = 'ts'
+        elif '.mkv' in s_url_lower: stream_format = 'mkv'
+        elif '.mp3' in s_url_lower: stream_format = 'mp3'
+
         new_channel = Channel(
             name=data.get('name'),
             stream_url=stream_url,
@@ -179,7 +188,8 @@ class ChannelService:
             epg_id=data.get('epg_id'),
             group_name=data.get('group_name', 'Manual'),
             status='unknown',
-            stream_type='unknown'
+            stream_type='unknown',
+            stream_format=stream_format
         )
         db.session.add(new_channel)
         db.session.commit()

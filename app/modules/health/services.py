@@ -63,6 +63,7 @@ class HealthCheckService:
                 channel.resolution = None
                 channel.audio_codec = None
                 channel.stream_type = 'unknown'
+                channel.stream_format = None
                 
         except Exception as e:
             logger.error(f"Check error for {channel.name}: {str(e)}", exc_info=True)
@@ -72,6 +73,7 @@ class HealthCheckService:
             channel.resolution = None
             channel.audio_codec = None
             channel.stream_type = 'unknown'
+            channel.stream_format = None
             
         channel.last_checked_at = datetime.utcnow()
         db.session.commit()
@@ -80,6 +82,15 @@ class HealthCheckService:
     def _update_stream_specs(channel):
         """Uses ffprobe to extract resolution, audio info, and detect VOD vs LIVE.
         Returns True if at least one stream is found, False otherwise."""
+        
+        # Initial guess from extension
+        url_lower = channel.stream_url.lower()
+        if '.m3u8' in url_lower: channel.stream_format = 'hls'
+        elif '.mp4' in url_lower: channel.stream_format = 'mp4'
+        elif '.ts' in url_lower: channel.stream_format = 'ts'
+        elif '.mkv' in url_lower: channel.stream_format = 'mkv'
+        elif '.mp3' in url_lower: channel.stream_format = 'mp3'
+
         cmd = [
             'ffprobe', '-v', 'quiet', 
             '-print_format', 'json', 
@@ -101,6 +112,16 @@ class HealthCheckService:
                 # Check Duration for VOD vs LIVE
                 format_info = data.get('format', {})
                 duration = format_info.get('duration')
+                
+                # Better format detection from ffprobe
+                fmt_name = format_info.get('format_name', '').lower()
+                if 'hls' in fmt_name or 'applehttp' in fmt_name: channel.stream_format = 'hls'
+                elif 'mp4' in fmt_name or 'mov' in fmt_name: channel.stream_format = 'mp4'
+                elif 'mpegts' in fmt_name: channel.stream_format = 'ts'
+                elif 'matroska' in fmt_name or 'webm' in fmt_name: channel.stream_format = 'mkv'
+                elif 'aac' in fmt_name: channel.stream_format = 'aac'
+                elif 'mp3' in fmt_name: channel.stream_format = 'mp3'
+
                 try:
                     if duration and float(duration) > 0:
                         channel.stream_type = 'vod'

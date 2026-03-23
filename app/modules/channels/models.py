@@ -12,6 +12,7 @@ class Channel(db.Model):
     epg_id = db.Column(db.String(128))
     status = db.Column(db.String(50), default='unknown') # live, die, unknown
     stream_type = db.Column(db.String(20), default='unknown') # live, vod, unknown
+    stream_format = db.Column(db.String(20)) # e.g., hls, mp4, ts
     latency = db.Column(db.Float) # Response time in ms
     quality = db.Column(db.String(50)) # excellent, good, poor
     resolution = db.Column(db.String(50)) # e.g., 1920x1080

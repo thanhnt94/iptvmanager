@@ -68,11 +68,21 @@ class IngestionService:
                 skipped_count += 1
                 continue
                 
+            # Quick format detection from extension
+            stream_url = data['stream_url'].lower()
+            stream_format = None
+            if '.m3u8' in stream_url: stream_format = 'hls'
+            elif '.mp4' in stream_url: stream_format = 'mp4'
+            elif '.ts' in stream_url: stream_format = 'ts'
+            elif '.mkv' in stream_url: stream_format = 'mkv'
+            elif '.mp3' in stream_url: stream_format = 'mp3'
+
             new_channel = Channel(
                 name=data['name'],
                 logo_url=data['logo_url'],
                 group_name=data['group_name'],
                 stream_url=data['stream_url'],
+                stream_format=stream_format,
                 epg_id=data['epg_id'],
                 status='unknown'
             )

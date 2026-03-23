@@ -21,7 +21,8 @@ def migrate():
         new_columns = [
             ('play_count', 'INTEGER DEFAULT 0'),
             ('total_watch_seconds', 'INTEGER DEFAULT 0'),
-            ('total_bandwidth_mb', 'FLOAT DEFAULT 0.0')
+            ('total_bandwidth_mb', 'FLOAT DEFAULT 0.0'),
+            ('stream_format', 'VARCHAR(20)')
         ]
         
         added_count = 0
