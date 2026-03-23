@@ -91,7 +91,7 @@ class PlaylistService:
                 wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 m3u_lines.append(wrapper_url)
             
-        return "\n".join(m3u_lines)
+        return "\r\n".join(m3u_lines)
 
         db.session.commit()
 

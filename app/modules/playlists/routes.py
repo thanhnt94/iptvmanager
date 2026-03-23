@@ -129,7 +129,9 @@ def publish_m3u8(slug):
     xml_url = url_for('playlists.publish_xml', slug=slug, token=token, _external=True)
     
     m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token)
-    return Response(m3u_content, mimetype='application/vnd.apple.mpegurl')
+    response = Response(m3u_content, mimetype='application/x-mpegurl')
+    response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
+    return response
 
 @playlists_bp.route('/publish/<slug>.xml')
 def publish_xml(slug):
