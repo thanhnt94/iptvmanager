@@ -153,6 +153,62 @@
     </div>
 
     <div class="card shadow-sm border-0 mb-5">
+        <div class="card-header bg-white border-0 pt-3 pb-2">
+            <nav aria-label="Page navigation">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if pagination.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('channels.index', page=pagination.prev_num, search=search, group=group, stream_type=stream_type_filter, status=status_filter, quality=quality_filter, resolution=res_filter, audio=audio_filter, sort=sort) }}" title="Previous">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+                            {% endif %}
+
+                            {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+                                {% if page_num %}
+                                    <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                                        <a class="page-link" href="{{ url_for('channels.index', page=page_num, search=search, group=group, stream_type=stream_type_filter, status=status_filter, quality=quality_filter, resolution=res_filter, audio=audio_filter, sort=sort) }}">{{ page_num }}</a>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if pagination.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('channels.index', page=pagination.next_num, search=search, group=group, stream_type=stream_type_filter, status=status_filter, quality=quality_filter, resolution=res_filter, audio=audio_filter, sort=sort) }}" title="Next">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small text-nowrap">Jump to:</span>
+                        <form class="d-flex gap-1" method="GET" action="{{ url_for('channels.index') }}">
+                            {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+                            {% if group %}<input type="hidden" name="group" value="{{ group }}">{% endif %}
+                            {% if stream_type_filter %}<input type="hidden" name="stream_type" value="{{ stream_type_filter }}">{% endif %}
+                            {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+                            {% if quality_filter %}<input type="hidden" name="quality" value="{{ quality_filter }}">{% endif %}
+                            {% if res_filter %}<input type="hidden" name="resolution" value="{{ res_filter }}">{% endif %}
+                            {% if audio_filter %}<input type="hidden" name="audio" value="{{ audio_filter }}">{% endif %}
+                            {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
+                            <input type="number" name="page" class="form-control form-control-sm text-center" style="width: 60px;" min="1" max="{{ pagination.pages }}" value="{{ pagination.page }}">
+                            <button type="submit" class="btn btn-sm btn-primary px-2"><i class="bi bi-arrow-right"></i></button>
+                        </form>
+                        <span class="text-muted small text-nowrap ms-1">of {{ pagination.pages }}</span>
+                    </div>
+                </div>
+            </nav>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0 align-middle">
@@ -250,21 +306,6 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-        <div class="card-footer bg-white py-3">
-            <nav>
-                <ul class="pagination justify-content-center align-items-center flex-wrap gap-2 mb-0">
-                    {% if pagination.has_prev %}
-                    <li class="page-item"><a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.prev_num, search=search, group=group) }}">&laquo; Previous</a></li>
-                    {% endif %}
-                    <div class="ms-md-3 d-flex align-items-center gap-2">
-                        <span class="text-muted small">Page {{ pagination.page }} of {{ pagination.pages }}</span>
-                    </div>
-                    {% if pagination.has_next %}
-                    <li class="page-item"><a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.next_num, search=search, group=group) }}">Next &raquo;</a></li>
-                    {% endif %}
-                </ul>
-            </nav>
         </div>
     </div>
 </div>
