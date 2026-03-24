@@ -1,10 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context
 from flask_login import login_required, current_user
 import requests
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 import time
 from app.modules.channels.models import Channel, EPGSource, EPGData
 from app.modules.channels.services import ChannelService, EPGService, ActiveSessionManager, StreamManager
+from app.modules.playlists.services import PlaylistService
 from app.core.database import db
 import time
 
@@ -526,9 +528,17 @@ def get_channel_stats(channel_id):
             'resolution': channel.resolution or 'N/A',
             'stream_format': channel.stream_format.upper() if channel.stream_format else 'N/A',
             'stream_type': (channel.stream_type or 'live').upper(),
-            'quality': (channel.quality or 'N/A').title()
+            'quality': (channel.quality or 'N/A').title(),
+            'video_codec': channel.video_codec or 'N/A',
+            'audio_codec': channel.audio_codec or 'N/A',
+            'bitrate': f"{channel.bitrate} kbps" if channel.bitrate else 'N/A',
+            'error_message': channel.error_message
         }
     })
+
+@channels_bp.route('/api/scan_status')
+def get_scan_status():
+    return jsonify(HealthCheckService.get_status())
 
 @channels_bp.route('/api/heartbeat', methods=['POST'])
 def track_usage():

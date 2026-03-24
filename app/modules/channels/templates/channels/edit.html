@@ -127,6 +127,35 @@
                     </div>
                 </div>
 
+                <!-- Technical Diagnostics -->
+                <div class="card border-0 shadow-sm mb-4" style="border-radius: 1rem; background-color: #f8f9fa;">
+                    <div class="card-body p-4">
+                        <h6 class="fw-bold mb-3 text-secondary"><i class="bi bi-activity me-2"></i>Technical Diagnostics</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="small text-muted d-block">Video Codec</label>
+                                <span class="fw-bold">{{ channel.video_codec or 'N/A' }}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="small text-muted d-block">Avg Bitrate</label>
+                                <span class="fw-bold">{% if channel.bitrate %}{{ channel.bitrate }} kbps{% else %}N/A{% endif %}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="small text-muted d-block">Latency (ms)</label>
+                                <span class="fw-bold text-{% if (channel.latency or 0) < 500 %}success{% elif (channel.latency or 0) < 1500 %}warning{% else %}danger{% endif %}">
+                                    {{ channel.latency|round(1) if channel.latency else 'N/A' }}
+                                </span>
+                            </div>
+                        </div>
+                        {% if channel.error_message %}
+                        <div class="mt-4 p-3 bg-{% if channel.status == 'live' %}info{% else %}danger{% endif %}-subtle border-start border-{% if channel.status == 'live' %}info{% else %}danger{% endif %} border-4 rounded">
+                            <label class="small fw-bold text-{% if channel.status == 'live' %}info{% else %}danger{% endif %} d-block mb-1">Last Diagnostic Note</label>
+                            <p class="mb-0 small text-{{ 'info' if channel.status == 'live' else 'danger' }}-emphasis">{{ channel.error_message }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
                 <div class="mb-4">
                     <label class="form-label fw-bold">Playlist Memberships & Groups</label>
                     <div class="border rounded bg-light" style="max-height: 350px; overflow-y: auto;">

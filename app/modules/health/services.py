@@ -53,25 +53,33 @@ class HealthCheckService:
             
             if success:
                 channel.status = 'live'
+                channel.error_message = None # Clear error on success
                 # Fallback quality if latency check was blocked but stream is live
                 if not channel.quality:
                     channel.quality = 'excellent'
             else:
                 channel.status = 'die'
+                channel.error_message = "FFprobe failed to extract streams. Stream might be offline or unsupported."
                 channel.quality = None
                 channel.latency = None
                 channel.resolution = None
                 channel.audio_codec = None
+                channel.video_codec = None
+                channel.bitrate = None
                 channel.stream_type = 'unknown'
                 channel.stream_format = None
                 
         except Exception as e:
-            logger.error(f"Check error for {channel.name}: {str(e)}", exc_info=True)
+            error_msg = str(e)
+            logger.error(f"Check error for {channel.name}: {error_msg}", exc_info=True)
             channel.status = 'die'
+            channel.error_message = error_msg
             channel.quality = None
             channel.latency = None
             channel.resolution = None
             channel.audio_codec = None
+            channel.video_codec = None
+            channel.bitrate = None
             channel.stream_type = 'unknown'
             channel.stream_format = None
             
@@ -112,6 +120,11 @@ class HealthCheckService:
                 # Check Duration for VOD vs LIVE
                 format_info = data.get('format', {})
                 duration = format_info.get('duration')
+                bitrate_raw = format_info.get('bit_rate')
+                
+                if bitrate_raw:
+                    try: channel.bitrate = int(int(bitrate_raw) / 1000)
+                    except: pass
                 
                 # Better format detection from ffprobe
                 fmt_name = format_info.get('format_name', '').lower()
@@ -132,6 +145,7 @@ class HealthCheckService:
 
                 for stream in streams:
                     if stream.get('codec_type') == 'video':
+                        channel.video_codec = stream.get('codec_name', '').upper()
                         w = stream.get('width')
                         h = stream.get('height')
                         if w and h:
@@ -153,7 +167,8 @@ class HealthCheckService:
         'live_count': 0,
         'die_count': 0,
         'unknown_count': 0,
-        'stop_requested': False
+        'stop_requested': False,
+        'logs': [] # List of {time, name, status, error}
     }
 
     @staticmethod
@@ -165,6 +180,18 @@ class HealthCheckService:
         HealthCheckService._scan_state['stop_requested'] = True
 
     @staticmethod
+    def _add_log(name, status, error=None):
+        log_entry = {
+            'time': datetime.utcnow().strftime('%H:%M:%S'),
+            'name': name,
+            'status': status,
+            'error': error
+        }
+        HealthCheckService._scan_state['logs'].insert(0, log_entry)
+        if len(HealthCheckService._scan_state['logs']) > 50:
+            HealthCheckService._scan_state['logs'].pop()
+
+    @staticmethod
     def start_background_scan(app, mode='all', days=None, playlist_id=None):
         """Starts the scanning process in a background thread."""
         if HealthCheckService._scan_state['is_running']:
@@ -172,6 +199,12 @@ class HealthCheckService:
             
         def run_scan(app_context, mode, days, playlist_id):
             with app_context:
+                # Type conversions for JSON data
+                try:
+                    if playlist_id: playlist_id = int(playlist_id)
+                    if days: days = int(days)
+                except: pass
+
                 HealthCheckService._scan_state['is_running'] = True
                 HealthCheckService._scan_state['stop_requested'] = False
                 HealthCheckService._scan_state['current'] = 0
@@ -223,11 +256,11 @@ class HealthCheckService:
                     HealthCheckService.check_stream(channel.id)
                     new_status = channel.status
                     
+                    # Log the result
+                    HealthCheckService._add_log(channel.name, new_status, channel.error_message)
+                    
                     # Update counts if status changed
                     if old_status != new_status:
-                        if old_status in HealthCheckService._scan_state: # e.g. 'live_count'
-                            pass # Need to map status to state key
-                        
                         # Direct update logic
                         if old_status == 'unknown': HealthCheckService._scan_state['unknown_count'] -= 1
                         elif old_status == 'live': HealthCheckService._scan_state['live_count'] -= 1
@@ -238,8 +271,11 @@ class HealthCheckService:
                         elif new_status == 'die': HealthCheckService._scan_state['die_count'] += 1
 
                     HealthCheckService._scan_state['current'] += 1
-                    # Small delay to prevent RAM spike and CPU high load on ARM devices
-                    time.sleep(1)
+                    
+                    # Configurable delay
+                    from app.modules.settings.services import SettingService
+                    delay = int(SettingService.get('SCAN_DELAY_SECONDS', '1'))
+                    time.sleep(delay)
                 
                 HealthCheckService._scan_state['is_running'] = False
 

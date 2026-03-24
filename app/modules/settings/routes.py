@@ -17,7 +17,18 @@ def admin_settings():
     if SettingService.get('ENABLE_STREAM_MANAGER') is None:
         SettingService.set('ENABLE_STREAM_MANAGER', 'true', type='bool', description='Enable singleton stream sharing (TVHeadend Mode).')
     
-    return render_template('settings/admin.html', settings=SettingService.get_all())
+    # Background Scan Settings
+    if SettingService.get('ENABLE_AUTO_SCAN') is None:
+        SettingService.set('ENABLE_AUTO_SCAN', 'false', type='bool', description='Enable periodic background health checks.')
+    if SettingService.get('AUTO_SCAN_INTERVAL') is None:
+        SettingService.set('AUTO_SCAN_INTERVAL', '6', type='int', description='Interval in hours between full scans.')
+    if SettingService.get('SCAN_DELAY_SECONDS') is None:
+        SettingService.set('SCAN_DELAY_SECONDS', '2', type='int', description='Delay in seconds between scanning each channel.')
+    
+    from app.modules.playlists.models import PlaylistProfile
+    playlists = PlaylistProfile.query.all()
+    
+    return render_template('settings/admin.html', settings=SettingService.get_all(), playlists=playlists)
 
 @settings_bp.route('/admin/save', methods=['POST'])
 @login_required
@@ -28,6 +39,12 @@ def save_settings():
     # Checkbox handling in Flask (only present if checked)
     SettingService.set('ENABLE_PROXY_STATS', 'true' if 'ENABLE_PROXY_STATS' in data else 'false', type='bool')
     SettingService.set('ENABLE_STREAM_MANAGER', 'true' if 'ENABLE_STREAM_MANAGER' in data else 'false', type='bool')
+    SettingService.set('ENABLE_AUTO_SCAN', 'true' if 'ENABLE_AUTO_SCAN' in data else 'false', type='bool')
+    
+    if 'AUTO_SCAN_INTERVAL' in data:
+        SettingService.set('AUTO_SCAN_INTERVAL', data['AUTO_SCAN_INTERVAL'], type='int')
+    if 'SCAN_DELAY_SECONDS' in data:
+        SettingService.set('SCAN_DELAY_SECONDS', data['SCAN_DELAY_SECONDS'], type='int')
     
     if 'CUSTOM_USER_AGENT' in data:
         SettingService.set('CUSTOM_USER_AGENT', data['CUSTOM_USER_AGENT'], description='Custom User-Agent for all proxy requests.')

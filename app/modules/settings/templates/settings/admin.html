@@ -5,7 +5,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold text-dark mb-0">System Settings</h2>
-            <p class="text-muted small">Configure global platform behavior and performance toggles.</p>
+            <p class="text-muted small">Configure global platform behavior and background health maintenance.</p>
         </div>
         <a href="{{ url_for('channels.active_sessions_page') }}" class="btn btn-outline-info shadow-sm">
             <i class="bi bi-broadcast me-1"></i> View Live Sessions
@@ -27,7 +27,7 @@
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div>
                                     <label class="fw-bold mb-0">Proxy Usage Tracking</label>
-                                    <p class="text-muted small mb-0">Force proxying for TS/HLS to track watch time in external players.</p>
+                                    <p class="text-muted small mb-0">Force proxying for TS/HLS to track watch time.</p>
                                 </div>
                                 <div class="form-check form-switch px-0">
                                     <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_PROXY_STATS" name="ENABLE_PROXY_STATS" {% if settings|selectattr('key', 'equalto', 'ENABLE_PROXY_STATS')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
@@ -39,7 +39,7 @@
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div>
                                     <label class="fw-bold mb-0">Stream Manager (Piping)</label>
-                                    <p class="text-muted small mb-0">Enable shared source connections (TVHeadend Mode) to save bandwidth.</p>
+                                    <p class="text-muted small mb-0">Enable shared source connections (TVHeadend Mode).</p>
                                 </div>
                                 <div class="form-check form-switch px-0">
                                     <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_STREAM_MANAGER" name="ENABLE_STREAM_MANAGER" {% if settings|selectattr('key', 'equalto', 'ENABLE_STREAM_MANAGER')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
@@ -61,27 +61,281 @@
                     <div class="card-body px-4 pb-4">
                         <div class="mb-3">
                             <label class="fw-bold mb-1">Custom Proxy User-Agent</label>
-                            <input type="text" class="form-control" name="CUSTOM_USER_AGENT" value="{{ (settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|first).value if settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|list else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }}">
-                            <p class="text-muted small mt-1 mb-0">The User-Agent sent to IPTV providers when proxying segments.</p>
+                            <input type="text" class="form-control shadow-none" name="CUSTOM_USER_AGENT" value="{{ (settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|first).value if settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|list else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unified Background Health Check Manager -->
+            <div class="col-md-12 mt-4">
+                <div class="card border-0 shadow-sm" style="border-radius: 1rem;">
+                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
+                        <h5 class="fw-bold mb-0 text-warning">
+                            <i class="bi bi-shield-check me-2"></i> Background Health Scan Control
+                        </h5>
+                        <p class="text-muted small mb-0 mt-1">Manual background scans persist even if you close the browser.</p>
+                    </div>
+                    <div class="card-body px-4 pb-4">
+                        <div class="row g-4">
+                            <!-- Left: Global Configuration -->
+                            <div class="col-md-4">
+                                <h6 class="fw-bold text-muted small text-uppercase mb-3">Scan Configuration</h6>
+                                <div class="mb-3">
+                                    <label class="fw-bold small mb-1">Per-Channel Delay (Seconds)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control shadow-none" id="SCAN_DELAY_SECONDS" name="SCAN_DELAY_SECONDS" value="{{ (settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|first).value if settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|list else '2' }}" min="0">
+                                        <span class="input-group-text">sec</span>
+                                    </div>
+                                    <p class="small text-muted mt-1 mb-0">Avoid provider bans by setting a reasonable delay.</p>
+                                </div>
+                                <div class="d-grid pt-2">
+                                    <button type="submit" class="btn btn-primary fw-bold shadow-sm">SAVE SETTINGS</button>
+                                </div>
+                            </div>
+
+                            <!-- Right: Dashboard & Progress -->
+                            <div class="col-md-8 border-start ps-md-4">
+                                <h6 class="fw-bold text-muted small text-uppercase mb-3">Background Operation Status</h6>
+                                
+                                <div id="scanActionContainer">
+                                    <div class="p-4 bg-light border rounded text-center shadow-sm">
+                                        <i class="bi bi-activity text-muted fs-1 mb-2"></i>
+                                        <h6 class="fw-bold text-dark">No Active Background Scan</h6>
+                                        <p class="text-muted small mb-3">Start a new scan to check for Live/Die status across your channels.</p>
+                                        <button type="button" class="btn btn-warning fw-bold px-5 py-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#advancedScanModal">
+                                            <i class="bi bi-play-circle-fill me-2"></i> START BACKGROUND SCAN
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Real-time Progress Card -->
+                                <div id="backgroundScanBar" class="d-none">
+                                    <div class="p-3 bg-white border rounded shadow-sm">
+                                        <div class="row align-items-center mb-3">
+                                            <div class="col-md-8">
+                                                <div class="d-flex align-items-center gap-2 mb-1">
+                                                    <div class="spinner-border spinner-border-sm text-primary" style="width: 14px; height: 14px;"></div>
+                                                    <span class="fw-bold text-primary small">SCANNING:</span>
+                                                    <span id="currentScanName" class="fw-bold text-dark small text-truncate d-inline-block" style="max-width: 250px;">...</span>
+                                                </div>
+                                                <div id="scanProgressLabel" class="small text-muted">0 / 0 channels processed</div>
+                                            </div>
+                                            <div class="col-md-4 text-end">
+                                                <span id="scanPercent" class="fw-bold text-primary display-6">0%</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="progress mb-4" style="height: 12px; border-radius: 6px; background-color: #f0f0f0;">
+                                            <div id="scanProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-warning" role="progressbar" style="width: 0%"></div>
+                                        </div>
+
+                                        <div class="row g-3 mb-4 text-center">
+                                            <div class="col-4">
+                                                <div class="p-2 border rounded bg-success-subtle">
+                                                    <div class="text-success small fw-bold text-uppercase" style="font-size: 0.6rem;">LIVE</div>
+                                                    <div id="scanStatLive" class="fw-bold fs-4 text-success">0</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 border rounded bg-danger-subtle">
+                                                    <div class="text-danger small fw-bold text-uppercase" style="font-size: 0.6rem;">DIE</div>
+                                                    <div id="scanStatDie" class="fw-bold fs-4 text-danger">0</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 border rounded bg-secondary-subtle">
+                                                    <div class="text-secondary small fw-bold text-uppercase" style="font-size: 0.6rem;">UNKNOWN</div>
+                                                    <div id="scanStatUnknown" class="fw-bold fs-4 text-secondary">0</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex gap-2 justify-content-between">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#scanLogModal">
+                                                <i class="bi bi-terminal me-1"></i> VIEW LIVE LOG
+                                            </button>
+                                            <button id="stopScanBtn" type="button" class="btn btn-danger btn-sm px-3 fw-bold">
+                                                <i class="bi bi-stop-circle-fill me-1"></i> STOP BACKGROUND SCAN
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="text-end mt-4">
-            <button type="submit" class="btn btn-primary px-5 py-2 shadow border-0" style="border-radius: 0.5rem;">
-                <i class="bi bi-save me-2"></i> Save All Settings
-            </button>
-        </div>
     </form>
 
     <div class="mt-5 p-4 bg-warning-subtle border-start border-warning border-4 rounded shadow-sm">
-        <h6 class="fw-bold text-warning-emphasis"><i class="bi bi-exclamation-triangle-fill me-2"></i> Important Warning</h6>
+        <h6 class="fw-bold text-warning-emphasis"><i class="bi bi-exclamation-triangle-fill me-2"></i> Technical Warning</h6>
         <p class="mb-0 text-warning-emphasis small">
-            Disabling <strong>Proxy Usage Tracking</strong> will drastically reduce server CPU and bandwidth usage, but you will LOSE all "Watch Time" and "Bandwidth" statistics for channels played through VLC or external players. 
-            The Web Player will still report heartbeats if possible.
+            Background scans utilize <strong>FFmpeg/ffprobe</strong> on the server. Running scans with 0s delay may impact server performance.
+            Scans will continue to run even if you close this browser tab.
         </p>
     </div>
 </div>
+
+<!-- Modal: Background Scan Configuration -->
+<div class="modal fade" id="advancedScanModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
+            <div class="modal-header bg-warning text-dark border-0 py-3">
+                <h5 class="modal-title fw-bold"><i class="bi bi-shield-check me-2"></i>Configure Background Scan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted text-uppercase">1. Target Scope</label>
+                    <select id="scanPlaylist" class="form-select shadow-none">
+                        <option value="">Full Database Scan (All Channels)</option>
+                        {% for pl in playlists %}
+                        <option value="{{ pl.id }}">{{ pl.name }} {% if pl.is_system %}(System){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted text-uppercase">2. Select Scan Condition</label>
+                    <div class="d-flex flex-column gap-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanMode" id="modeAll" value="all" checked>
+                            <label class="form-check-label" for="modeAll">Scan everything in scope</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanMode" id="modeNever" value="never">
+                            <label class="form-check-label" for="modeNever">Only channels NEVER scanned</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanMode" id="modeDie" value="die">
+                            <label class="form-check-label" for="modeDie">Only channels currently "Die"</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanMode" id="modeOutdated" value="outdated">
+                            <label class="form-check-label" for="modeOutdated">Scan channels older than X days</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="outdatedDaysGroup" class="mb-4 d-none">
+                    <label class="form-label fw-bold small text-muted text-uppercase">Days Threshold</label>
+                    <div class="input-group">
+                        <input type="number" id="scanDays" class="form-control" value="3" min="1">
+                        <span class="input-group-text">days</span>
+                    </div>
+                </div>
+
+                <div class="alert alert-info py-2 px-3 small border-0 mb-0">
+                    <i class="bi bi-info-circle-fill me-2"></i> Background scans are persistent and will run until completed or stopped.
+                </div>
+            </div>
+            <div class="modal-footer border-0 p-3">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                <button id="startScanBtn" class="btn btn-warning fw-bold px-4 shadow-sm">LAUNCH BACKGROUND SCAN</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Diagnostic Logs -->
+<div class="modal fade" id="scanLogModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border-0 shadow-lg" style="border-radius: 1rem;">
+            <div class="modal-header border-0 py-3 px-4">
+                <h5 class="modal-title fw-bold"><i class="bi bi-terminal me-2"></i>Live Background Log</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" style="min-height: 400px; background: #000;">
+                <div id="scanLogContainer" class="p-3 font-monospace small" style="max-height: 500px; overflow-y: auto;">
+                    <div class="text-muted text-center py-5">Connecting to background task...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const scanModes = document.querySelectorAll('input[name="scanMode"]');
+    const daysGroup = document.getElementById('outdatedDaysGroup');
+    const startScanBtn = document.getElementById('startScanBtn');
+    const stopScanBtn = document.getElementById('stopScanBtn');
+    const advScanModal = new bootstrap.Modal(document.getElementById('advancedScanModal'));
+
+    scanModes.forEach(m => {
+        m.addEventListener('change', () => {
+            if (m.value === 'outdated') daysGroup.classList.remove('d-none');
+            else daysGroup.classList.add('d-none');
+        });
+    });
+
+    startScanBtn.addEventListener('click', async () => {
+        const mode = document.querySelector('input[name="scanMode"]:checked').value;
+        const playlistId = document.getElementById('scanPlaylist').value;
+        const days = document.getElementById('scanDays').value;
+
+        startScanBtn.disabled = true;
+        startScanBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Launching...';
+
+        try {
+            const resp = await fetch('/health/check-now', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode, playlist_id: playlistId, days })
+            });
+            const data = await resp.json();
+            if (data.status === 'started') { advScanModal.hide(); pollScanStatus(); }
+        } catch (e) { alert('Error starting background task.'); }
+        finally { startScanBtn.disabled = false; startScanBtn.innerHTML = 'LAUNCH BACKGROUND SCAN'; }
+    });
+
+    stopScanBtn.addEventListener('click', async () => {
+        if (!confirm('This will immediately stop the background process. Continue?')) return;
+        stopScanBtn.disabled = true;
+        try { await fetch('/health/stop', { method: 'POST' }); } catch (e) {}
+        finally { stopScanBtn.disabled = false; }
+    });
+
+    function pollScanStatus() {
+        fetch('/health/status').then(r => r.json()).then(data => {
+            const bar = document.getElementById('backgroundScanBar');
+            const action = document.getElementById('scanActionContainer');
+            
+            if (data.is_running) {
+                bar.classList.remove('d-none');
+                action.classList.add('d-none');
+                
+                const percent = data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
+                document.getElementById('scanProgressBar').style.width = percent + '%';
+                document.getElementById('scanPercent').innerText = percent + '%';
+                document.getElementById('scanProgressLabel').innerText = `${data.current} / ${data.total} channels processed`;
+                document.getElementById('currentScanName').innerText = data.current_name || 'Connecting...';
+                
+                // Live Stats
+                document.getElementById('scanStatLive').innerText = data.live_count || 0;
+                document.getElementById('scanStatDie').innerText = data.die_count || 0;
+                document.getElementById('scanStatUnknown').innerText = data.unknown_count || 0;
+
+                const logContainer = document.getElementById('scanLogContainer');
+                if (data.logs && data.logs.length > 0) {
+                    logContainer.innerHTML = data.logs.map(log => `
+                        <div class="mb-1 text-light small">
+                            <span class="text-secondary opacity-75">[${log.time}]</span> 
+                            <span class="fw-bold text-info">${log.name}</span>: 
+                            <span class="badge bg-${log.status === 'live' ? 'success' : 'danger'}" style="font-size: 0.65rem;">${log.status.toUpperCase()}</span>
+                        </div>
+                    `).join('');
+                }
+            } else {
+                bar.classList.add('d-none');
+                action.classList.remove('d-none');
+            }
+        });
+    }
+    // Poll more frequently (every 2s) for better real-time feel
+    setInterval(pollScanStatus, 2000); pollScanStatus();
+});
+</script>
 {% endblock %}

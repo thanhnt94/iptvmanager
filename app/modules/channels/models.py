@@ -18,6 +18,9 @@ class Channel(db.Model):
     resolution = db.Column(db.String(50)) # e.g., 1920x1080
     audio_codec = db.Column(db.String(50)) # e.g., aac, ac3
     proxy_type = db.Column(db.String(20), default='default') # default, direct, tvheadend
+    video_codec = db.Column(db.String(50)) # e.g., h264, hevc
+    bitrate = db.Column(db.Integer)        # in kbps
+    error_message = db.Column(db.Text)    # Last failure reason
     last_checked_at = db.Column(db.DateTime)
     
     # Stats fields
