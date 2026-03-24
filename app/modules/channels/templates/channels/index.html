@@ -621,12 +621,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const vBtn = e.target.closest('.vlc-quick-btn');
         if (vBtn) {
-            const id = vBtn.dataset.id; const original = vBtn.innerHTML; vBtn.disabled = true;
-            vBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-            fetch(`/channels/play_vlc/${id}`, { method: 'POST' }).then(r => r.json()).then(data => {
-                if (data.success) { vBtn.classList.replace('btn-warning', 'btn-success'); vBtn.innerHTML = 'DONE'; setTimeout(() => { vBtn.classList.replace('btn-success', 'btn-warning'); vBtn.innerHTML = original; vBtn.disabled = false; }, 2000); }
-                else { vBtn.disabled = false; vBtn.innerHTML = original; }
-            });
+            const id = vBtn.dataset.id;
+            const url = window.location.origin + "/channels/play/" + id + "?token=" + userApiToken;
+            window.location.href = "vlc://" + url;
+            
+            const original = vBtn.innerHTML;
+            vBtn.classList.replace('btn-warning', 'btn-success');
+            vBtn.innerHTML = 'OPENING';
+            setTimeout(() => {
+                vBtn.classList.replace('btn-success', 'btn-warning');
+                vBtn.innerHTML = original;
+            }, 2000);
             return;
         }
 
@@ -669,7 +674,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.getElementById('vlcBtn').addEventListener('click', function() {
-        if (currentChannelId) fetch(`/channels/play_vlc/${currentChannelId}`, { method: 'POST' });
+        if (currentChannelId) {
+            const url = window.location.origin + "/channels/play/" + currentChannelId + "?token=" + userApiToken;
+            window.location.href = "vlc://" + url;
+        }
     });
 
     document.getElementById('playerModal').addEventListener('hidden.bs.modal', () => {
@@ -680,10 +688,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function copyChannelLink(id, token, btn) {
     const link = window.location.origin + "/channels/play/" + id + (token ? "?token=" + token : "");
-    navigator.clipboard.writeText(link).then(() => {
-        const orig = btn.innerHTML; btn.innerHTML = 'COPIED!'; btn.classList.replace('btn-outline-secondary', 'btn-success');
-        setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-success', 'btn-outline-secondary'); }, 2000);
-    });
+    
+    const successAction = () => {
+        const orig = btn.innerHTML; 
+        btn.innerHTML = 'COPIED!'; 
+        btn.classList.replace('btn-outline-secondary', 'btn-success');
+        setTimeout(() => { 
+            btn.innerHTML = orig; 
+            btn.classList.replace('btn-success', 'btn-outline-secondary'); 
+        }, 2000);
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(link).then(successAction);
+    } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = link;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            successAction();
+        } catch (err) {
+            alert("Could not copy automatically. Link: " + link);
+        }
+        document.body.removeChild(textArea);
+    }
 }
 </script>
 {% endblock %}
