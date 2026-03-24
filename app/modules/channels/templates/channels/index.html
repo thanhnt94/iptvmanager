@@ -508,27 +508,65 @@ document.addEventListener('DOMContentLoaded', function() {
             heartbeatInterval = setInterval(() => sendPing(10), 10000);
         }
         
-        if (hls) hls.destroy(); hls = null;
-        if (mpegtsPlayer) mpegtsPlayer.destroy(); mpegtsPlayer = null;
-        video.pause(); video.src = "";
+        if (hls) { hls.destroy(); hls = null; }
+        if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
+        video.pause(); video.removeAttribute('src'); video.load();
 
         const playbackUrl = `/channels/play/${id}?token=${userApiToken}`;
-        const isHls = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('playlist');
-        const isTS = url.toLowerCase().includes('.ts') || url.toLowerCase().includes('type=ts');
+        const urlLower = url.toLowerCase();
+        const isHls = urlLower.includes('.m3u8') || urlLower.includes('playlist') || urlLower.includes('hls');
+        const isTS = urlLower.includes('.ts') || urlLower.includes('type=ts') || urlLower.includes('mpegts');
+
+        console.log(`Starting playback: ${name} (ID: ${id}) - Type: ${isHls ? 'HLS' : (isTS ? 'TS' : 'Direct')}`);
 
         if (isHls && Hls.isSupported()) {
-            hls = new Hls({ enableWorker: true });
+            hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 60,
+                manifestLoadingMaxRetry: 10,
+                manifestLoadingRetryDelay: 1000
+            });
+            hls.loadSource(playbackUrl);
             hls.attachMedia(video);
-            hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(playbackUrl));
-            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(e => console.error("Play failed", e)));
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    switch (data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR: hls.startLoad(); break;
+                        case Hls.ErrorTypes.MEDIA_ERROR: hls.recoverMediaError(); break;
+                        default: playStream(url, name, id); break;
+                    }
+                }
+            });
         } else if (isTS && mpegts.getFeatureList().mseLivePlayback) {
-            mpegtsPlayer = mpegts.createPlayer({ type: 'mse', isLive: true, url: playbackUrl }, { enableWorker: true });
+            mpegtsPlayer = mpegts.createPlayer({
+                type: 'mse',
+                isLive: true,
+                url: playbackUrl,
+                cors: true
+            }, {
+                enableWorker: true,
+                enableStashBuffer: false, // Low latency
+                stashInitialSize: 128,
+                lazyLoad: false
+            });
             mpegtsPlayer.attachMediaElement(video);
             mpegtsPlayer.load();
-            mpegtsPlayer.play().catch(() => { video.src = playbackUrl; video.play().catch(()=>{}); });
+            mpegtsPlayer.play().catch(() => {
+                // Fallback to direct video src if MSE fails
+                video.src = playbackUrl;
+                video.play().catch(e => console.error("Direct play failed", e));
+            });
+            mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
+                console.error("MPEGTS Error", type, detail, info);
+                // Auto-reconnect on TS error
+                setTimeout(() => playStream(url, name, id), 2000);
+            });
         } else {
+            // Direct playback for MP4 or other native formats
             video.src = playbackUrl;
-            video.play().catch(()=>{});
+            video.play().catch(e => console.error("Native play failed", e));
         }
         playerModal.show();
     }
