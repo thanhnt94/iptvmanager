@@ -121,7 +121,7 @@ def add_channel():
                 group_id = request.form.get(f'group_{pid}')
                 playlist_data[pid] = group_id
                 
-            PlaylistService.sync_channel_playlists(new_ch.id, playlist_data)
+            PlaylistService.sync_channel_playlists(new_ch.id, playlist_data, request.form.to_dict(flat=False).get('new_group'))
             
             # 3. IMMEDIATE HEALTH CHECK
             # Perform a full scan right now so the user sees technical specs immediately

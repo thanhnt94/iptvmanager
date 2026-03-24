@@ -39,8 +39,27 @@ class PlaylistService:
         return group
 
     @staticmethod
-    def add_channel_to_playlist(playlist_id, channel_id, group_id=None):
-        # Get max order_index
+    def add_channel_to_playlist(playlist_id, channel_id, group_id=None, new_group_name=None):
+        # 1. Handle New Group Creation
+        if not group_id and new_group_name:
+            # Check if group already exists in this playlist
+            existing_g = PlaylistGroup.query.filter_by(playlist_id=playlist_id, name=new_group_name).first()
+            if existing_g:
+                group_id = existing_g.id
+            else:
+                new_g = PlaylistGroup(playlist_id=playlist_id, name=new_group_name)
+                db.session.add(new_g)
+                db.session.commit()
+                group_id = new_g.id
+
+        # 2. Check for existing entry
+        existing_entry = PlaylistEntry.query.filter_by(playlist_id=playlist_id, channel_id=channel_id).first()
+        if existing_entry:
+            existing_entry.group_id = group_id
+            db.session.commit()
+            return existing_entry
+
+        # 3. Create New Entry
         max_order = db.session.query(db.func.max(PlaylistEntry.order_index))\
             .filter_by(playlist_id=playlist_id).scalar() or 0
         
@@ -160,10 +179,11 @@ class PlaylistService:
         return ET.tostring(root, encoding='unicode', method='xml')
 
     @staticmethod
-    def sync_channel_playlists(channel_id, playlist_data):
+    def sync_channel_playlists(channel_id, playlist_data, new_groups_data=None):
         """
-        Syncs a channel's memberships across multiple playlists with specific group IDs.
-        playlist_data: {playlist_id: group_id_or_none, ...}
+        Syncs a channel's memberships.
+        playlist_data: {playlist_id: group_id_str, ...}
+        new_groups_data: {playlist_id: new_group_name_str, ...}
         """
         from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
         
@@ -174,8 +194,8 @@ class PlaylistService:
         ).all()
         
         existing_map = {e.playlist_id: e for e in existing_entries}
-        # playlist_data might have string keys from form, convert to int
         target_playlists = {int(pid): gid for pid, gid in playlist_data.items() if pid}
+        new_groups = {int(pid): name for pid, name in (new_groups_data or {}).items() if pid and name}
         
         # 1. Remove entries for unselected playlists
         for pid in existing_map:
@@ -183,23 +203,32 @@ class PlaylistService:
                 db.session.delete(existing_map[pid])
         
         # 2. Add or Update entries
-        for pid, gid in target_playlists.items():
-            gid_int = int(gid) if gid and str(gid).isdigit() else None
+        for pid in target_playlists:
+            gid = target_playlists[pid]
+            new_name = new_groups.get(pid)
             
+            # Resolve group ID (prioritize existing select, then new name)
+            final_gid = int(gid) if gid and str(gid).isdigit() else None
+            if not final_gid and new_name:
+                # Create or find the new group
+                g = PlaylistGroup.query.filter_by(playlist_id=pid, name=new_name).first()
+                if not g:
+                    g = PlaylistGroup(playlist_id=pid, name=new_name)
+                    db.session.add(g)
+                    db.session.commit()
+                final_gid = g.id
+
             if pid in existing_map:
-                # Update group if changed
                 entry = existing_map[pid]
-                if entry.group_id != gid_int:
-                    entry.group_id = gid_int
+                if entry.group_id != final_gid:
+                    entry.group_id = final_gid
             else:
-                # Add new entry
                 max_order = db.session.query(db.func.max(PlaylistEntry.order_index))\
                     .filter_by(playlist_id=pid).scalar() or 0
-                
                 new_entry = PlaylistEntry(
                     channel_id=channel_id,
                     playlist_id=pid,
-                    group_id=gid_int,
+                    group_id=final_gid,
                     order_index=max_order + 1
                 )
                 db.session.add(new_entry)
