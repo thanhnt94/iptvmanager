@@ -1,310 +1,405 @@
 {% extends "base.html" %}
 
+{% block extra_css %}
+<style>
+    .table-responsive { overflow: visible !important; }
+    .play-btn, .vlc-quick-btn, .stats-btn, .copy-link-btn, .ajax-check-btn, .quick-add-row-btn {
+        position: relative;
+        z-index: 5;
+    }
+    .checkAllBtn {
+        cursor: pointer;
+        z-index: 10;
+        transition: transform 0.2s;
+    }
+    .checkAllBtn:hover { transform: scale(1.05); }
+    .checkAllBtn:active { transform: scale(0.95); }
+    
+    /* Mobile optimization */
+    @media (max-width: 768px) {
+        .mobile-scroll-actions {
+            overflow-x: auto;
+            white-space: nowrap;
+            padding-bottom: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .mobile-scroll-actions::-webkit-scrollbar { display: none; }
+        .stat-card { padding: 0.5rem !important; }
+        .stat-card h5 { font-size: 0.75rem !important; margin-bottom: 0.2rem !important; }
+        .stat-card h3 { font-size: 1.1rem !important; margin-bottom: 0 !important; }
+        .action-header-title { font-size: 1.15rem !important; margin-bottom: 0.15rem !important; margin-top: -5px !important; letter-spacing: -0.5px; }
+        #advancedFilters select { font-size: 0.85rem !important; }
+        .mb-3-mobile { margin-bottom: 0.5rem !important; }
+        .mb-4-mobile { margin-bottom: 0.75rem !important; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Channel Management</h2>
-        <div class="d-flex gap-2 align-items-center">
+<div class="container-fluid pt-0 px-2 px-md-5">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-1 mb-md-3">
+        <h2 class="action-header-title">Channel Management</h2>
+        <div class="d-flex mobile-scroll-actions gap-2 align-items-center">
             <div id="scanStatusContainer" class="d-none me-2 text-end">
-                <div id="currentChannelInfo" class="text-primary small fw-bold" style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+                <div id="currentChannelInfo" class="text-primary small fw-bold" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
             </div>
-            <button id="scanStatusBtn" class="btn btn-warning d-none" disabled>
-                <span class="spinner-border spinner-border-sm me-1"></span>
-                <span id="scanProgressText">Scanning...</span>
+            <!-- Scan Controls -->
+            <button id="scanStatusBtn" class="btn btn-sm btn-info d-none">
+                <span class="spinner-grow spinner-grow-sm me-1"></span>
+                <span id="scanProgressText">...</span>
             </button>
-            <button id="stopScanBtn" class="btn btn-outline-danger d-none">Stop</button>
-            <button id="scanOptionsBtn" class="btn btn-warning">Scan Status...</button>
-            <a href="{{ url_for('channels.extractor_page') }}" class="btn btn-outline-info">Link Grabber</a>
-            <a href="{{ url_for('channels.add_channel') }}" class="btn btn-success">Add Channel</a>
-            <a href="{{ url_for('ingestion.import_channels') }}" class="btn btn-primary">Import</a>
+            <button id="stopScanBtn" class="btn btn-sm btn-danger d-none">Stop</button>
+            <button id="scanOptionsBtn" class="btn btn-sm btn-outline-warning border-2">Scan Options</button>
+            <a href="{{ url_for('channels.extractor_page') }}" class="btn btn-sm btn-outline-info">Link Grabber</a>
+            <a href="{{ url_for('channels.add_channel') }}" class="btn btn-sm btn-success">Add Channel</a>
+            <a href="{{ url_for('ingestion.import_channels') }}" class="btn btn-sm btn-primary">Import</a>
         </div>
     </div>
 
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white text-center p-3">
-                <h5>Total Channels</h5>
-                <h3 id="stat-total">{{ stats.total }}</h3>
+    <div class="row g-1 g-md-3 mb-2 mb-md-4 flex-nowrap overflow-x-auto pb-2 scrollbar-hide text-nowrap">
+        <div class="col-3">
+            <div class="card bg-primary text-white text-center p-2 p-md-3 stat-card h-100 shadow-sm border-0">
+                <h5 class="mb-1 text-white-50 small text-uppercase fw-bold">Total</h5>
+                <h3 id="stat-total" class="mb-0 fw-bold">{{ stats.total }}</h3>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white text-center p-3">
-                <h5>Live</h5>
-                <h3 id="stat-live">{{ stats.live }}</h3>
+        <div class="col-3">
+            <div class="card bg-success text-white text-center p-2 p-md-3 stat-card h-100 shadow-sm border-0">
+                <h5 class="mb-1 text-white-50 small text-uppercase fw-bold">Live</h5>
+                <h3 id="stat-live" class="mb-0 fw-bold">{{ stats.live }}</h3>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-danger text-white text-center p-3">
-                <h5>Die</h5>
-                <h3 id="stat-die">{{ stats.die }}</h3>
+        <div class="col-3">
+            <div class="card bg-danger text-white text-center p-2 p-md-3 stat-card h-100 shadow-sm border-0">
+                <h5 class="mb-1 text-white-50 small text-uppercase fw-bold">Die</h5>
+                <h3 id="stat-die" class="mb-0 fw-bold">{{ stats.die }}</h3>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark text-center p-3">
-                <h5>Unknown</h5>
-                <h3 id="stat-unknown">{{ stats.unknown }}</h3>
+        <div class="col-3">
+            <div class="card bg-warning text-dark text-center p-2 p-md-3 stat-card h-100 shadow-sm border-0">
+                <h5 class="mb-1 text-dark-50 small text-uppercase fw-bold">Unknown</h5>
+                <h3 id="stat-unknown" class="mb-0 fw-bold">{{ stats.unknown }}</h3>
             </div>
         </div>
     </div>
 
-    <div class="card mb-4">
-        <div class="card-body">
-                    <form method="GET" action="{{ url_for('channels.index') }}" class="row g-2">
-                        <!-- Row 1: Primary -->
-                        <div class="col-md-5">
-                            <input type="text" name="search" class="form-control" placeholder="Search name or ID..." value="{{ search or '' }}">
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-body p-2 p-md-3">
+            <form method="GET" action="{{ url_for('channels.index') }}">
+                <div class="row g-2 align-items-center">
+                    <!-- Basic Search Row (Always Visible) -->
+                    <div class="col-12 col-md-8">
+                        <div class="input-group">
+                            <input type="text" name="search" class="form-control" placeholder="Search name/ID..." value="{{ search or '' }}">
+                            <button type="submit" class="btn btn-primary" title="Search">
+                                <i class="bi bi-search"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilters" title="Toggle Filters">
+                                <i class="bi bi-filter"></i>
+                            </button>
                         </div>
-                        <div class="col-md-3">
-                            <select name="group" class="form-select" onchange="this.form.submit()">
-                                <option value="">All Groups</option>
-                                {% for g in distinct_groups %}
-                                <option value="{{ g }}" {% if group == g %}selected{% endif %}>{{ g }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <select name="stream_type" class="form-select" onchange="this.form.submit()">
-                                <option value="">All Types</option>
-                                <option value="live" {% if stream_type == 'live' %}selected{% endif %}>Live TV</option>
-                                <option value="vod" {% if stream_type == 'vod' %}selected{% endif %}>VOD</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <button type="submit" class="btn btn-secondary w-100">Search</button>
-                        </div>
+                    </div>
 
-                        <!-- Row 2: Advanced -->
-                        <div class="col-md-2 mt-2">
-                            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="">Status: All</option>
-                                <option value="live" {% if status == 'live' %}selected{% endif %}>Status: Live</option>
-                                <option value="die" {% if status == 'die' %}selected{% endif %}>Status: Die</option>
-                                <option value="unknown" {% if status == 'unknown' %}selected{% endif %}>Status: Unknown</option>
-                            </select>
+                    <!-- Collapsible Advanced Filters -->
+                    <div class="collapse mt-3" id="advancedFilters">
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="small text-muted mb-1">Group</label>
+                                <select name="group" class="form-select form-select-sm" onchange="this.form.submit()">
+                                    <option value="">All Groups</option>
+                                    {% for g in distinct_groups %}
+                                    <option value="{{ g }}" {% if group == g %}selected{% endif %}>{{ g }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small text-muted mb-1">Stream Type</label>
+                                <select name="stream_type" class="form-select form-select-sm" onchange="this.form.submit()">
+                                    <option value="">All Types</option>
+                                    <option value="live" {% if stream_type == 'live' %}selected{% endif %}>Live TV</option>
+                                    <option value="vod" {% if stream_type == 'vod' %}selected{% endif %}>VOD</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small text-muted mb-1">Status</label>
+                                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                                    <option value="">All Statuses</option>
+                                    <option value="live" {% if status == 'live' %}selected{% endif %}>Live</option>
+                                    <option value="die" {% if status == 'die' %}selected{% endif %}>Die</option>
+                                    <option value="unknown" {% if status == 'unknown' %}selected{% endif %}>Unknown</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small text-muted mb-1">Quality</label>
+                                <select name="quality" class="form-select form-select-sm" onchange="this.form.submit()">
+                                    <option value="">All Quality</option>
+                                    <option value="excellent" {% if quality == 'excellent' %}selected{% endif %}>Excellent</option>
+                                    <option value="good" {% if quality == 'good' %}selected{% endif %}>Good</option>
+                                    <option value="poor" {% if quality == 'poor' %}selected{% endif %}>Poor</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small text-muted mb-1">Resolution</label>
+                                <select name="resolution" class="form-select form-select-sm" onchange="this.form.submit()">
+                                    <option value="">All Resolution</option>
+                                    {% for r in distinct_res %}
+                                    <option value="{{ r }}" {% if res_filter == r %}selected{% endif %}>{{ r }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small text-muted mb-1">Sort By</label>
+                                <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                                    <option value="">Default</option>
+                                    <option value="newest_checked" {% if sort == 'newest_checked' %}selected{% endif %}>Newest Checked</option>
+                                    <option value="oldest_checked" {% if sort == 'oldest_checked' %}selected{% endif %}>Oldest Checked</option>
+                                    <option value="ping_low" {% if sort == 'ping_low' %}selected{% endif %}>Ping Low</option>
+                                    <option value="name_asc" {% if sort == 'name_asc' %}selected{% endif %}>Name: A-Z</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-danger mt-md-4">Clear All</a>
+                            </div>
                         </div>
-                        <div class="col-md-2 mt-2">
-                            <select name="quality" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="">Quality: All</option>
-                                <option value="excellent" {% if quality == 'excellent' %}selected{% endif %}>Qual: Excellent</option>
-                                <option value="good" {% if quality == 'good' %}selected{% endif %}>Qual: Good</option>
-                                <option value="poor" {% if quality == 'poor' %}selected{% endif %}>Qual: Poor</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3 mt-2">
-                            <select name="resolution" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="">Resolution: All</option>
-                                {% for r in distinct_res %}
-                                <option value="{{ r }}" {% if res_filter == r %}selected{% endif %}>Res: {{ r }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-3 mt-2">
-                            <select name="audio" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="">Audio: All</option>
-                                {% for a in distinct_audio %}
-                                <option value="{{ a }}" {% if audio_filter == a %}selected{% endif %}>Audio: {{ a }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2 mt-2">
-                            <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="">Sort: Default</option>
-                                <option value="newest_checked" {% if sort == 'newest_checked' %}selected{% endif %}>Newest Checked</option>
-                                <option value="oldest_checked" {% if sort == 'oldest_checked' %}selected{% endif %}>Oldest Checked</option>
-                                <option value="ping_low" {% if sort == 'ping_low' %}selected{% endif %}>Ping: Low to High</option>
-                                <option value="ping_high" {% if sort == 'ping_high' %}selected{% endif %}>Ping: High to Low</option>
-                                <option value="name_asc" {% if sort == 'name_asc' %}selected{% endif %}>Name: A-Z</option>
-                                <option value="name_desc" {% if sort == 'name_desc' %}selected{% endif %}>Name: Z-A</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2 mt-2">
-                            <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-danger w-100">Clear All</a>
-                        </div>
-                    </form>
+                    </div>
                 </div>
-            </div>
+            </form>
+        </div>
+    </div>
+            </form>
+        </div>
+    </div>
 
-            <div class="card">
-                <div class="card-body p-0">
-                    <table class="table table-hover mb-0">
-                        <thead class="table-dark">
-                            <tr>
-                                <th style="width: 50px;">#</th>
-                                <th style="width: 60px;">Logo</th>
-                                <th>Name</th>
-                                <th>Group</th>
-                                <th>Status</th>
-                                <th>Type</th>
-                                <th>Format</th>
-                                <th>Quality</th>
-                                <th>Resolution</th>
-                                <th>Audio</th>
-                                <th>Last Checked</th>
-                                <th style="min-width: 150px;">
-                                    <div class="d-flex align-items-center gap-1">
-                                        Actions
-                                        <button id="checkAllBtn" class="btn btn-xs btn-outline-warning py-0" title="Check all visible channels on this page">Check All</button>
-                                    </div>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for channel in channels %}
-                            <tr id="channel-row-{{ channel.id }}">
-                                <td>{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
-                                <td>
-                                    {% if channel.logo_url %}
-                                    <img src="{{ channel.logo_url }}" class="img-fluid" style="max-height: 30px;" alt="" loading="lazy">
-                                    {% else %}
-                                    -
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="fw-bold">{{ channel.name }}</div>
-                                    <div class="text-muted small">ID: {{ channel.id }}</div>
-                                </td>
-                                <td><span class="badge bg-light text-dark">{{ channel.group_name }}</span></td>
-                                <td class="status-cell">
-                                    {% if channel.status == 'live' %}
-                                    <span class="badge bg-success">Live</span>
-                                    {% elif channel.status == 'die' %}
-                                    <span class="badge bg-danger">Die</span>
+    <div class="card shadow-sm border-0 mb-5">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-dark sticky-top">
+                        <tr>
+                            <th class="d-none d-md-table-cell" style="width: 50px;">#</th>
+                            <th style="width: 60px;">Logo</th>
+                            <th>Channel Info</th>
+                            <th class="d-none d-lg-table-cell">Group</th>
+                            <th>Status</th>
+                            <th class="d-none d-md-table-cell">Type</th>
+                            <th class="d-none d-lg-table-cell">Format</th>
+                            <th class="d-none d-lg-table-cell">Quality</th>
+                            <th class="d-none d-lg-table-cell">Resolution</th>
+                            <th class="d-none d-lg-table-cell">Usage</th>
+                            <th class="d-none d-xl-table-cell">Last Checked</th>
+                            <th style="width: 140px;" class="text-center">
+                                <div class="d-flex align-items-center justify-content-center gap-2">
+                                    <span>Actions</span>
+                                    <button class="btn btn-sm btn-warning fw-bold p-1 py-0 shadow-sm checkAllBtn" style="font-size: 0.75rem;" title="Check All visible">
+                                        <i class="bi bi-shield-check-fill"></i>
+                                    </button>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for channel in channels %}
+                        <tr id="channel-row-{{ channel.id }}">
+                            <td class="d-none d-md-table-cell text-muted small">{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
+                            <td>
+                                {% if channel.logo_url %}
+                                <img src="{{ channel.logo_url }}" class="img-fluid rounded shadow-sm" style="max-height: 28px;" alt="" loading="lazy">
+                                {% else %}
+                                <div class="text-muted small">N/A</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="fw-bold text-dark lh-sm" style="font-size: 0.95rem;">{{ channel.name }}</div>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    <span class="text-muted" style="font-size: 0.75rem;">ID: {{ channel.id }}</span>
+                                    <span class="badge bg-light text-dark d-lg-none" style="font-size: 0.7rem;">{{ channel.group_name }}</span>
+                                    <span class="badge bg-info-subtle text-info d-lg-none" style="font-size: 0.7rem;">{{ channel.play_count }}p | {{ "%.1f"|format(channel.total_bandwidth_mb) }}MB</span>
+                                </div>
+                            </td>
+                            <td class="d-none d-lg-table-cell">
+                                <span class="badge bg-light text-dark">{{ channel.group_name }}</span>
+                            </td>
+                            <td class="status-cell">
+                                {% if channel.status == 'live' %}
+                                <span class="badge bg-success" style="font-size: 0.75rem;">Live</span>
+                                {% elif channel.status == 'die' %}
+                                <span class="badge bg-danger" style="font-size: 0.75rem;">Die</span>
+                                {% else %}
+                                <span class="badge bg-secondary" style="font-size: 0.75rem;">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td class="type-cell d-none d-md-table-cell">
+                                {% if channel.status == 'die' %}
+                                -
+                                {% else %}
+                                    {% if channel.stream_type == 'vod' %}
+                                    <span class="badge bg-info">VOD</span>
+                                    {% elif channel.stream_type == 'live' %}
+                                    <span class="badge bg-primary">Live TV</span>
                                     {% else %}
                                     <span class="badge bg-secondary">Unknown</span>
                                     {% endif %}
-                                </td>
-                                <td class="type-cell">
-                                    {% if channel.status == 'die' %}
-                                    -
-                                    {% else %}
-                                        {% if channel.stream_type == 'vod' %}
-                                        <span class="badge bg-info">VOD</span>
-                                        {% elif channel.stream_type == 'live' %}
-                                        <span class="badge bg-primary">Live TV</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Unknown</span>
-                                        {% endif %}
+                                {% endif %}
+                            </td>
+                            <td class="format-cell d-none d-lg-table-cell">
+                                {% if channel.status == 'die' or not channel.stream_format %}
+                                -
+                                {% else %}
+                                <span class="badge bg-secondary text-light">{{ channel.stream_format|upper }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="quality-cell d-none d-lg-table-cell">
+                                {% if channel.status == 'die' or not channel.quality %}
+                                -
+                                {% else %}
+                                    {% if channel.quality == 'excellent' %}
+                                    <span class="badge bg-success">Excellent</span>
+                                    {% elif channel.quality == 'good' %}
+                                    <span class="badge bg-info">Good</span>
+                                    {% elif channel.quality == 'poor' %}
+                                    <span class="badge bg-danger">Poor</span>
                                     {% endif %}
-                                </td>
-                                <td class="format-cell">
-                                    {% if channel.status == 'die' or not channel.stream_format %}
-                                    -
-                                    {% else %}
-                                    <span class="badge bg-secondary text-light">{{ channel.stream_format|upper }}</span>
-                                    {% endif %}
-                                </td>
-                                <td class="quality-cell">
-                                    {% if channel.status == 'die' or not channel.quality %}
-                                    -
-                                    {% else %}
-                                        {% if channel.quality == 'excellent' %}
-                                        <span class="badge bg-success">Excellent</span>
-                                        {% elif channel.quality == 'good' %}
-                                        <span class="badge bg-info">Good</span>
-                                        {% elif channel.quality == 'poor' %}
-                                        <span class="badge bg-danger">Poor</span>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                                <td class="res-cell">
-                                    {% if channel.status == 'die' or not channel.resolution %}
-                                    -
-                                    {% else %}
-                                    <span class="badge bg-dark text-light" style="font-size: 0.75rem;">{{ channel.resolution }}</span>
-                                    {% endif %}
-                                </td>
-                                <td class="audio-cell">
-                                    {% if channel.status == 'die' or not channel.audio_codec %}
-                                    -
-                                    {% else %}
-                                    <span class="badge bg-info text-dark" style="font-size: 0.75rem;">{{ channel.audio_codec }}</span>
-                                    {% endif %}
-                                </td>
-                                <td class="checked-cell">
-                                    <small class="text-muted">
-                                        {{ channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never' }}
-                                    </small>
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-info play-btn" 
+                                {% endif %}
+                            </td>
+                            <td class="res-cell d-none d-lg-table-cell">
+                                {% if channel.status == 'die' or not channel.resolution %}
+                                -
+                                {% else %}
+                                <span class="badge bg-dark text-light" style="font-size: 0.75rem;">{{ channel.resolution }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="usage-cell d-none d-lg-table-cell">
+                                <div class="small lh-1">
+                                    <div class="fw-bold text-primary">{{ channel.play_count }} <span class="text-muted" style="font-size: 0.65rem;">Plays</span></div>
+                                    <div class="text-muted mt-1" style="font-size: 0.7rem;">{{ "%.1f"|format(channel.total_bandwidth_mb) }} MB</div>
+                                </div>
+                            </td>
+                            <td class="checked-cell d-none d-md-table-cell">
+                                <small class="text-muted">
+                                    {{ channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never' }}
+                                </small>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1" style="max-width: 140px;">
+                                    <button class="btn btn-sm btn-info play-btn flex-fill px-1" style="font-size: 0.7rem;"
                                             data-url="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" 
                                             data-name="{{ channel.name }}"
                                             data-format="{{ channel.stream_format or '' }}"
                                             data-id="{{ channel.id }}">Play</button>
-                                    <button class="btn btn-sm btn-outline-info stats-btn" data-id="{{ channel.id }}">Stats</button>
-                                    <button class="btn btn-sm btn-outline-secondary copy-link-btn px-2" onclick="copyChannelLink('{{ channel.id }}', '{{ current_user.api_token }}', this)" title="Copy Wrapped Link">
+                                    <button class="btn btn-sm btn-warning vlc-quick-btn flex-fill px-1" style="font-size: 0.7rem;"
+                                            data-id="{{ channel.id }}"
+                                            title="Open in VLC Player">
+                                        <i class="bi bi-play-btn-fill"></i> VLC
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>
+                                    <button class="btn btn-sm btn-outline-secondary copy-link-btn flex-fill px-1" style="font-size: 0.7rem;" onclick="copyChannelLink('{{ channel.id }}', '{{ current_user.api_token }}', this)" title="Copy Link">
                                         <i class="bi bi-link-45deg"></i> URL
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-outline-success ajax-check-btn" 
+                                    <button class="btn btn-sm btn-outline-primary quick-add-row-btn flex-fill px-1" style="font-size: 0.7rem;"
+                                            data-id="{{ channel.id }}" 
+                                            data-name="{{ channel.name }}" 
+                                            title="Quick Add">
+                                        <i class="bi bi-plus-circle-fill"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-success ajax-check-btn flex-fill px-1" style="font-size: 0.7rem;"
                                             data-id="{{ channel.id }}" 
                                             data-url="{{ url_for('channels.check_channel', id=channel.id) }}">Check</button>
-                                    <a href="{{ url_for('channels.edit_channel', id=channel.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
-                                    <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" style="display:inline;">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure?')">Delete</button>
+                                    <a href="{{ url_for('channels.edit_channel', id=channel.id) }}" class="btn btn-sm btn-outline-primary flex-fill px-1" style="font-size: 0.7rem;">Edit</a>
+                                    <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" class="flex-fill d-grid">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger px-1" style="font-size: 0.7rem;" onclick="return confirm('Are you sure?')">Del</button>
                                     </form>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                </tbody>
-            </table>
-            
-            <div class="mt-4 pb-4">
-                <nav aria-label="Page navigation">
-                    <ul class="pagination justify-content-center align-items-center gap-2">
-                        {% if pagination.has_prev %}
-                        <li class="page-item">
-                            <a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.prev_num, search=search, group=group, stream_type=stream_type) }}">&laquo; Previous</a>
-                        </li>
-                        {% else %}
-                        <li class="page-item disabled">
-                            <span class="page-link rounded-pill px-3">&laquo; Previous</span>
-                        </li>
-                        {% endif %}
-
-                        <div class="d-none d-md-flex gap-1">
-                            {% for page in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-                                {% if page %}
-                                    <li class="page-item {% if page == pagination.page %}active{% endif %}">
-                                        <a class="page-link rounded" href="{{ url_for('channels.index', page=page, search=search, group=group, stream_type=stream_type) }}">{{ page }}</a>
-                                    </li>
-                                {% else %}
-                                    <li class="page-item disabled"><span class="page-link border-0">...</span></li>
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-
-                        {% if pagination.has_next %}
-                        <li class="page-item">
-                            <a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.next_num, search=search, group=group, stream_type=stream_type) }}">Next &raquo;</a>
-                        </li>
-                        {% else %}
-                        <li class="page-item disabled">
-                            <span class="page-link rounded-pill px-3">Next &raquo;</span>
-                        </li>
-                        {% endif %}
-
-                        <div class="ms-3 d-flex align-items-center gap-2">
-                            <span class="text-muted small">Go to:</span>
-                            <div class="input-group input-group-sm" style="width: 100px;">
-                                <input type="number" id="jumpPage" class="form-control text-center" value="{{ pagination.page }}" min="1" max="{{ pagination.pages }}">
-                                <button class="btn btn-primary" type="button" onclick="jumpToPage()">Go</button>
-                            </div>
-                        </div>
-                    </ul>
-                </nav>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
+        </div>
+        <div class="card-footer bg-white py-3">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center align-items-center flex-wrap gap-2 mb-0">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.prev_num, search=search, group=group, stream_type=stream_type) }}">&laquo; Previous</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link rounded-pill px-3">&laquo; Previous</span>
+                    </li>
+                    {% endif %}
 
-            <script>
-                function jumpToPage() {
-                    const pageNum = parseInt(document.getElementById('jumpPage').value);
-                    const totalPages = parseInt("{{ pagination.pages }}");
-                    if (pageNum >= 1 && pageNum <= totalPages) {
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('page', pageNum);
-                        window.location.href = url.toString();
-                    }
-                }
-            </script>
+                    <div class="d-none d-md-flex gap-1">
+                        {% for page in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page %}
+                                <li class="page-item {% if page == pagination.page %}active{% endif %}">
+                                    <a class="page-link rounded" href="{{ url_for('channels.index', page=page, search=search, group=group, stream_type=stream_type) }}">{{ page }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link border-0">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link rounded-pill px-3" href="{{ url_for('channels.index', page=pagination.next_num, search=search, group=group, stream_type=stream_type) }}">Next &raquo;</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link rounded-pill px-3">Next &raquo;</span>
+                    </li>
+                    {% endif %}
+
+                    <div class="ms-md-3 d-flex align-items-center gap-2 mt-2 mt-md-0">
+                        <span class="text-muted small">Go to:</span>
+                        <div class="input-group input-group-sm" style="width: 120px;">
+                            <input type="number" id="jumpPage" class="form-control text-center" value="{{ pagination.page }}" min="1" max="{{ pagination.pages }}">
+                            <button class="btn btn-primary" type="button" onclick="jumpToPage()">Go</button>
+                        </div>
+                        <span class="text-muted small">of {{ pagination.pages }}</span>
+                    </div>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<script>
+    function jumpToPage() {
+        const pageNum = parseInt(document.getElementById('jumpPage').value);
+        const totalPages = parseInt("{{ pagination.pages }}");
+        if (pageNum >= 1 && pageNum <= totalPages) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', pageNum);
+            window.location.href = url.toString();
+        }
+    }
+</script>
+
+<!-- Quick Add Modal -->
+<div id="quickAddModal" class="modal fade" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-0 shadow-lg" style="border-radius: 1rem; backdrop-filter: blur(10px); background: rgba(30, 30, 30, 0.95) !important;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-info">Add to Playlist</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small text-white-50">Target Playlist</label>
+                    <select id="qaPlaylist" class="form-select bg-dark border border-white border-opacity-10 text-white shadow-none" style="border-radius: 0.5rem;">
+                        <option value="" class="bg-dark">Select Playlist...</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label small text-white-50">Category (Group)</label>
+                    <select id="qaGroup" class="form-select bg-dark border border-white border-opacity-10 text-white shadow-none" style="border-radius: 0.5rem;">
+                        <option value="" class="bg-dark">Default/No Group</option>
+                    </select>
+                </div>
+                <button id="qaConfirm" class="btn btn-primary w-100 fw-bold py-2 shadow-sm" style="border-radius: 0.5rem;">CONFIRM ADD</button>
+            </div>
         </div>
     </div>
 </div>
@@ -451,7 +546,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const scanOptionsBtn = document.getElementById('scanOptionsBtn');
     const startScanBtn = document.getElementById('startScanBtn');
     const stopBtn = document.getElementById('stopScanBtn');
-    const scanModal = new bootstrap.Modal(document.getElementById('scanModal'));
+    const scanModalElement = document.getElementById('scanModal');
+    const scanModal = scanModalElement ? new bootstrap.Modal(scanModalElement) : null;
     let pollInterval;
 
     // Player Elements
@@ -474,28 +570,32 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(r => r.json())
         .then(data => {
             if (data.is_running) {
-                scanOptionsBtn.classList.add('d-none');
-                scanStatusBtn.classList.remove('d-none');
-                stopBtn.classList.remove('d-none');
+                if (scanOptionsBtn) scanOptionsBtn.classList.add('d-none');
+                if (scanStatusBtn) scanStatusBtn.classList.remove('d-none');
+                if (stopBtn) stopBtn.classList.remove('d-none');
+                
                 let percent = 0;
                 if (data.total > 0) percent = Math.round((data.current / data.total) * 100);
-                document.getElementById('scanProgressText').textContent = `${percent}% (${data.current}/${data.total})`;
+                const progressText = document.getElementById('scanProgressText');
+                if (progressText) progressText.textContent = `${percent}% (${data.current}/${data.total})`;
+                
                 const container = document.getElementById('scanStatusContainer');
                 const info = document.getElementById('currentChannelInfo');
                 if (container && info && data.current_name) {
                     container.classList.remove('d-none');
                     info.textContent = `Processing: ${data.current_name} (ID: ${data.current_id})`;
                 }
-                if (data.live_count !== undefined) {
-                    document.getElementById('stat-live').textContent = data.live_count;
-                    document.getElementById('stat-die').textContent = data.die_count;
-                    document.getElementById('stat-unknown').textContent = data.unknown_count;
+                const l = document.getElementById('stat-live'), d = document.getElementById('stat-die'), u = document.getElementById('stat-unknown');
+                if (data.live_count !== undefined && l && d && u) {
+                    l.textContent = data.live_count;
+                    d.textContent = data.die_count;
+                    u.textContent = data.unknown_count;
                 }
                 if (!pollInterval) pollInterval = setInterval(updateStatusUI, 3000);
             } else {
-                scanOptionsBtn.classList.remove('d-none');
-                scanStatusBtn.classList.add('d-none');
-                stopBtn.classList.add('d-none');
+                if (scanOptionsBtn) scanOptionsBtn.classList.remove('d-none');
+                if (scanStatusBtn) scanStatusBtn.classList.add('d-none');
+                if (stopBtn) stopBtn.classList.add('d-none');
                 const container = document.getElementById('scanStatusContainer');
                 if (container) container.classList.add('d-none');
                 if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
@@ -503,25 +603,29 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    if (scanOptionsBtn && scanModal) scanOptionsBtn.addEventListener('click', () => scanModal.show());
     updateStatusUI();
-    scanOptionsBtn.addEventListener('click', () => scanModal.show());
 
-    startScanBtn.addEventListener('click', function() {
-        const mode = document.getElementById('scanMode').value;
-        const days = document.getElementById('scanDays').value;
-        const playlist_id = document.getElementById('scanPlaylist').value;
-        fetch("{{ url_for('check_now') }}", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ mode, days, playlist_id })
-        }).then(() => { scanModal.hide(); updateStatusUI(); });
-    });
+    if (startScanBtn) {
+        startScanBtn.addEventListener('click', function() {
+            const mode = document.getElementById('scanMode').value;
+            const days = document.getElementById('scanDays').value;
+            const playlist_id = document.getElementById('scanPlaylist').value;
+            fetch("{{ url_for('check_now') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mode, days, playlist_id })
+            }).then(() => { if (scanModal) scanModal.hide(); updateStatusUI(); });
+        });
+    }
 
-    stopBtn.addEventListener('click', function() {
-        if (confirm('Stop all scanning?')) {
-            fetch("{{ url_for('check_now') }}", {method: 'DELETE'}).then(() => updateStatusUI());
-        }
-    });
+    if (stopBtn) {
+        stopBtn.addEventListener('click', function() {
+            if (confirm('Stop all scanning?')) {
+                fetch("{{ url_for('check_now') }}", {method: 'DELETE'}).then(() => updateStatusUI());
+            }
+        });
+    }
 
     // Smart HUD
     let hudTimeout;
@@ -588,6 +692,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const resCell = row.querySelector('.res-cell');
         resCell.innerHTML = (data.status !== 'die' && data.resolution) ? `<span class="badge bg-dark text-light" style="font-size: 0.75rem;">${data.resolution}</span>` : '-';
         
+        // Stats
+        const usageCell = row.querySelector('.usage-cell');
+        if (usageCell && data.play_count !== undefined) {
+            usageCell.innerHTML = `
+                <div class="small lh-1">
+                    <div class="fw-bold text-primary">${data.play_count} <span class="text-muted" style="font-size: 0.65rem;">Plays</span></div>
+                    <div class="text-muted mt-1" style="font-size: 0.7rem;">${parseFloat(data.bandwidth_mb || 0).toFixed(1)} MB</div>
+                </div>
+            `;
+        }
+
         const audioCell = row.querySelector('.audio-cell');
         audioCell.innerHTML = (data.status !== 'die' && data.audio_codec) ? `<span class="badge bg-info text-dark" style="font-size: 0.75rem;">${data.audio_codec}</span>` : '-';
 
@@ -711,16 +826,80 @@ document.addEventListener('DOMContentLoaded', function() {
                 checkBtn.disabled = false;
                 checkBtn.innerHTML = originalText;
             });
+            return;
+        }
+
+        const vlcBtn = e.target.closest('.vlc-quick-btn');
+        if (vlcBtn) {
+            const id = vlcBtn.dataset.id;
+            const originalHtml = vlcBtn.innerHTML;
+            vlcBtn.disabled = true;
+            vlcBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            fetch(`/channels/play_vlc/${id}`, { method: 'POST' })
+            .then(r => r.json()).then(data => {
+                if (data.success) {
+                    vlcBtn.classList.replace('btn-warning', 'btn-success');
+                    vlcBtn.innerHTML = '<i class="bi bi-check2"></i> Done';
+                    setTimeout(() => {
+                        vlcBtn.classList.replace('btn-success', 'btn-warning');
+                        vlcBtn.innerHTML = originalHtml;
+                        vlcBtn.disabled = false;
+                    }, 2000);
+                } else {
+                    vlcBtn.disabled = false;
+                    vlcBtn.innerHTML = originalHtml;
+                }
+            }).catch(() => {
+                vlcBtn.disabled = false;
+                vlcBtn.innerHTML = originalHtml;
+            });
+            return;
         }
     });
 
+    // Batch Check Tool (Handles multiple "Check All" buttons now)
+    document.querySelectorAll('.checkAllBtn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!confirm('Start checking all visible channels on this page?')) return;
+            
+            const buttons = Array.from(document.querySelectorAll('.ajax-check-btn'));
+            const originalText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+
+            let completed = 0;
+            buttons.forEach((rowBtn, index) => {
+                setTimeout(() => {
+                    if (!rowBtn.disabled) {
+                        rowBtn.click();
+                    }
+                    completed++;
+                    if (completed === buttons.length) {
+                        this.innerHTML = '<i class="bi bi-check2"></i> Done';
+                        setTimeout(() => {
+                            this.innerHTML = originalText;
+                            this.disabled = false;
+                        }, 3000);
+                    }
+                }, index * 200); // Faster stagger (0.2s)
+            });
+        });
+    });
+
+    // Player Modal VLC Button
     document.getElementById('vlcBtn').addEventListener('click', function() {
         if (!currentChannelId) return;
         fetch(`/channels/play_vlc/${currentChannelId}`, { method: 'POST' })
         .then(r => r.json()).then(data => {
             if (data.success) {
                 this.classList.replace('btn-warning', 'btn-success');
-                setTimeout(() => this.classList.replace('btn-success', 'btn-warning'), 2000);
+                this.innerHTML = '<i class="bi bi-check2"></i> Done';
+                setTimeout(() => {
+                    this.classList.replace('btn-success', 'btn-warning');
+                    this.innerHTML = 'VLC';
+                }, 2000);
             }
         });
     });
@@ -729,6 +908,112 @@ document.addEventListener('DOMContentLoaded', function() {
         video.pause();
         if (hls) { hls.destroy(); hls = null; }
         if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
+    });
+
+    // Quick Add Logic
+    const qaModalElement = document.getElementById('quickAddModal');
+    const qaModal = qaModalElement ? new bootstrap.Modal(qaModalElement) : null;
+    const qaPlaylistSelect = document.getElementById('qaPlaylist');
+    const qaGroupSelect = document.getElementById('qaGroup');
+    const qaConfirmBtn = document.getElementById('qaConfirm');
+    let qaChannelId = null;
+    let playlistsCache = null;
+
+    async function openQuickAdd(channelId, channelName) {
+        qaChannelId = channelId;
+        if (qaModal) qaModal.show();
+        
+        if (!playlistsCache) {
+            try {
+                const resp = await fetch('/channels/api/playlists_with_groups');
+                const data = await resp.json();
+                if (data.status === 'ok') {
+                    playlistsCache = data.playlists;
+                    renderQAPlaylists();
+                }
+            } catch (err) { console.error(err); }
+        } else {
+            renderQAPlaylists();
+        }
+    }
+
+    function renderQAPlaylists() {
+        if (!qaPlaylistSelect) return;
+        let html = '<option value="" class="bg-dark">Select Playlist...</option>';
+        if (playlistsCache) {
+            playlistsCache.forEach(pl => {
+                html += `<option value="${pl.id}" class="bg-dark">${pl.name}</option>`;
+            });
+        }
+        qaPlaylistSelect.innerHTML = html;
+        if (qaGroupSelect) qaGroupSelect.innerHTML = '<option value="" class="bg-dark">Default/No Group</option>';
+    }
+
+    if (qaPlaylistSelect) {
+        qaPlaylistSelect.addEventListener('change', () => {
+            const plId = qaPlaylistSelect.value;
+            if (!plId) {
+                if (qaGroupSelect) qaGroupSelect.innerHTML = '<option value="" class="bg-dark">Default/No Group</option>';
+                return;
+            }
+            
+            if (playlistsCache) {
+                const pl = playlistsCache.find(p => p.id == plId);
+                if (pl && pl.groups) {
+                    let html = '<option value="" class="bg-dark">Default/No Group</option>';
+                    pl.groups.forEach(g => {
+                        html += `<option value="${g.id}" class="bg-dark">${g.name}</option>`;
+                    });
+                    if (qaGroupSelect) qaGroupSelect.innerHTML = html;
+                }
+            }
+        });
+    }
+
+    if (qaConfirmBtn) {
+        qaConfirmBtn.addEventListener('click', async () => {
+            const plId = qaPlaylistSelect ? qaPlaylistSelect.value : null;
+            const gId = qaGroupSelect ? qaGroupSelect.value : null;
+            
+            if (!plId) return alert('Please select a playlist');
+            
+            qaConfirmBtn.disabled = true;
+            const originalText = qaConfirmBtn.innerText;
+            qaConfirmBtn.innerText = 'ADDING...';
+            
+            try {
+                const resp = await fetch('/channels/api/quick_add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        channel_id: qaChannelId,
+                        playlist_id: plId,
+                        group_id: gId
+                    })
+                });
+                const data = await resp.json();
+                if (data.status === 'ok') {
+                    if (qaModal) qaModal.hide();
+                    alert('Channel added successfully!');
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (err) { alert('Request failed'); }
+            finally {
+                qaConfirmBtn.disabled = false;
+                qaConfirmBtn.innerText = originalText;
+            }
+        });
+    }
+
+    // Delegate Quick Add Button Clicks
+    document.addEventListener('click', function(e) {
+        const qaBtn = e.target.closest('.quick-add-row-btn');
+        if (qaBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            openQuickAdd(qaBtn.dataset.id, qaBtn.dataset.name);
+        }
     });
 });
 

@@ -136,10 +136,18 @@ def edit_channel(id):
     current_entries = PlaylistEntry.query.filter_by(channel_id=id).all()
     current_memberships = {e.playlist_id: e.group_id for e in current_entries}
     
+    # Navigation: Find previous and next channel IDs
+    prev_channel = Channel.query.filter(Channel.id < id).order_by(Channel.id.desc()).first()
+    next_channel = Channel.query.filter(Channel.id > id).order_by(Channel.id.asc()).first()
+    prev_id = prev_channel.id if prev_channel else None
+    next_id = next_channel.id if next_channel else None
+    
     return render_template('channels/edit.html', 
                          channel=channel, 
                          all_playlists=all_playlists,
-                         current_memberships=current_memberships)
+                         current_memberships=current_memberships,
+                         prev_id=prev_id,
+                         next_id=next_id)
 
 @channels_bp.route('/delete/<int:id>', methods=['POST'])
 @login_required

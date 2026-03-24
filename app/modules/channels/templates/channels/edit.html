@@ -3,10 +3,77 @@
 {% block content %}
 <div class="container bg-white p-4 rounded shadow-sm" style="max-width: 900px;">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3>Edit Channel: {{ channel.name }}</h3>
-        <span class="badge {% if channel.status == 'live' %}bg-success{% else %}bg-danger{% endif %}">{{ channel.status|upper }}</span>
+        <div class="d-flex flex-column">
+            <div class="d-flex align-items-center mb-1">
+                <h3 class="mb-0 me-3">Edit Channel: {{ channel.name }}</h3>
+                <div id="channelStatusBadge">
+                    <span class="badge {% if channel.status == 'live' %}bg-success{% else %}bg-danger{% endif %}">{{ channel.status|upper }}</span>
+                </div>
+            </div>
+            <div id="techSpecs" class="d-flex gap-2 flex-wrap">
+                {% if channel.status == 'live' %}
+                    {% if channel.stream_type == 'live' %}<span class="badge bg-primary">Live TV</span>{% elif channel.stream_type == 'vod' %}<span class="badge bg-info">VOD</span>{% endif %}
+                    {% if channel.resolution %}<span class="badge bg-dark">{{ channel.resolution }}</span>{% endif %}
+                    {% if channel.stream_format %}<span class="badge bg-secondary">{{ channel.stream_format|upper }}</span>{% endif %}
+                    {% if channel.quality == 'excellent' %}<span class="badge bg-success">Excellent</span>{% elif channel.quality == 'good' %}<span class="badge bg-info">Good</span>{% elif channel.quality == 'poor' %}<span class="badge bg-danger">Poor</span>{% endif %}
+                {% endif %}
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button type="submit" form="editForm" class="btn btn-sm btn-primary px-3 fw-bold d-none d-md-inline-block">
+                <i class="bi bi-save"></i> Save
+            </button>
+            <div class="btn-group shadow-sm">
+                {% if prev_id %}
+                <a href="{{ url_for('channels.edit_channel', id=prev_id) }}" class="btn btn-outline-secondary btn-sm" title="Previous Channel">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+                {% endif %}
+                {% if next_id %}
+                <a href="{{ url_for('channels.edit_channel', id=next_id) }}" class="btn btn-outline-secondary btn-sm" title="Next Channel">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+            <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-secondary">Back</a>
+        </div>
+    </div>
+    <div class="d-md-none mb-3">
+        <button type="submit" form="editForm" class="btn btn-primary w-100 fw-bold">
+            <i class="bi bi-save"></i> Save Changes
+        </button>
     </div>
     <hr>
+
+    <!-- Full Action Toolbar -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex flex-wrap gap-2 p-2 bg-light border rounded shadow-sm">
+                <button class="btn btn-sm btn-info px-3 fw-bold" id="playBtn" data-id="{{ channel.id }}">
+                    <i class="bi bi-play-fill"></i> Web Player
+                </button>
+                <button class="btn btn-sm btn-warning px-3 fw-bold" id="playVlcBtnAction">
+                    <i class="bi bi-play-btn-fill"></i> VLC
+                </button>
+                <button class="btn btn-sm btn-outline-success px-3 fw-bold" id="ajaxCheckBtn" data-id="{{ channel.id }}">
+                    <i class="bi bi-shield-check"></i> Check
+                </button>
+                <button class="btn btn-sm btn-outline-info px-3 fw-bold" id="statsBtnAction" data-id="{{ channel.id }}">
+                    <i class="bi bi-graph-up"></i> Stats
+                </button>
+                <button class="btn btn-sm btn-outline-primary px-3 fw-bold" id="quickAddBtnAction" data-id="{{ channel.id }}" data-name="{{ channel.name }}">
+                    <i class="bi bi-plus-circle"></i> Quick Add
+                </button>
+                <div class="ms-auto d-flex gap-2">
+                    <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this channel?')">
+                        <button type="submit" class="btn btn-sm btn-outline-danger px-3 fw-bold">
+                            <i class="bi bi-trash"></i> Delete
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="row">
         <!-- Left Column: Form -->
@@ -17,8 +84,17 @@
                     <input type="text" name="name" class="form-control" value="{{ channel.name }}" required>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Stream URL</label>
+                    <label class="form-label fw-bold">Stream URL (Original)</label>
                     <input type="text" id="streamUrlInput" name="stream_url" class="form-control" value="{{ channel.stream_url }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Server Play Link (Obfuscated)</label>
+                    <div class="input-group">
+                        <input type="text" id="serverPlayLink" class="form-control font-monospace small" value="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" readonly>
+                        <button class="btn btn-primary" type="button" id="copyServerLinkBtn" title="Copy Server Link">
+                            <i class="bi bi-clipboard"></i> Copy
+                        </button>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Logo URL</label>
@@ -113,7 +189,12 @@
                 <!-- Video Player -->
                 <div class="border rounded bg-dark overflow-hidden shadow position-relative">
                     <div class="bg-secondary p-2 d-flex justify-content-between align-items-center">
-                        <span class="text-white small fw-bold">LIVE PREVIEW</span>
+                        <div class="d-flex align-items-center">
+                            <span class="text-white small fw-bold me-2">LIVE PREVIEW</span>
+                            <button class="btn btn-xs btn-warning py-0 px-2 fw-bold" id="playVlcBtn" title="Play in VLC">
+                                <i class="bi bi-play-fill"></i> VLC
+                            </button>
+                        </div>
                         <button class="btn btn-xs btn-outline-light py-0 px-2" id="reloadPlayer" style="font-size: 0.7rem;">Reload</button>
                     </div>
                     <div class="ratio ratio-16x9 bg-black d-flex align-items-center justify-content-center">
@@ -154,6 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     let hls = null;
     let mpegtsPlayer = null;
+    let streamTimeout = null;
 
     // 1. Logo Preview Update (Instant)
     logoInput.addEventListener('input', function() {
@@ -233,8 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loadStream(streamInput.value);
     });
 
-    // Debounced real-time update
-    let streamTimeout = null;
+    // 3. Sync Stream Preview with Input (Debounced)
     streamInput.addEventListener('input', function() {
         clearTimeout(streamTimeout);
         streamTimeout = setTimeout(() => {
@@ -242,7 +323,185 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000); 
     });
 
-    // 3. Playlist Checkbox & Group Select Sync
+    // 4. Action Toolbar Logic
+    const playBtn = document.getElementById('playBtn');
+    const playVlcBtnAction = document.getElementById('playVlcBtnAction');
+    const ajaxCheckBtn = document.getElementById('ajaxCheckBtn');
+    const statsBtnAction = document.getElementById('statsBtnAction');
+    const quickAddBtnAction = document.getElementById('quickAddBtnAction');
+    const copyServerLinkBtn = document.getElementById('copyServerLinkBtn');
+    const serverPlayLink = document.getElementById('serverPlayLink');
+
+    // 4a. Copy Server Link
+    copyServerLinkBtn.addEventListener('click', function() {
+        navigator.clipboard.writeText(serverPlayLink.value).then(() => {
+            const originalText = copyServerLinkBtn.innerHTML;
+            copyServerLinkBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+            setTimeout(() => { copyServerLinkBtn.innerHTML = originalText; }, 2000);
+        });
+    });
+
+    // 4b. VLC Action
+    playVlcBtnAction.addEventListener('click', function(e) {
+        e.preventDefault();
+        playVlcBtnAction.disabled = true;
+        playVlcBtnAction.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        
+        fetch("{{ url_for('channels.play_vlc', id=channel.id) }}", { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) alert('Could not open VLC.');
+        })
+        .finally(() => {
+            playVlcBtnAction.disabled = false;
+            playVlcBtnAction.innerHTML = '<i class="bi bi-play-btn-fill"></i> VLC';
+        });
+    });
+
+    // 4c. AJAX Check
+    ajaxCheckBtn.addEventListener('click', function() {
+        ajaxCheckBtn.disabled = true;
+        ajaxCheckBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+        
+        fetch("{{ url_for('channels.check_channel', id=channel.id) }}", {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('channelStatusBadge');
+            const techSpecs = document.getElementById('techSpecs');
+            
+            if (data.status === 'live') {
+                badge.innerHTML = '<span class="badge bg-success">LIVE</span>';
+                
+                // Tech Specs Update
+                let specsHtml = '';
+                if (data.stream_type === 'live') specsHtml += '<span class="badge bg-primary">Live TV</span> ';
+                else if (data.stream_type === 'vod') specsHtml += '<span class="badge bg-info">VOD</span> ';
+                
+                if (data.resolution) specsHtml += `<span class="badge bg-dark">${data.resolution}</span> `;
+                if (data.stream_format) specsHtml += `<span class="badge bg-secondary">${data.stream_format.toUpperCase()}</span> `;
+                
+                const q = (data.quality || '').toLowerCase();
+                if (q === 'excellent') specsHtml += '<span class="badge bg-success">Excellent</span>';
+                else if (q === 'good') specsHtml += '<span class="badge bg-info">Good</span>';
+                else if (q === 'poor') specsHtml += '<span class="badge bg-danger">Poor</span>';
+                
+                techSpecs.innerHTML = specsHtml;
+            } else {
+                badge.innerHTML = '<span class="badge bg-danger">DIE</span>';
+                techSpecs.innerHTML = '';
+            }
+            // Update preview
+            loadStream(streamInput.value);
+        })
+        .finally(() => {
+            ajaxCheckBtn.disabled = false;
+            ajaxCheckBtn.innerHTML = '<i class="bi bi-shield-check"></i> Check';
+        });
+    });
+
+    // 4d. Stats Modal Logic
+    const statsModal = new bootstrap.Modal(document.getElementById('statsModal'));
+    statsBtnAction.addEventListener('click', function() {
+        statsModal.show();
+        document.getElementById('statsLoader').classList.remove('d-none');
+        document.getElementById('statsContent').classList.add('d-none');
+        
+        fetch(`/channels/api/stats/${this.dataset.id}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('statsLoader').classList.add('d-none');
+            document.getElementById('statsContent').classList.remove('d-none');
+            document.getElementById('statsName').textContent = data.stats.name;
+            document.getElementById('statPlays').textContent = data.stats.play_count;
+            document.getElementById('statTime').textContent = data.stats.total_watch_time;
+            document.getElementById('statBandwidth').textContent = data.stats.bandwidth_mb + ' MB';
+            document.getElementById('statCreated').textContent = data.stats.created_at;
+        });
+    });
+
+    // 4e. Quick Add Modal Logic
+    const quickAddModal = new bootstrap.Modal(document.getElementById('quickAddModal'));
+    const qaPlaylist = document.getElementById('qaPlaylist');
+    const qaGroup = document.getElementById('qaGroup');
+    const qaConfirm = document.getElementById('qaConfirm');
+    let currentQaId = null;
+
+    quickAddBtnAction.addEventListener('click', function() {
+        currentQaId = this.dataset.id;
+        quickAddModal.show();
+        
+        // Load playlists if empty
+        if (qaPlaylist.options.length <= 1) {
+            fetch("{{ url_for('channels.get_playlists_with_groups') }}")
+            .then(r => r.json())
+            .then(data => {
+                data.playlists.forEach(pl => {
+                    const opt = new Option(pl.name, pl.id);
+                    opt.dataset.groups = JSON.stringify(pl.groups);
+                    qaPlaylist.add(opt);
+                });
+            });
+        }
+    });
+
+    qaPlaylist.addEventListener('change', function() {
+        qaGroup.innerHTML = '<option value="">Default/No Group</option>';
+        const opt = this.options[this.selectedIndex];
+        if (opt.dataset.groups) {
+            const groups = JSON.parse(opt.dataset.groups);
+            groups.forEach(g => {
+                qaGroup.add(new Option(g.name, g.id));
+            });
+        }
+    });
+
+    qaConfirm.addEventListener('click', function() {
+        if (!qaPlaylist.value) return alert('Select a playlist');
+        qaConfirm.disabled = true;
+        qaConfirm.textContent = 'ADDING...';
+
+        fetch("{{ url_for('channels.quick_add') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                channel_id: currentQaId,
+                playlist_id: qaPlaylist.value,
+                group_id: qaGroup.value
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                quickAddModal.hide();
+                alert('Added successfully!');
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .finally(() => {
+            qaConfirm.disabled = false;
+            qaConfirm.textContent = 'CONFIRM ADD';
+        });
+    });
+
+    // 4f. Web Player Link
+    playBtn.addEventListener('click', function() {
+        window.open(`{{ url_for('channels.web_player') }}?id=${this.dataset.id}`, '_blank');
+    });
+
+    // 4g. Legacy VLC preview button (if needed, or just redirect to new one)
+    const playVlcBtnLegacy = document.getElementById('playVlcBtn');
+    if (playVlcBtnLegacy) {
+        playVlcBtnLegacy.addEventListener('click', (e) => {
+            e.preventDefault();
+            playVlcBtnAction.click();
+        });
+    }
+
+    // 5. Playlist Checkbox & Group Select Sync
     const playlistChecks = document.querySelectorAll('.playlist-check');
     playlistChecks.forEach(check => {
         check.addEventListener('change', function() {
