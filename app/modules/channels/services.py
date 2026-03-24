@@ -66,8 +66,9 @@ class StreamManager:
         session = requests.Session()
         
         # User Agent optimization for IPTV providers
-        if not headers:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) VLC/3.0.18'}
+        if not headers or 'User-Agent' not in headers:
+            if not headers: headers = {}
+            headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
 
         while True:
             # Cleanup check

@@ -9,8 +9,10 @@ from app.modules.channels.services import ChannelService, EPGService, ActiveSess
 from app.modules.playlists.services import PlaylistService
 from app.core.database import db
 import time
+import logging
 
 channels_bp = Blueprint('channels', __name__, template_folder='templates')
+logger = logging.getLogger('iptv')
 
 def validate_proxy_access(token=None):
     """
@@ -538,6 +540,7 @@ def get_channel_stats(channel_id):
 
 @channels_bp.route('/api/scan_status')
 def get_scan_status():
+    from app.modules.health.services import HealthCheckService
     return jsonify(HealthCheckService.get_status())
 
 @channels_bp.route('/api/heartbeat', methods=['POST'])
@@ -856,14 +859,36 @@ def proxy_hls_segment():
         return "Missing params", 400
         
     from app.modules.settings.services import SettingService
-    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) VLC/3.0.18')
+    # Use standard browser UA to prevent 403 from strict IPTV panels
+    default_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+    ua = SettingService.get('CUSTOM_USER_AGENT', default_ua)
     headers = { 'User-Agent': ua }
     
     try:
         from app.modules.channels.services import ActiveSessionManager, HLSEngine
         ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'Proxy (HLS)')
         
-        # USE HLS ENGINE FOR CACHING
+        # 1. Check if it's a Variant Playlist (m3u8)
+        if '.m3u8' in url.lower() or 'playlist' in url.lower():
+            # Must handle recursively just like the manifest
+            resp = requests.get(url, headers=headers, timeout=10)
+            lines = resp.text.splitlines()
+            new_lines = []
+            pure_url = url.split('?')[0]
+            base_url = pure_url.rsplit('/', 1)[0] + '/'
+            
+            for line in lines:
+                line = line.strip()
+                if not line.startswith('#') and line:
+                    seg_url = line
+                    if not seg_url.startswith('http'):
+                        seg_url = base_url + seg_url
+                    new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
+                else:
+                    new_lines.append(line)
+            return "\n".join(new_lines), 200, {'Content-Type': 'application/x-mpegURL'}
+
+        # 2. It's a Media Segment (ts, m4s). Use Cache Engine.
         data = HLSEngine.get_segment(url, headers=headers)
         
         if data:
@@ -873,15 +898,14 @@ def proxy_hls_segment():
                 channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 8 
                 db.session.commit()
             
-            # Determine content type (usually video/mp2t)
             content_type = 'video/mp2t'
             if url.lower().endswith('.m4s'): content_type = 'video/iso.segment'
+            if url.lower().endswith('.aac'): content_type = 'audio/aac'
             
             return Response(data, content_type=content_type)
         else:
-            # Fallback to redirect if download failed
             return redirect(url)
 
     except Exception as e:
-        logger.error(f"HLS Proxy Error: {e}")
+        logger.error(f"HLS Proxy Error for {url}: {e}")
         return redirect(url)
