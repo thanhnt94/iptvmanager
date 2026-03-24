@@ -292,7 +292,8 @@
                                             data-id="{{ channel.id }}">Play</button>
                                     <button class="btn btn-sm btn-warning vlc-quick-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}"><i class="bi bi-play-btn-fill"></i> VLC</button>
                                     <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>
-                                    <button class="btn btn-sm btn-outline-secondary flex-fill px-1" style="font-size: 0.7rem;" onclick="copyChannelLink('{{ channel.id }}', '{{ current_user.api_token }}', this)"><i class="bi bi-link-45deg"></i> URL</button>
+                                    <button class="btn btn-sm btn-outline-secondary flex-fill px-1" style="font-size: 0.7rem;" onclick="copyChannelLink('{{ channel.id }}', '{{ current_user.api_token }}', this, 'proxy')" title="Copy Server Proxy URL">Proxy</button>
+                                    <button class="btn btn-sm btn-outline-dark flex-fill px-1" style="font-size: 0.7rem;" onclick="copyChannelLink('{{ channel.id }}', '{{ channel.stream_url }}', this, 'origin')" title="Copy Original Source URL">Origin</button>
                                     <button class="btn btn-sm btn-outline-primary quick-add-row-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-name="{{ channel.name }}"><i class="bi bi-plus-circle-fill"></i></button>
                                     <button class="btn btn-sm btn-outline-success ajax-check-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-url="{{ url_for('channels.check_channel', channel_id=channel.id) }}">Check</button>
                                     <a href="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" class="btn btn-sm btn-outline-primary flex-fill px-1" style="font-size: 0.7rem;">Edit</a>
@@ -660,16 +661,23 @@ document.addEventListener('DOMContentLoaded', function() {
         const vBtn = e.target.closest('.vlc-quick-btn');
         if (vBtn) {
             const id = vBtn.dataset.id;
-            const url = window.location.origin + "/channels/play/" + id + "?token=" + userApiToken;
-            window.location.href = "vlc://" + url;
-            
             const original = vBtn.innerHTML;
             vBtn.classList.replace('btn-warning', 'btn-success');
-            vBtn.innerHTML = 'OPENING';
-            setTimeout(() => {
-                vBtn.classList.replace('btn-success', 'btn-warning');
-                vBtn.innerHTML = original;
-            }, 2000);
+            vBtn.innerHTML = 'OPENING...';
+            
+            // Revert to old logic: Call Server API to open VLC (Works on localhost)
+            fetch(`/channels/play_vlc/${id}`, { method: 'POST' }).then(r => r.json()).then(data => {
+                if (!data.success) {
+                    // Fallback for Remote IP (Armbian): Try client-side protocol
+                    const playbackUrl = window.location.origin + "/channels/play/" + id + "?token=" + userApiToken;
+                    window.location.href = `vlc://${playbackUrl}`;
+                }
+                
+                setTimeout(() => {
+                    vBtn.classList.replace('btn-success', 'btn-warning');
+                    vBtn.innerHTML = original;
+                }, 2000);
+            });
             return;
         }
 
@@ -713,8 +721,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('vlcBtn').addEventListener('click', function() {
         if (currentChannelId) {
-            const url = window.location.origin + "/channels/play/" + currentChannelId + "?token=" + userApiToken;
-            window.location.href = "vlc://" + url;
+             fetch(`/channels/play_vlc/${currentChannelId}`, { method: 'POST' }).then(r => r.json()).then(data => {
+                if (!data.success) {
+                    const playbackUrl = window.location.origin + "/channels/play/" + currentChannelId + "?token=" + userApiToken;
+                    window.location.href = `vlc://${playbackUrl}`;
+                }
+             });
         }
     });
 
@@ -724,16 +736,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function copyChannelLink(id, token, btn) {
-    const link = window.location.origin + "/channels/play/" + id + (token ? "?token=" + token : "");
+function copyChannelLink(id, data, btn, type) {
+    let link = "";
+    if (type === 'proxy') {
+        link = window.location.origin + "/channels/play/" + id + (data ? "?token=" + data : "");
+    } else {
+        link = data;
+    }
     
     const successAction = () => {
         const orig = btn.innerHTML; 
         btn.innerHTML = 'COPIED!'; 
-        btn.classList.replace('btn-outline-secondary', 'btn-success');
+        const oldClass = type === 'proxy' ? 'btn-outline-secondary' : 'btn-outline-dark';
+        btn.classList.replace(oldClass, 'btn-success');
         setTimeout(() => { 
             btn.innerHTML = orig; 
-            btn.classList.replace('btn-success', 'btn-outline-secondary'); 
+            btn.classList.replace('btn-success', oldClass); 
         }, 2000);
     };
 

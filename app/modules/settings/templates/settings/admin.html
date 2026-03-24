@@ -26,8 +26,32 @@
                         <div class="mb-4">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div>
+                                    <label class="fw-bold mb-0 text-warning"><i class="bi bi-cpu me-1"></i> MPEG-TS Engine (Singleton)</label>
+                                    <p class="text-muted small mb-0">Enable TVHeadend-style piping for .ts streams to avoid multiple source connections.</p>
+                                </div>
+                                <div class="form-check form-switch px-0">
+                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_TS_PROXY" name="ENABLE_TS_PROXY" {% if settings|selectattr('key', 'equalto', 'ENABLE_TS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
+                                    <label class="fw-bold mb-0 text-info"><i class="bi bi-memory me-1"></i> HLS Caching Engine</label>
+                                    <p class="text-muted small mb-0">Enable RAM Caching for .m3u8 segments to prevent lag on unstable connections.</p>
+                                </div>
+                                <div class="form-check form-switch px-0">
+                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_HLS_PROXY" name="ENABLE_HLS_PROXY" {% if settings|selectattr('key', 'equalto', 'ENABLE_HLS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
                                     <label class="fw-bold mb-0">Proxy Usage Tracking</label>
-                                    <p class="text-muted small mb-0">Force proxying for TS/HLS to track watch time.</p>
+                                    <p class="text-muted small mb-0">Force proxying for TS/HLS to track watch time and bandwidth.</p>
                                 </div>
                                 <div class="form-check form-switch px-0">
                                     <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_PROXY_STATS" name="ENABLE_PROXY_STATS" {% if settings|selectattr('key', 'equalto', 'ENABLE_PROXY_STATS')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
@@ -35,11 +59,11 @@
                             </div>
                         </div>
 
-                        <div class="mb-0">
+                        <div class="mb-0 d-none">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div>
-                                    <label class="fw-bold mb-0">Stream Manager (Piping)</label>
-                                    <p class="text-muted small mb-0">Enable shared source connections (TVHeadend Mode).</p>
+                                    <label class="fw-bold mb-0">Global Stream Manager</label>
+                                    <p class="text-muted small mb-0">Enable global connection sharing (Master Switch).</p>
                                 </div>
                                 <div class="form-check form-switch px-0">
                                     <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_STREAM_MANAGER" name="ENABLE_STREAM_MANAGER" {% if settings|selectattr('key', 'equalto', 'ENABLE_STREAM_MANAGER')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
@@ -62,6 +86,67 @@
                         <div class="mb-3">
                             <label class="fw-bold mb-1">Custom Proxy User-Agent</label>
                             <input type="text" class="form-control shadow-none" name="CUSTOM_USER_AGENT" value="{{ (settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|first).value if settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|list else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Proxy Engine Advanced Tuning -->
+            <div class="col-md-12 mt-4">
+                <div class="card border-0 shadow-sm" style="border-radius: 1rem;">
+                    <div class="card-header bg-white border-bottom-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="fw-bold mb-0 text-dark">
+                                <i class="bi bi-gear-wide-connected me-2 text-primary"></i> Proxy Engine Advanced Tuning
+                            </h5>
+                            <p class="text-muted small mb-0 mt-1">Optimize RAM and CPU usage based on your hardware capabilities.</p>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-primary btn-sm dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-lightning-charge me-1"></i> APPLY HARDWARE PRESET
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                <li><a class="dropdown-item py-2" href="#" onclick="applyPreset('low')">
+                                    <div class="fw-bold">Armbian / Low-End</div>
+                                    <div class="small text-muted">1GB RAM, SD/HD Focus</div>
+                                </a></li>
+                                <li><a class="dropdown-item py-2" href="#" onclick="applyPreset('mid')">
+                                    <div class="fw-bold">Mid-Range / Raspberry Pi 4</div>
+                                    <div class="small text-muted">2-4GB RAM, Balanced</div>
+                                </a></li>
+                                <li><a class="dropdown-item py-2" href="#" onclick="applyPreset('high')">
+                                    <div class="fw-bold">High-End / Desktop Server</div>
+                                    <div class="small text-muted">8GB+ RAM, 4K / Multi-user</div>
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="card-body px-4 pb-4">
+                        <div class="row g-4">
+                            <div class="col-md-4">
+                                <label class="fw-bold small mb-1 text-uppercase text-muted">TS Buffer Size (Chunks)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="TS_BUFFER_SIZE" name="TS_BUFFER_SIZE" value="{{ (settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|first).value if settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|list else '128' }}">
+                                    <span class="input-group-text">x 16KB</span>
+                                </div>
+                                <p class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">Total RAM: <span id="ts_ram_calc">2.0</span> MB per active channel.</p>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="fw-bold small mb-1 text-uppercase text-muted">HLS Cache TTL (Seconds)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="HLS_CACHE_TTL" name="HLS_CACHE_TTL" value="{{ (settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|first).value if settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|list else '60' }}">
+                                    <span class="input-group-text">sec</span>
+                                </div>
+                                <p class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">Time to keep video segments in memory.</p>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="fw-bold small mb-1 text-uppercase text-muted">HLS Max Segments</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="HLS_MAX_SEGMENTS" name="HLS_MAX_SEGMENTS" value="{{ (settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|first).value if settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|list else '50' }}">
+                                    <span class="input-group-text">files</span>
+                                </div>
+                                <p class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">Max segments to store globally in RAM.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -258,6 +343,41 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // --- Advanced Tuning Presets ---
+    window.applyPreset = function(type) {
+        const tsBuf = document.getElementById('TS_BUFFER_SIZE');
+        const hlsTtl = document.getElementById('HLS_CACHE_TTL');
+        const hlsMax = document.getElementById('HLS_MAX_SEGMENTS');
+        const uaInput = document.querySelector('input[name="CUSTOM_USER_AGENT"]');
+
+        if (type === 'low') {
+            tsBuf.value = 64; // 1MB
+            hlsTtl.value = 30;
+            hlsMax.value = 20;
+            uaInput.value = 'Mozilla/5.0 VLC/3.0.18';
+        } else if (type === 'mid') {
+            tsBuf.value = 256; // 4MB
+            hlsTtl.value = 60;
+            hlsMax.value = 100;
+            uaInput.value = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36';
+        } else if (type === 'high') {
+            tsBuf.value = 1024; // 16MB
+            hlsTtl.value = 120;
+            hlsMax.value = 500;
+            uaInput.value = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36';
+        }
+        updateRamCalc();
+        alert('Preset "' + type.toUpperCase() + '" applied. Please click SAVE SETTINGS to confirm.');
+    };
+
+    function updateRamCalc() {
+        const val = document.getElementById('TS_BUFFER_SIZE').value;
+        const mb = (val * 16384 / 1024 / 1024).toFixed(1);
+        document.getElementById('ts_ram_calc').innerText = mb;
+    }
+    document.getElementById('TS_BUFFER_SIZE').addEventListener('input', updateRamCalc);
+    updateRamCalc();
+
     const scanModes = document.querySelectorAll('input[name="scanMode"]');
     const daysGroup = document.getElementById('outdatedDaysGroup');
     const startScanBtn = document.getElementById('startScanBtn');

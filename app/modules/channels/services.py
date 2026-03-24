@@ -26,12 +26,13 @@ class StreamManager:
     """
     _streams = {} # { sid: { thread, clients: [queues], buffer: deque, lock } }
     _lock = threading.Lock()
-    BUFFER_SIZE = 128 # ~2MB if chunk is 16KB (Adjust based on RAM)
 
     @classmethod
     def get_source_stream(cls, url, headers=None):
         from app.modules.settings.services import SettingService
         use_sm = SettingService.get('ENABLE_STREAM_MANAGER', True)
+        # Load dynamic buffer size
+        ts_buffer_size = SettingService.get('TS_BUFFER_SIZE', 128)
         
         with cls._lock:
             sid = url if use_sm else f"{url}_{time.time()}"
@@ -39,7 +40,7 @@ class StreamManager:
             if sid not in cls._streams:
                 cls._streams[sid] = {
                     'clients': [],
-                    'buffer': deque(maxlen=cls.BUFFER_SIZE),
+                    'buffer': deque(maxlen=ts_buffer_size),
                     'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers, sid), daemon=True),
                     'lock': threading.Lock()
                 }
@@ -310,10 +311,10 @@ class HLSEngine:
     """
     _cache = {} # { segment_url: { data, timestamp } }
     _lock = threading.Lock()
-    CACHE_TTL = 60 # Seconds to keep a segment in RAM
 
     @classmethod
     def get_segment(cls, url, headers=None):
+        from app.modules.settings.services import SettingService
         now = time.time()
         
         # 1. Check Cache
@@ -335,8 +336,10 @@ class HLSEngine:
                 # 3. Save to Cache
                 with cls._lock:
                     cls._cache[url] = {'data': data, 'timestamp': now}
-                    # Cleanup old segments every few hits
-                    if len(cls._cache) > 50:
+                    
+                    # Dynamic Cleanup
+                    max_segments = SettingService.get('HLS_MAX_SEGMENTS', 50)
+                    if len(cls._cache) > max_segments:
                         cls._cleanup()
                         
                 return data
@@ -347,11 +350,24 @@ class HLSEngine:
 
     @classmethod
     def _cleanup(cls):
+        from app.modules.settings.services import SettingService
         now = time.time()
-        expired = [u for u, v in cls._cache.items() if now - v['timestamp'] > cls.CACHE_TTL]
+        ttl = SettingService.get('HLS_CACHE_TTL', 60)
+        
+        expired = [u for u, v in cls._cache.items() if now - v['timestamp'] > ttl]
         for u in expired:
             del cls._cache[u]
-        logger.debug(f"HLSEngine: Cleaned up {len(expired)} expired segments.")
+        
+        # Emergency cleanup if still too many
+        max_segments = SettingService.get('HLS_MAX_SEGMENTS', 50)
+        if len(cls._cache) > max_segments:
+            # Sort by timestamp and remove oldest
+            sorted_cache = sorted(cls._cache.items(), key=lambda x: x[1]['timestamp'])
+            to_remove = len(cls._cache) - max_segments
+            for i in range(to_remove):
+                del cls._cache[sorted_cache[i][0]]
+                
+        logger.debug(f"HLSEngine: Cleanup finished. Remaining: {len(cls._cache)}")
 
 class ExtractorService:
     @staticmethod

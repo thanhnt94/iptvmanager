@@ -333,6 +333,19 @@ def player_playlist_categories(playlist_id):
         
     return jsonify({'status': 'ok', 'categories': sorted(categories)})
 
+@channels_bp.route('/vlc-launcher/<int:channel_id>')
+def vlc_launcher(channel_id):
+    token = request.args.get('token')
+    channel = Channel.query.get_or_404(channel_id)
+    playback_url = url_for('channels.play_channel', channel_id=channel.id, token=token, _external=True)
+    
+    m3u_content = f"#EXTM3U\n#EXTINF:-1,{channel.name}\n{playback_url}"
+    return Response(
+        m3u_content,
+        mimetype='application/x-mpegURL',
+        headers={'Content-Disposition': f'attachment; filename=play_{channel_id}.m3u'}
+    )
+
 @channels_bp.route('/check/<int:channel_id>', methods=['POST'])
 @login_required
 def check_channel(channel_id):
@@ -483,21 +496,22 @@ def play_channel(channel_id):
     
     from app.modules.settings.services import SettingService
     enable_stats = SettingService.get('ENABLE_PROXY_STATS', True)
-    enable_manager = SettingService.get('ENABLE_STREAM_MANAGER', True)
+    enable_ts_proxy = SettingService.get('ENABLE_TS_PROXY', True)
+    enable_hls_proxy = SettingService.get('ENABLE_HLS_PROXY', True)
     
     proxy_type = getattr(channel, 'proxy_type', 'default')
     use_proxy = False
     
     if proxy_type == 'tvheadend':
-        # FORCE MODE: Always proxy/track even if global options are disabled
         use_proxy = True
     elif proxy_type == 'direct':
-        # DIRECT MODE: Never proxy
         use_proxy = False
     else: 
-        # DEFAULT MODE: Strictly follow system settings
-        # If both tracking and stream manager are off, do not proxy anything
-        use_proxy = (enable_stats or enable_manager) and (is_ts or is_hls)
+        # Default mode with specific format toggles
+        if is_hls:
+            use_proxy = enable_hls_proxy or enable_stats
+        elif is_ts:
+            use_proxy = enable_ts_proxy or enable_stats
 
     if use_proxy:
         if is_hls:

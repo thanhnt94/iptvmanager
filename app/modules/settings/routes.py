@@ -25,6 +25,20 @@ def admin_settings():
     if SettingService.get('SCAN_DELAY_SECONDS') is None:
         SettingService.set('SCAN_DELAY_SECONDS', '2', type='int', description='Delay in seconds between scanning each channel.')
     
+    # Proxy Engine Settings
+    if SettingService.get('ENABLE_TS_PROXY') is None:
+        SettingService.set('ENABLE_TS_PROXY', 'true', type='bool', description='Enable TVHeadend-style Proxy for MPEG-TS streams.')
+    if SettingService.get('ENABLE_HLS_PROXY') is None:
+        SettingService.set('ENABLE_HLS_PROXY', 'true', type='bool', description='Enable RAM Caching Proxy for HLS streams.')
+    
+    # Advanced Tuning
+    if SettingService.get('TS_BUFFER_SIZE') is None:
+        SettingService.set('TS_BUFFER_SIZE', '128', type='int', description='Number of 16KB chunks in TS RAM buffer.')
+    if SettingService.get('HLS_CACHE_TTL') is None:
+        SettingService.set('HLS_CACHE_TTL', '60', type='int', description='Seconds to keep HLS segments in RAM.')
+    if SettingService.get('HLS_MAX_SEGMENTS') is None:
+        SettingService.set('HLS_MAX_SEGMENTS', '50', type='int', description='Max HLS segments per channel in RAM.')
+
     from app.modules.playlists.models import PlaylistProfile
     playlists = PlaylistProfile.query.all()
     
@@ -36,7 +50,9 @@ def save_settings():
     if current_user.role != 'admin': return jsonify({"status": "error"}), 403
     
     data = request.form
-    # Checkbox handling in Flask (only present if checked)
+    # Proxy Engine toggles
+    SettingService.set('ENABLE_TS_PROXY', 'true' if 'ENABLE_TS_PROXY' in data else 'false', type='bool')
+    SettingService.set('ENABLE_HLS_PROXY', 'true' if 'ENABLE_HLS_PROXY' in data else 'false', type='bool')
     SettingService.set('ENABLE_PROXY_STATS', 'true' if 'ENABLE_PROXY_STATS' in data else 'false', type='bool')
     SettingService.set('ENABLE_STREAM_MANAGER', 'true' if 'ENABLE_STREAM_MANAGER' in data else 'false', type='bool')
     SettingService.set('ENABLE_AUTO_SCAN', 'true' if 'ENABLE_AUTO_SCAN' in data else 'false', type='bool')
@@ -45,6 +61,14 @@ def save_settings():
         SettingService.set('AUTO_SCAN_INTERVAL', data['AUTO_SCAN_INTERVAL'], type='int')
     if 'SCAN_DELAY_SECONDS' in data:
         SettingService.set('SCAN_DELAY_SECONDS', data['SCAN_DELAY_SECONDS'], type='int')
+    
+    # Advanced Tuning
+    if 'TS_BUFFER_SIZE' in data:
+        SettingService.set('TS_BUFFER_SIZE', data['TS_BUFFER_SIZE'], type='int')
+    if 'HLS_CACHE_TTL' in data:
+        SettingService.set('HLS_CACHE_TTL', data['HLS_CACHE_TTL'], type='int')
+    if 'HLS_MAX_SEGMENTS' in data:
+        SettingService.set('HLS_MAX_SEGMENTS', data['HLS_MAX_SEGMENTS'], type='int')
     
     if 'CUSTOM_USER_AGENT' in data:
         SettingService.set('CUSTOM_USER_AGENT', data['CUSTOM_USER_AGENT'], description='Custom User-Agent for all proxy requests.')
