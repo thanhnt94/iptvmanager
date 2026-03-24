@@ -856,45 +856,32 @@ def proxy_hls_segment():
         return "Missing params", 400
         
     from app.modules.settings.services import SettingService
-    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) VLC/3.0.18')
     headers = { 'User-Agent': ua }
     
     try:
-        from app.modules.channels.services import ActiveSessionManager
+        from app.modules.channels.services import ActiveSessionManager, HLSEngine
         ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'Proxy (HLS)')
         
-        resp = requests.get(url, headers=headers, stream=True, timeout=15)
-        content_type = resp.headers.get('Content-Type', '').lower()
+        # USE HLS ENGINE FOR CACHING
+        data = HLSEngine.get_segment(url, headers=headers)
         
-        # If it's actually an M3U8 (Recursive Variant), handle it!
-        if 'mpegurl' in content_type or 'm3u8' in url.lower():
-            # Manifest handling
-            lines = resp.text.splitlines()
-            new_lines = []
-            pure_url = url.split('?')[0]
-            base_url = pure_url.rsplit('/', 1)[0] + '/'
-            for line in lines:
-                line = line.strip()
-                if not line.startswith('#') and line:
-                    seg_url = line
-                    if not seg_url.startswith('http'):
-                        seg_url = base_url + seg_url
-                    new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
-                else:
-                    new_lines.append(line)
-            return "\n".join(new_lines), 200, {'Content-Type': 'application/x-mpegURL'}
+        if data:
+            # Track duration (approximation: 5-10 seconds per segment request)
+            channel = Channel.query.get(channel_id)
+            if channel:
+                channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 8 
+                db.session.commit()
+            
+            # Determine content type (usually video/mp2t)
+            content_type = 'video/mp2t'
+            if url.lower().endswith('.m4s'): content_type = 'video/iso.segment'
+            
+            return Response(data, content_type=content_type)
+        else:
+            # Fallback to redirect if download failed
+            return redirect(url)
 
-        # ULTRA-LIGHT OPTIMIZATION:
-        # Instead of proxying the large binary data (which uses CPU/BW), 
-        # we log the watch time and then REDIRECT the player to the source segment.
-        # This keeps duration tracking 100% accurate while using 0% server bandwidth.
-        
-        # Track duration (approximation: 5 seconds per segment request)
-        channel = Channel.query.get(channel_id)
-        if channel:
-            channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 5 
-            db.session.commit()
-
-        return redirect(url)
     except Exception as e:
-        return str(e), 500
+        logger.error(f"HLS Proxy Error: {e}")
+        return redirect(url)

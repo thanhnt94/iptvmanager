@@ -14,13 +14,19 @@ import time
 import threading
 import queue
 
+from collections import deque
+
 class StreamManager:
     """
-    TVHeadend-style Singleton Stream Manager.
-    Ensures one connection per source URL and manages broadcast to multiple clients.
+    Advanced IPTV Proxy Engine for Armbian/Linux.
+    Features: 
+    - Singleton connection (1 source link = 1 bandwidth usage).
+    - Circular RAM Buffer (Pre-fills data to prevent lag).
+    - Burst-delivery for new clients (Instant playback).
     """
-    _streams = {} # { url: { thread, clients: [queues], last_active } }
+    _streams = {} # { sid: { thread, clients: [queues], buffer: deque, lock } }
     _lock = threading.Lock()
+    BUFFER_SIZE = 128 # ~2MB if chunk is 16KB (Adjust based on RAM)
 
     @classmethod
     def get_source_stream(cls, url, headers=None):
@@ -28,59 +34,80 @@ class StreamManager:
         use_sm = SettingService.get('ENABLE_STREAM_MANAGER', True)
         
         with cls._lock:
-            # If SM is OFF, we use a unique ID for this session to bypass sharing
             sid = url if use_sm else f"{url}_{time.time()}"
             
             if sid not in cls._streams:
                 cls._streams[sid] = {
                     'clients': [],
+                    'buffer': deque(maxlen=cls.BUFFER_SIZE),
                     'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers, sid), daemon=True),
-                    'active': True
+                    'lock': threading.Lock()
                 }
                 cls._streams[sid]['thread'].start()
             
-            q = queue.Queue(maxsize=2000) 
-            cls._streams[sid]['clients'].append(q)
-            return q, sid # Return sid too so remove_client works
+            # Create a new client queue
+            q = queue.Queue(maxsize=3000) 
+            
+            # PRE-FILL (Burst-start): Fill the new client's queue with historical data from RAM
+            with cls._streams[sid]['lock']:
+                for chunk in cls._streams[sid]['buffer']:
+                    try:
+                        q.put_nowait(chunk)
+                    except:
+                        break
+                
+                cls._streams[sid]['clients'].append(q)
+                
+            return q, sid
 
     @classmethod
     def _run_source_pipe(cls, url, headers, sid):
-        logger.info(f"StreamManager: Starting source pipe for {url}")
+        logger.info(f"StreamEngine: Starting optimized pipe for {url}")
         session = requests.Session()
+        
+        # User Agent optimization for IPTV providers
+        if not headers:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) VLC/3.0.18'}
+
         while True:
-            # Cleanup check: Any clients left?
+            # Cleanup check
             with cls._lock:
                 if sid not in cls._streams or not cls._streams[sid]['clients']:
-                    logger.info(f"StreamManager: No clients left for {sid}, stopping pipe.")
+                    logger.info(f"StreamEngine: No clients for {sid}, releasing resources.")
                     if sid in cls._streams: del cls._streams[sid]
                     return
 
             try:
+                # Use a larger stream buffer for stability
                 with session.get(url, headers=headers, stream=True, timeout=15) as r:
                     if r.status_code >= 400:
-                        logger.error(f"StreamManager: Source error {r.status_code} for {url}")
+                        logger.error(f"StreamEngine: Source error {r.status_code}")
                         time.sleep(5)
                         continue
                     
-                    logger.info(f"StreamManager: Connected to source {url}")
-                    for chunk in r.iter_content(chunk_size=16384):
+                    for chunk in r.iter_content(chunk_size=16384): # 16KB chunks
                         if not chunk: break
+                        
                         with cls._lock:
                             if sid not in cls._streams: break
-                            for q in cls._streams[sid]['clients'][:]:
-                                try:
-                                    if not q.full():
-                                        q.put_nowait(chunk)
-                                    else:
-                                        # Drop old if full to keep it real-time
-                                        for _ in range(100):
+                            
+                            # Update RAM Buffer
+                            cls._streams[sid]['buffer'].append(chunk)
+                            
+                            # Distribute to all connected clients
+                            with cls._streams[sid]['lock']:
+                                for q in cls._streams[sid]['clients'][:]:
+                                    try:
+                                        if q.full():
+                                            # If client is too slow, drop oldest to maintain real-time
                                             try: q.get_nowait()
-                                            except: break
+                                            except: pass
                                         q.put_nowait(chunk)
-                                except: pass
+                                    except:
+                                        pass
             except Exception as e:
-                logger.error(f"StreamManager: Pipe exception for {url}: {e}")
-                time.sleep(2)
+                logger.error(f"StreamEngine: Connection lost for {url}: {e}")
+                time.sleep(2) # Auto-reconnect after 2s
 
     @classmethod
     def remove_client(cls, sid, q):
@@ -274,6 +301,56 @@ class ChannelService:
                 print(f"VLC error: {e}")
                 continue
         return False
+
+class HLSEngine:
+    """
+    HLS Proxy Engine with RAM Caching.
+    Prevents lag by pre-downloading and caching .ts segments.
+    """
+    _cache = {} # { segment_url: { data, timestamp } }
+    _lock = threading.Lock()
+    CACHE_TTL = 60 # Seconds to keep a segment in RAM
+
+    @classmethod
+    def get_segment(cls, url, headers=None):
+        now = time.time()
+        
+        # 1. Check Cache
+        with cls._lock:
+            if url in cls._cache:
+                logger.debug(f"HLSEngine: Cache HIT for {url[-20:]}")
+                return cls._cache[url]['data']
+
+        # 2. Cache MISS: Download from source
+        try:
+            logger.debug(f"HLSEngine: Cache MISS, downloading {url[-20:]}")
+            if not headers:
+                headers = {'User-Agent': 'Mozilla/5.0 VLC/3.0.18'}
+                
+            resp = requests.get(url, headers=headers, timeout=15)
+            if resp.status_code == 200:
+                data = resp.content
+                
+                # 3. Save to Cache
+                with cls._lock:
+                    cls._cache[url] = {'data': data, 'timestamp': now}
+                    # Cleanup old segments every few hits
+                    if len(cls._cache) > 50:
+                        cls._cleanup()
+                        
+                return data
+        except Exception as e:
+            logger.error(f"HLSEngine: Download error: {e}")
+            
+        return None
+
+    @classmethod
+    def _cleanup(cls):
+        now = time.time()
+        expired = [u for u, v in cls._cache.items() if now - v['timestamp'] > cls.CACHE_TTL]
+        for u in expired:
+            del cls._cache[u]
+        logger.debug(f"HLSEngine: Cleaned up {len(expired)} expired segments.")
 
 class ExtractorService:
     @staticmethod
