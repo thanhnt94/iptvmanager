@@ -40,12 +40,18 @@
                     </div>
                 </div>
 
-                <div class="mb-3 form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="use_proxy" id="useProxyCheck">
-                    <label class="form-check-label fw-bold" for="useProxyCheck">
-                        Use TVHeadend Proxy (Recommended for .ts streams)
-                    </label>
-                    <div class="form-text">Server will proxy the stream. Automatically enabled for .ts files if left unchecked.</div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-primary"><i class="bi bi-cpu-fill me-1"></i>Playback & Proxy Mode</label>
+                    <select name="proxy_type" class="form-select shadow-sm border-primary">
+                        <option value="default" selected>Default (Follow Global Settings)</option>
+                        <option value="direct">Direct (Speed Priority, No Tracking)</option>
+                        <option value="tvheadend">Force Proxy (Always Track & Proxy)</option>
+                    </select>
+                    <div class="form-text mt-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <b>Default:</b> Proxies only if enabled in <a href="{{ url_for('settings.admin_settings') }}" class="text-decoration-none">Admin Settings</a>.
+                        <br><b>Force Proxy:</b> Overrides settings to ensure tracking and connection sharing are ALWAYS active.
+                    </div>
                 </div>
 
                 <div class="mb-4">

@@ -17,7 +17,7 @@ class Channel(db.Model):
     quality = db.Column(db.String(50)) # excellent, good, poor
     resolution = db.Column(db.String(50)) # e.g., 1920x1080
     audio_codec = db.Column(db.String(50)) # e.g., aac, ac3
-    use_proxy = db.Column(db.Boolean, default=False) # Use TVHeadend-style proxy
+    proxy_type = db.Column(db.String(20), default='default') # default, direct, tvheadend
     last_checked_at = db.Column(db.DateTime)
     
     # Stats fields

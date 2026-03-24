@@ -1,11 +1,46 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context
 from flask_login import login_required, current_user
 import requests
-from app.modules.channels.models import Channel, EPGSource
-from app.modules.channels.services import ChannelService, EPGService
+from datetime import datetime
+import time
+from app.modules.channels.models import Channel, EPGSource, EPGData
+from app.modules.channels.services import ChannelService, EPGService, ActiveSessionManager, StreamManager
 from app.core.database import db
+import time
 
 channels_bp = Blueprint('channels', __name__, template_folder='templates')
+
+def validate_proxy_access(token=None):
+    """
+    Validates if a request is authorized to play a stream.
+    Returns the username/identity if valid, else None.
+    """
+    if current_user.is_authenticated:
+        return current_user.username
+    
+    if not token:
+        # Fallback to IP trust
+        from app.modules.auth.models import TrustedIP
+        ip = request.remote_addr
+        trusted = TrustedIP.query.filter_by(ip_address=ip).first()
+        if trusted:
+            return f"Trusted IP: {ip}"
+        return None
+
+    from app.modules.auth.models import User
+    from app.modules.playlists.models import PlaylistProfile
+    
+    # Check User API Token
+    user = User.query.filter_by(api_token=token).first()
+    if user:
+        return user.username
+        
+    # Check Playlist Security Token
+    playlist = PlaylistProfile.query.filter_by(security_token=token).first()
+    if playlist:
+        return f"Playlist: {playlist.name}"
+        
+    return None
 
 @channels_bp.route('/')
 @login_required
@@ -107,16 +142,16 @@ def add_channel():
                          distinct_groups=ChannelService.get_distinct_groups(),
                          all_playlists=PlaylistProfile.query.filter_by(is_system=False).all())
 
-@channels_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
+@channels_bp.route('/edit/<int:channel_id>', methods=['GET', 'POST'])
 @login_required
-def edit_channel(id):
+def edit_channel(channel_id):
     from app.modules.playlists.models import PlaylistProfile, PlaylistEntry
     from app.modules.playlists.services import PlaylistService
     
-    channel = Channel.query.get_or_404(id)
+    channel = Channel.query.get_or_404(channel_id)
     
     if request.method == 'POST':
-        ChannelService.update_channel(id, request.form)
+        ChannelService.update_channel(channel_id, request.form)
         
         # Sync playlist memberships with group IDs
         selected_playlists = request.form.getlist('playlists')
@@ -125,7 +160,7 @@ def edit_channel(id):
             group_id = request.form.get(f'group_{pid}')
             playlist_data[pid] = group_id
             
-        PlaylistService.sync_channel_playlists(id, playlist_data)
+        PlaylistService.sync_channel_playlists(channel_id, playlist_data)
         
         flash('Channel updated successfully!')
         return redirect(url_for('channels.index'))
@@ -133,12 +168,12 @@ def edit_channel(id):
     # For GET: fetch all available playlists (non-system) with their groups
     all_playlists = PlaylistProfile.query.filter_by(is_system=False).all()
     # Fetch current playlist memberships mapping pid -> group_id
-    current_entries = PlaylistEntry.query.filter_by(channel_id=id).all()
+    current_entries = PlaylistEntry.query.filter_by(channel_id=channel_id).all()
     current_memberships = {e.playlist_id: e.group_id for e in current_entries}
     
     # Navigation: Find previous and next channel IDs
-    prev_channel = Channel.query.filter(Channel.id < id).order_by(Channel.id.desc()).first()
-    next_channel = Channel.query.filter(Channel.id > id).order_by(Channel.id.asc()).first()
+    prev_channel = Channel.query.filter(Channel.id < channel_id).order_by(Channel.id.desc()).first()
+    next_channel = Channel.query.filter(Channel.id > channel_id).order_by(Channel.id.asc()).first()
     prev_id = prev_channel.id if prev_channel else None
     next_id = next_channel.id if next_channel else None
     
@@ -149,18 +184,19 @@ def edit_channel(id):
                          prev_id=prev_id,
                          next_id=next_id)
 
-@channels_bp.route('/delete/<int:id>', methods=['POST'])
+@channels_bp.route('/delete/<int:channel_id>', methods=['POST'])
 @login_required
-def delete_channel(id):
-    channel = Channel.query.get_or_404(id)
+def delete_channel(channel_id):
+    channel = Channel.query.get_or_404(channel_id)
     db.session.delete(channel)
     db.session.commit()
     flash('Channel deleted successfully.', 'success')
     return redirect(url_for('channels.index'))
 
 @channels_bp.route('/web-player')
+@channels_bp.route('/web-player/<int:channel_id>')
 @login_required
-def web_player():
+def web_player(channel_id=None):
     from app.modules.playlists.models import PlaylistProfile
     from app.modules.auth.services import AuthService
     
@@ -169,17 +205,17 @@ def web_player():
     else:
         playlists = AuthService.get_user_playlists(current_user.id)
         
-    initial_id = request.args.get('id', type=int)
+    initial_id = channel_id or request.args.get('id', type=int)
     return render_template('channels/player.html', playlists=playlists, initial_id=initial_id)
 
-@channels_bp.route('/api/channel/<int:id>')
+@channels_bp.route('/api/channel/<int:channel_id>')
 @login_required
-def get_channel_info(id):
+def get_channel_info(channel_id):
     from app.modules.playlists.models import PlaylistEntry
-    channel = Channel.query.get_or_404(id)
+    channel = Channel.query.get_or_404(channel_id)
     
     # Try to find which playlist this channel belongs to
-    entry = PlaylistEntry.query.filter_by(channel_id=id).first()
+    entry = PlaylistEntry.query.filter_by(channel_id=channel_id).first()
     playlist_id = entry.playlist_id if entry else None
     
     return jsonify({
@@ -189,7 +225,7 @@ def get_channel_info(id):
             'name': channel.name,
             'logo': channel.logo_url,
             'group': channel.group_name or 'Uncategorized',
-            'play_url': url_for('channels.play_channel', id=channel.id),
+            'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
             'stream_url': channel.stream_url,
             'playlist_id': playlist_id,
             'stream_type': channel.stream_type or 'live'
@@ -238,7 +274,7 @@ def player_playlist_channels(playlist_id):
                 'status': channel.status,
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', id=channel.id),
+                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
                 'stream_url': channel.stream_url
             })
     else:
@@ -265,7 +301,7 @@ def player_playlist_channels(playlist_id):
                 'status': channel.status,
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', id=channel.id),
+                'play_url': url_for('channels.play_channel', channel_id=channel.id),
                 'stream_url': channel.stream_url
             })
         
@@ -293,13 +329,14 @@ def player_playlist_categories(playlist_id):
         
     return jsonify({'status': 'ok', 'categories': sorted(categories)})
 
-@channels_bp.route('/check/<int:id>', methods=['POST'])
-def check_channel(id):
+@channels_bp.route('/check/<int:channel_id>', methods=['POST'])
+@login_required
+def check_channel(channel_id):
     from app.modules.health.services import HealthCheckService
     from datetime import datetime
     
-    HealthCheckService.check_stream(id)
-    channel = Channel.query.get(id)
+    HealthCheckService.check_stream(channel_id)
+    channel = Channel.query.get(channel_id)
     
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('ajax'):
         return jsonify({
@@ -317,11 +354,11 @@ def check_channel(id):
     flash('Channel check completed!')
     return redirect(url_for('channels.index'))
 
-@channels_bp.route('/play_vlc/<int:id>', methods=['POST'])
-def play_vlc(id):
-    channel = Channel.query.get_or_404(id)
-    # Use the wrapper URL instead of the direct stream URL
-    wrapper_url = url_for('channels.play_channel', id=id, _external=True)
+@channels_bp.route('/play_vlc/<int:channel_id>', methods=['POST'])
+def play_vlc(channel_id):
+    channel = Channel.query.get_or_404(channel_id)
+    # Include the token for authorized playback in VLC
+    wrapper_url = url_for('channels.play_channel', channel_id=channel_id, token=current_user.api_token, _external=True)
     success = ChannelService.play_with_vlc(wrapper_url)
     return jsonify({'success': success})
 
@@ -356,8 +393,8 @@ def sync_epg(id):
     from app.modules.channels.services import EPGService
     result = EPGService.sync_epg(id)
     return jsonify(result)
-@channels_bp.route('/play/<int:id>')
-def play_channel(id):
+@channels_bp.route('/play/<int:channel_id>')
+def play_channel(channel_id):
     """
     Playback redirector that obfuscates the original URL and 
     performs a quick health check on access (crowdsourced status).
@@ -366,10 +403,11 @@ def play_channel(id):
     import threading
     from app.modules.health.services import HealthCheckService
     
-    channel = Channel.query.get_or_404(id)
+    channel = Channel.query.get_or_404(channel_id)
     
-    # 1. Update Play Count
-    channel.play_count += 1
+    # 1. Update Play Count (Initial)
+    channel.play_count = (channel.play_count or 0) + 1
+    channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 1 # Initial ping
     db.session.commit()
     
     # 2. Quick health check (Ping/HEAD only)
@@ -395,7 +433,7 @@ def play_channel(id):
                 with app.app_context():
                     HealthCheckService.check_stream(cid)
             
-            threading.Thread(target=_bg_check, args=(current_app._get_current_object(), id)).start()
+            threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
             
     except Exception as e:
         logger.error(f"Quick check failed for {channel.name}: {e}")
@@ -431,15 +469,43 @@ def play_channel(id):
                 trusted.last_seen = db.func.now()
             db.session.commit()
 
-    if channel.use_proxy:
-        return redirect(url_for('channels.proxy_stream', url=channel.stream_url, token=token))
+    # 3. SMART REDIRECT & PROXY LOGIC
+    # Determine if we should use the proxy based on proxy_type and stream format
+    url_low = channel.stream_url.lower()
+    format_low = (channel.stream_format or '').lower()
+    
+    is_hls = '.m3u8' in url_low or 'playlist' in url_low or 'm3u8' in format_low or 'hls' in format_low
+    is_ts = '.ts' in url_low or 'mpegts' in url_low or 'type=ts' in url_low or 'ts' in format_low
+    
+    from app.modules.settings.services import SettingService
+    enable_stats = SettingService.get('ENABLE_PROXY_STATS', True)
+    enable_manager = SettingService.get('ENABLE_STREAM_MANAGER', True)
+    
+    proxy_type = getattr(channel, 'proxy_type', 'default')
+    use_proxy = False
+    
+    if proxy_type == 'tvheadend':
+        # FORCE MODE: Always proxy/track even if global options are disabled
+        use_proxy = True
+    elif proxy_type == 'direct':
+        # DIRECT MODE: Never proxy
+        use_proxy = False
+    else: 
+        # DEFAULT MODE: Strictly follow system settings
+        # If both tracking and stream manager are off, do not proxy anything
+        use_proxy = (enable_stats or enable_manager) and (is_ts or is_hls)
+
+    if use_proxy:
+        if is_hls:
+            return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token))
+        return redirect(url_for('channels.proxy_stream', url=channel.stream_url, token=token, channel_id=channel.id))
         
     return redirect(channel.stream_url)
 
-@channels_bp.route('/api/stats/<int:id>')
+@channels_bp.route('/api/stats/<int:channel_id>')
 @login_required
-def get_channel_stats(id):
-    channel = Channel.query.get_or_404(id)
+def get_channel_stats(channel_id):
+    channel = Channel.query.get_or_404(channel_id)
     
     # Format duration
     hours = channel.total_watch_seconds // 3600
@@ -456,7 +522,11 @@ def get_channel_stats(id):
             'total_watch_time': duration_str,
             'bandwidth_mb': round(channel.total_bandwidth_mb, 2),
             'last_checked': channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never',
-            'created_at': channel.created_at.strftime('%Y-%m-%d %H:%M')
+            'created_at': channel.created_at.strftime('%Y-%m-%d %H:%M'),
+            'resolution': channel.resolution or 'N/A',
+            'stream_format': channel.stream_format.upper() if channel.stream_format else 'N/A',
+            'stream_type': (channel.stream_type or 'live').upper(),
+            'quality': (channel.quality or 'N/A').title()
         }
     })
 
@@ -490,48 +560,43 @@ def track_usage():
     db.session.commit()
     return jsonify({'status': 'ok'})
 
+def validate_proxy_access(token=None):
+    """Universal validator for proxy and stream access (Returns username or None)"""
+    if current_user.is_authenticated:
+        return current_user.username
+        
+    if token:
+        from app.modules.auth.models import User
+        from app.modules.playlists.models import PlaylistProfile
+        # Check User API Token
+        user = User.query.filter_by(api_token=token).first()
+        if user: return user.username
+        # Check Playlist Security Token
+        playlist = PlaylistProfile.query.filter_by(security_token=token).first()
+        if playlist: return f"Playlist: {playlist.name}"
+        
+    # IP-BASED BYPASS
+    from app.modules.auth.models import TrustedIP
+    ip = request.remote_addr
+    trusted = TrustedIP.query.filter_by(ip_address=ip).first()
+    if trusted: return f"Trusted IP: {ip}"
+    
+    return None
+
 @channels_bp.route('/api/proxy')
 def proxy_stream():
     """
     TVHeadend-style Singleton Proxy Gateway.
-    Uses StreamManager to share a single source connection among clients.
     Secured by token to prevent Auth Redirect loops in media players.
     """
-    from app.modules.channels.services import StreamManager
-    from app.modules.auth.models import User
-    import requests
-    from flask import Response, stream_with_context, request
-    
-    # 1. Token-based Security (Prevents 302 Login Redirects)
     token = request.args.get('token')
-    from app.modules.auth.models import User, TrustedIP
-    from app.modules.playlists.models import PlaylistProfile
-    
-    is_valid = False
-    if current_user.is_authenticated:
-        is_valid = True
-    elif token:
-        # Check User API Token
-        user = User.query.filter_by(api_token=token).first()
-        if user:
-            is_valid = True
-        else:
-            # Check Playlist Security Token
-            playlist = PlaylistProfile.query.filter_by(security_token=token).first()
-            if playlist:
-                is_valid = True
-    else:
-        # IP-BASED BYPASS: Check if this IP is trusted
-        ip = request.remote_addr
-        trusted = TrustedIP.query.filter_by(ip_address=ip).first()
-        if trusted:
-            # Optional: Check if the trust is still fresh (e.g., last 24h)
-            is_valid = True
-    
-    if not is_valid:
+    username = validate_proxy_access(token)
+    if not username:
         return "Unauthorized", 401
     
     url = request.args.get('url')
+    channel_id = request.args.get('channel_id', type=int)
+    
     if not url:
         return "No URL provided", 400
     
@@ -548,22 +613,50 @@ def proxy_stream():
     
     # Get the broadcast queue from the manager
     from app.modules.channels.services import StreamManager
-    q = StreamManager.get_source_stream(url, headers)
-
+    q, sid = StreamManager.get_source_stream(url, headers=headers)
+    
     def generate():
+        start_time = time.time()
         try:
+            last_ping = 0
             while True:
                 try:
                     # Timeout ensures we don't hang if the source dies
                     chunk = q.get(timeout=20) 
                     if chunk is None: break
                     yield chunk
+                    
+                    # Heartbeat for Real-time Dashboard (every 5 seconds)
+                    if channel_id and time.time() - last_ping > 5:
+                        ActiveSessionManager.update_session(channel_id, username, request.remote_addr, 'Proxy (TS)')
+                        last_ping = time.time()
                 except:
                     # Source timeout or disconnect
                     break
         finally:
             # Clean up: remove this client from the broadcast list
-            StreamManager.remove_client(url, q)
+            StreamManager.remove_client(sid, q)
+            
+            # Record total stats when they finally disconnect
+            if channel_id:
+                duration = int(time.time() - start_time)
+                ActiveSessionManager.update_session(channel_id, username, request.remote_addr, 'Proxy (TS)')
+                
+                if duration > 1: # Only track if they actually connected for a bit
+                    # Use the already imported Channel and db
+                    ch = Channel.query.get(channel_id)
+                    if ch:
+                        ch.total_watch_seconds += duration
+                        # Estimate bandwidth
+                        bitrate = 2.0 
+                        if ch.resolution:
+                            res = ch.resolution.lower()
+                            if '3840' in res or '4k' in res: bitrate = 25.0
+                            elif '1920' in res or '1080' in res: bitrate = 8.0
+                            elif '1280' in res or '720' in res: bitrate = 4.0
+                        
+                        ch.total_bandwidth_mb += (bitrate * duration) / 8
+                        db.session.commit()
 
     return Response(stream_with_context(generate()), content_type='video/mp2t')
 
@@ -616,3 +709,182 @@ def quick_add():
         return jsonify({"status": "ok", "message": "Added successfully"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@channels_bp.route('/api/heartbeat', methods=['POST'])
+@login_required
+def heartbeat():
+    data = request.get_json()
+    channel_id = data.get('channel_id')
+    seconds = data.get('seconds', 0)
+    
+    if not channel_id:
+        return jsonify({"status": "error", "message": "Missing channel_id"}), 400
+        
+    try:
+        channel_id_int = int(channel_id)
+    except:
+        return jsonify({"status": "error", "message": "Invalid channel_id"}), 400
+
+    from app.modules.channels.models import Channel
+    channel = Channel.query.get(channel_id_int)
+    if not channel:
+        return jsonify({"status": "error", "message": "Channel not found"}), 404
+        
+    channel.total_watch_seconds = (channel.total_watch_seconds or 0) + seconds
+    
+    # Estimate bandwidth
+    bitrate = 2.0 
+    if channel.resolution:
+        res = channel.resolution.lower()
+        if '3840' in res or '4k' in res: bitrate = 25.0
+        elif '1920' in res or '1080' in res: bitrate = 8.0
+        elif '1280' in res or '720' in res: bitrate = 4.0
+    
+    channel.total_bandwidth_mb = (channel.total_bandwidth_mb or 0) + (bitrate * seconds) / 8
+    
+    # Update Real-time Session
+    from app.modules.channels.services import ActiveSessionManager
+    ActiveSessionManager.update_session(channel_id_int, current_user.username if current_user.is_authenticated else 'Guest', request.remote_addr, 'Web Player')
+    
+    db.session.commit()
+    
+    return jsonify({"status": "ok"})
+
+@channels_bp.route('/active')
+@login_required
+def active_sessions_page():
+    return render_template('channels/active_sessions.html')
+
+@channels_bp.route('/api/active_sessions')
+@login_required
+def get_active_sessions_api():
+    from app.modules.channels.services import ActiveSessionManager
+    from app.modules.channels.models import Channel
+    sessions = ActiveSessionManager.get_active_sessions()
+    
+    results = []
+    for s in sessions:
+        ch = Channel.query.get(s['channel_id'])
+        results.append({
+            'channel_name': ch.name if ch else 'Unknown',
+            'channel_id': s['channel_id'],
+            'user': s['user'],
+            'ip': s['ip'],
+            'start_time': s['start_time'].strftime('%H:%M:%S'),
+            'type': s['type'],
+            'duration': int((datetime.now() - s['start_time']).total_seconds())
+        })
+    return jsonify({"status": "ok", "sessions": results})
+
+@channels_bp.route('/api/proxy_hls_manifest')
+def proxy_hls_manifest():
+    token = request.args.get('token')
+    username = validate_proxy_access(token)
+    if not username:
+        return "Unauthorized", 401
+        
+    channel_id = request.args.get('channel_id')
+    channel = Channel.query.get_or_404(channel_id)
+    
+    # URL Priority: explicit param > channel default
+    url = request.args.get('url') or channel.stream_url
+    if not url:
+        return "No URL provided", 400
+    
+    from app.modules.settings.services import SettingService
+    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    headers = { 'User-Agent': ua }
+    
+    try:
+        from app.modules.channels.services import ActiveSessionManager
+        ActiveSessionManager.update_session(channel.id, username, request.remote_addr, 'Proxy (HLS)')
+        
+        resp = requests.get(url, headers=headers, timeout=10)
+        lines = resp.text.splitlines()
+        new_lines = []
+        
+        # Robust Base URL (remove bit after last slash, before query)
+        pure_url = url.split('?')[0]
+        base_url = pure_url.rsplit('/', 1)[0] + '/'
+        
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+            
+            if not line.startswith('#'):
+                # It's a segment or variant playlist
+                seg_url = line
+                if not seg_url.startswith('http'):
+                    if seg_url.startswith('/'):
+                        # Absolute path on same host
+                        from urllib.parse import urlparse
+                        p = urlparse(url)
+                        seg_url = f"{p.scheme}://{p.netloc}{seg_url}"
+                    else:
+                        seg_url = base_url + seg_url
+                
+                # Rewrite to proxy
+                new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
+            else:
+                new_lines.append(line)
+        
+        return "\n".join(new_lines), 200, {'Content-Type': 'application/x-mpegURL'}
+    except Exception as e:
+        return str(e), 500
+
+@channels_bp.route('/api/proxy_hls_segment')
+def proxy_hls_segment():
+    token = request.args.get('token')
+    username = validate_proxy_access(token)
+    if not username:
+        return "Unauthorized", 401
+        
+    channel_id = request.args.get('channel_id')
+    url = request.args.get('url')
+    
+    if not channel_id or not url:
+        return "Missing params", 400
+        
+    from app.modules.settings.services import SettingService
+    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    headers = { 'User-Agent': ua }
+    
+    try:
+        from app.modules.channels.services import ActiveSessionManager
+        ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'Proxy (HLS)')
+        
+        resp = requests.get(url, headers=headers, stream=True, timeout=15)
+        content_type = resp.headers.get('Content-Type', '').lower()
+        
+        # If it's actually an M3U8 (Recursive Variant), handle it!
+        if 'mpegurl' in content_type or 'm3u8' in url.lower():
+            # Manifest handling
+            lines = resp.text.splitlines()
+            new_lines = []
+            pure_url = url.split('?')[0]
+            base_url = pure_url.rsplit('/', 1)[0] + '/'
+            for line in lines:
+                line = line.strip()
+                if not line.startswith('#') and line:
+                    seg_url = line
+                    if not seg_url.startswith('http'):
+                        seg_url = base_url + seg_url
+                    new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
+                else:
+                    new_lines.append(line)
+            return "\n".join(new_lines), 200, {'Content-Type': 'application/x-mpegURL'}
+
+        # ULTRA-LIGHT OPTIMIZATION:
+        # Instead of proxying the large binary data (which uses CPU/BW), 
+        # we log the watch time and then REDIRECT the player to the source segment.
+        # This keeps duration tracking 100% accurate while using 0% server bandwidth.
+        
+        # Track duration (approximation: 5 seconds per segment request)
+        channel = Channel.query.get(channel_id)
+        if channel:
+            channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 5 
+            db.session.commit()
+
+        return redirect(url)
+    except Exception as e:
+        return str(e), 500

@@ -24,70 +24,103 @@ class StreamManager:
 
     @classmethod
     def get_source_stream(cls, url, headers=None):
+        from app.modules.settings.services import SettingService
+        use_sm = SettingService.get('ENABLE_STREAM_MANAGER', True)
+        
         with cls._lock:
-            if url not in cls._streams:
-                print(f"StreamManager: [NEW] Opening source link for {url}")
-                cls._streams[url] = {
+            # If SM is OFF, we use a unique ID for this session to bypass sharing
+            sid = url if use_sm else f"{url}_{time.time()}"
+            
+            if sid not in cls._streams:
+                cls._streams[sid] = {
                     'clients': [],
-                    'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers), daemon=True),
+                    'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers, sid), daemon=True),
                     'active': True
                 }
-                cls._streams[url]['thread'].start()
+                cls._streams[sid]['thread'].start()
             
-            # LARGER QUEUE: maxsize=2000 handles ~32MB of data (approx 15-20 seconds of 1080p)
             q = queue.Queue(maxsize=2000) 
-            cls._streams[url]['clients'].append(q)
-            return q
+            cls._streams[sid]['clients'].append(q)
+            return q, sid # Return sid too so remove_client works
 
     @classmethod
-    def _run_source_pipe(cls, url, headers):
+    def _run_source_pipe(cls, url, headers, sid):
+        logger.info(f"StreamManager: Starting source pipe for {url}")
         session = requests.Session()
         while True:
             # Cleanup check: Any clients left?
             with cls._lock:
-                if not cls._streams[url]['clients']:
-                    print(f"StreamManager: [CLEANUP] No clients left for {url}. Closing source.")
-                    del cls._streams[url]
+                if sid not in cls._streams or not cls._streams[sid]['clients']:
+                    logger.info(f"StreamManager: No clients left for {sid}, stopping pipe.")
+                    if sid in cls._streams: del cls._streams[sid]
                     return
 
             try:
-                # Use stream=True to get a real-time stream
                 with session.get(url, headers=headers, stream=True, timeout=15) as r:
                     if r.status_code >= 400:
-                        time.sleep(2)
+                        logger.error(f"StreamManager: Source error {r.status_code} for {url}")
+                        time.sleep(5)
                         continue
                     
-                    # 16KB chunk size for efficient broadcast
+                    logger.info(f"StreamManager: Connected to source {url}")
                     for chunk in r.iter_content(chunk_size=16384):
                         if not chunk: break
-                        
-                        # Dispatch chunk to ALL active clients
                         with cls._lock:
-                            if url not in cls._streams: break
-                            
-                            # Broadcast to all client queues
-                            for q in cls._streams[url]['clients'][:]:
+                            if sid not in cls._streams: break
+                            for q in cls._streams[sid]['clients'][:]:
                                 try:
                                     if not q.full():
                                         q.put_nowait(chunk)
                                     else:
-                                        # Queue full? Clear oldest 100 chunks (approx 1.6MB)
+                                        # Drop old if full to keep it real-time
                                         for _ in range(100):
                                             try: q.get_nowait()
                                             except: break
                                         q.put_nowait(chunk)
-                                except:
-                                    pass
+                                except: pass
             except Exception as e:
-                # Log error but try to reconnect after a short delay
-                time.sleep(1)
+                logger.error(f"StreamManager: Pipe exception for {url}: {e}")
+                time.sleep(2)
 
     @classmethod
-    def remove_client(cls, url, q):
+    def remove_client(cls, sid, q):
         with cls._lock:
-            if url in cls._streams:
-                if q in cls._streams[url]['clients']:
-                    cls._streams[url]['clients'].remove(q)
+            if sid in cls._streams:
+                if q in cls._streams[sid]['clients']:
+                    cls._streams[sid]['clients'].remove(q)
+
+class ActiveSessionManager:
+    """
+    Real-time session tracker for both Proxy and Web Players.
+    """
+    _sessions = {} # { session_key: { channel_id, user, ip, start_time, last_active, type } }
+    _lock = threading.Lock()
+
+    @classmethod
+    def update_session(cls, channel_id, user_name, ip, session_type):
+        key = f"{channel_id}_{ip}_{session_type}"
+        now = datetime.now()
+        with cls._lock:
+            if key not in cls._sessions:
+                cls._sessions[key] = {
+                    'channel_id': channel_id,
+                    'user': user_name or 'Guest',
+                    'ip': ip,
+                    'start_time': now,
+                    'type': session_type
+                }
+            cls._sessions[key]['last_active'] = now
+
+    @classmethod
+    def get_active_sessions(cls):
+        now = datetime.now()
+        with cls._lock:
+            # Cleanup sessions older than 30s
+            keys_to_del = [k for k, v in cls._sessions.items() 
+                           if (now - v['last_active']).total_seconds() > 30]
+            for k in keys_to_del: del cls._sessions[k]
+            
+            return list(cls._sessions.values())
 
 class EPGService:
     @staticmethod
@@ -196,7 +229,7 @@ class ChannelService:
             status='unknown',
             stream_type='unknown',
             stream_format=stream_format,
-            use_proxy=(stream_format == 'ts') # Default to true for TS files
+            proxy_type=data.get('proxy_type', 'default')
         )
         db.session.add(new_channel)
         db.session.commit()
@@ -215,7 +248,7 @@ class ChannelService:
         channel.group_name = data.get('group_name', channel.group_name)
         channel.epg_id = data.get('epg_id', channel.epg_id)
         channel.stream_url = data.get('stream_url', channel.stream_url)
-        channel.use_proxy = True if data.get('use_proxy') else False
+        channel.proxy_type = data.get('proxy_type', channel.proxy_type)
         
         db.session.commit()
         return channel
@@ -307,84 +340,6 @@ class ExtractorService:
             return {'success': True, 'links': results}
         return {'success': False, 'error': 'No media streams found on this page.'}
 
-import time
-import threading
-import queue
-
-class StreamManager:
-    """
-    TVHeadend-style Singleton Stream Manager.
-    Ensures one connection per source URL and manages broadcast to multiple clients.
-    """
-    _streams = {} # { url: { thread, clients: [queues], last_active } }
-    _lock = threading.Lock()
-
-    @classmethod
-    def get_source_stream(cls, url, headers=None):
-        with cls._lock:
-            if url not in cls._streams:
-                print(f"StreamManager: [NEW] Opening source link for {url}")
-                cls._streams[url] = {
-                    'clients': [],
-                    'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers), daemon=True),
-                    'active': True
-                }
-                cls._streams[url]['thread'].start()
-            
-            # LARGER QUEUE: maxsize=2000 handles ~32MB of data (approx 15-20 seconds of 1080p)
-            q = queue.Queue(maxsize=2000) 
-            cls._streams[url]['clients'].append(q)
-            return q
-
-    @classmethod
-    def _run_source_pipe(cls, url, headers):
-        session = requests.Session()
-        while True:
-            # Cleanup check: Any clients left?
-            with cls._lock:
-                if not cls._streams[url]['clients']:
-                    print(f"StreamManager: [CLEANUP] No clients left for {url}. Closing source.")
-                    del cls._streams[url]
-                    return
-
-            try:
-                # Use stream=True to get a real-time stream
-                with session.get(url, headers=headers, stream=True, timeout=15) as r:
-                    if r.status_code >= 400:
-                        time.sleep(2)
-                        continue
-                    
-                    # 16KB chunk size for efficient broadcast
-                    for chunk in r.iter_content(chunk_size=16384):
-                        if not chunk: break
-                        
-                        # Dispatch chunk to ALL active clients
-                        with cls._lock:
-                            if url not in cls._streams: break
-                            
-                            # Broadcast to all client queues
-                            for q in cls._streams[url]['clients'][:]:
-                                try:
-                                    if not q.full():
-                                        q.put_nowait(chunk)
-                                    else:
-                                        # Queue full? Clear oldest 100 chunks (approx 1.6MB)
-                                        for _ in range(100):
-                                            try: q.get_nowait()
-                                            except: break
-                                        q.put_nowait(chunk)
-                                except:
-                                    pass
-            except Exception as e:
-                # Log error but try to reconnect after a short delay
-                time.sleep(1)
-
-    @classmethod
-    def remove_client(cls, url, q):
-        with cls._lock:
-            if url in cls._streams:
-                if q in cls._streams[url]['clients']:
-                    cls._streams[url]['clients'].remove(q)
 
 class EPGService:
     @staticmethod

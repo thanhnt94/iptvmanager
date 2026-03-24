@@ -25,12 +25,12 @@
             </button>
             <div class="btn-group shadow-sm">
                 {% if prev_id %}
-                <a href="{{ url_for('channels.edit_channel', id=prev_id) }}" class="btn btn-outline-secondary btn-sm" title="Previous Channel">
+                <a href="{{ url_for('channels.edit_channel', channel_id=prev_id) }}" class="btn btn-outline-secondary btn-sm" title="Previous Channel">
                     <i class="bi bi-chevron-left"></i>
                 </a>
                 {% endif %}
                 {% if next_id %}
-                <a href="{{ url_for('channels.edit_channel', id=next_id) }}" class="btn btn-outline-secondary btn-sm" title="Next Channel">
+                <a href="{{ url_for('channels.edit_channel', channel_id=next_id) }}" class="btn btn-outline-secondary btn-sm" title="Next Channel">
                     <i class="bi bi-chevron-right"></i>
                 </a>
                 {% endif %}
@@ -65,7 +65,7 @@
                     <i class="bi bi-plus-circle"></i> Quick Add
                 </button>
                 <div class="ms-auto d-flex gap-2">
-                    <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this channel?')">
+                    <form action="{{ url_for('channels.delete_channel', channel_id=channel.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this channel?')">
                         <button type="submit" class="btn btn-sm btn-outline-danger px-3 fw-bold">
                             <i class="bi bi-trash"></i> Delete
                         </button>
@@ -78,7 +78,7 @@
     <div class="row">
         <!-- Left Column: Form -->
         <div class="col-md-6 border-end">
-            <form action="{{ url_for('channels.edit_channel', id=channel.id) }}" method="POST" id="editForm">
+            <form action="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" method="POST" id="editForm">
                 <div class="mb-3">
                     <label class="form-label fw-bold">Channel Name</label>
                     <input type="text" name="name" class="form-control" value="{{ channel.name }}" required>
@@ -90,7 +90,7 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold">Server Play Link (Obfuscated)</label>
                     <div class="input-group">
-                        <input type="text" id="serverPlayLink" class="form-control font-monospace small" value="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" readonly>
+                        <input type="text" id="serverPlayLink" class="form-control font-monospace small" value="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}" readonly>
                         <button class="btn btn-primary" type="button" id="copyServerLinkBtn" title="Copy Server Link">
                             <i class="bi bi-clipboard"></i> Copy
                         </button>
@@ -113,12 +113,18 @@
                     </div>
                 </div>
 
-                <div class="mb-3 form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="use_proxy" id="useProxyCheck" {% if channel.use_proxy %}checked{% endif %}>
-                    <label class="form-check-label fw-bold" for="useProxyCheck">
-                        Use TVHeadend Proxy (Recommended for .ts streams)
-                    </label>
-                    <div class="form-text">If enabled, the server will proxy the stream to clients, masking the source URL and improving compatibility.</div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-primary"><i class="bi bi-cpu-fill me-1"></i>Playback & Proxy Mode</label>
+                    <select name="proxy_type" class="form-select shadow-sm border-primary">
+                        <option value="default" {% if channel.proxy_type == 'default' %}selected{% endif %}>Default (Follow Global Settings)</option>
+                        <option value="direct" {% if channel.proxy_type == 'direct' %}selected{% endif %}>Direct (Speed Priority, No Tracking)</option>
+                        <option value="tvheadend" {% if channel.proxy_type == 'tvheadend' %}selected{% endif %}>Force Proxy (Always Track & Proxy)</option>
+                    </select>
+                    <div class="form-text mt-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <b>Default:</b> Proxies only if enabled in <a href="{{ url_for('settings.admin_settings') }}" class="text-decoration-none">Admin Settings</a>.
+                        <br><b>Force Proxy:</b> Overrides settings to ensure tracking and connection sharing are ALWAYS active.
+                    </div>
                 </div>
 
                 <div class="mb-4">
@@ -236,6 +242,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let hls = null;
     let mpegtsPlayer = null;
     let streamTimeout = null;
+    let heartbeatInterval = null;
 
     // 1. Logo Preview Update (Instant)
     logoInput.addEventListener('input', function() {
@@ -252,6 +259,26 @@ document.addEventListener('DOMContentLoaded', function() {
         playerStatus.textContent = "Loading stream...";
         overlay.classList.remove('d-none');
         
+        // Heartbeat Logic
+        const cid = {{ channel.id|tojson if channel.id else 'null' }};
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        if (url && cid) {
+            const sendPing = (sec) => {
+                if (video.paused) return;
+                fetch("{{ url_for('channels.heartbeat') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel_id: parseInt(cid), seconds: sec })
+                }).catch(err => console.error("Heartbeat failed:", err));
+            };
+            
+            // Initial Ping after 2 seconds
+            setTimeout(() => sendPing(2), 2000);
+            
+            // Continuous Heartbeat every 10 seconds
+            heartbeatInterval = setInterval(() => sendPing(10), 10000);
+        }
+
         // Cleanup
         if (hls) { hls.destroy(); hls = null; }
         if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
@@ -262,11 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const isHls = lowUrl.includes('.m3u8') || lowUrl.includes('playlist');
         const isTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts');
 
-        let playbackUrl = url;
-        // Auto-proxy TS for preview stability
-        if (isTS && !url.includes('/api/proxy')) {
-            playbackUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`;
-        }
+        let playbackUrl = `/channels/play/${cid}?token=${userApiToken}`;
 
         if (isHls && Hls.isSupported()) {
             hls = new Hls({ enableWorker: true });
@@ -347,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
         playVlcBtnAction.disabled = true;
         playVlcBtnAction.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
         
-        fetch("{{ url_for('channels.play_vlc', id=channel.id) }}", { method: 'POST' })
+        fetch("{{ url_for('channels.play_vlc', channel_id=channel.id) }}", { method: 'POST' })
         .then(r => r.json())
         .then(data => {
             if (!data.success) alert('Could not open VLC.');
@@ -363,7 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ajaxCheckBtn.disabled = true;
         ajaxCheckBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
         
-        fetch("{{ url_for('channels.check_channel', id=channel.id) }}", {
+        fetch("{{ url_for('channels.check_channel', channel_id=channel.id) }}", {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
@@ -419,6 +442,12 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('statTime').textContent = data.stats.total_watch_time;
             document.getElementById('statBandwidth').textContent = data.stats.bandwidth_mb + ' MB';
             document.getElementById('statCreated').textContent = data.stats.created_at;
+            
+            // Tech Specs
+            document.getElementById('statRes').textContent = data.stats.resolution;
+            document.getElementById('statFormat').textContent = data.stats.stream_format;
+            document.getElementById('statType').textContent = data.stats.stream_type;
+            document.getElementById('statQuality').textContent = data.stats.quality;
         });
     });
 
@@ -489,7 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 4f. Web Player Link
     playBtn.addEventListener('click', function() {
-        window.open(`{{ url_for('channels.web_player') }}?id=${this.dataset.id}`, '_blank');
+        window.open("{{ url_for('channels.web_player', channel_id=channel.id) }}", '_blank');
     });
 
     // 4g. Legacy VLC preview button (if needed, or just redirect to new one)
@@ -512,6 +541,78 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+
+<!-- Stats Modal -->
+<div class="modal fade" id="statsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title"><i class="bi bi-graph-up-arrow me-2"></i>Channel Statistics</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="statsLoader" class="text-center py-4">
+            <div class="spinner-border text-info"></div>
+        </div>
+        <div id="statsContent" class="d-none">
+            <h4 id="statsName" class="fw-bold mb-3 text-primary text-truncate"></h4>
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">Total Plays</div>
+                        <div id="statPlays" class="fs-4 fw-bold text-primary">0</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">Watch Time</div>
+                        <div id="statTime" class="fs-4 fw-bold text-success">00:00:00</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">Est. Bandwidth</div>
+                        <div id="statBandwidth" class="fs-4 fw-bold text-warning">0 MB</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="p-3 border rounded bg-light shadow-sm h-100">
+                        <div class="text-muted small mb-1">First Added</div>
+                        <div id="statCreated" class="fs-6 fw-bold">N/A</div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4">
+                <h6 class="text-uppercase small fw-bold text-muted border-bottom pb-2 mb-3">Technical Specifications</h6>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="small text-muted">Resolution</div>
+                        <div id="statRes" class="fw-bold text-dark">N/A</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Format</div>
+                        <div id="statFormat" class="fw-bold text-dark">N/A</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Stream Type</div>
+                        <div id="statType" class="fw-bold text-dark">N/A</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Quality</div>
+                        <div id="statQuality" class="fw-bold text-dark">N/A</div>
+                    </div>
+                </div>
+            </div>
+            <hr>
+            <div class="text-muted small">
+                <i class="bi bi-info-circle me-1"></i> 
+                Watch time is tracked via Server Proxy (TS links) and Web Player heartbeats. Note: HLS duration tracking requires use of the Web Player.
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <style>
 .sticky-top { z-index: 1000; }

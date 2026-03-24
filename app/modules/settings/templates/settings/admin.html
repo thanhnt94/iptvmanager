@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark mb-0">System Settings</h2>
+            <p class="text-muted small">Configure global platform behavior and performance toggles.</p>
+        </div>
+        <a href="{{ url_for('channels.active_sessions_page') }}" class="btn btn-outline-info shadow-sm">
+            <i class="bi bi-broadcast me-1"></i> View Live Sessions
+        </a>
+    </div>
+
+    <form action="{{ url_for('settings.save_settings') }}" method="POST">
+        <div class="row g-4">
+            <!-- Performance & Tracking -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100" style="border-radius: 1rem;">
+                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
+                        <h5 class="fw-bold mb-0 text-primary">
+                            <i class="bi bi-speedometer2 me-2"></i> Performance & Tracking
+                        </h5>
+                    </div>
+                    <div class="card-body px-4 pb-4">
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
+                                    <label class="fw-bold mb-0">Proxy Usage Tracking</label>
+                                    <p class="text-muted small mb-0">Force proxying for TS/HLS to track watch time in external players.</p>
+                                </div>
+                                <div class="form-check form-switch px-0">
+                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_PROXY_STATS" name="ENABLE_PROXY_STATS" {% if settings|selectattr('key', 'equalto', 'ENABLE_PROXY_STATS')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-0">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
+                                    <label class="fw-bold mb-0">Stream Manager (Piping)</label>
+                                    <p class="text-muted small mb-0">Enable shared source connections (TVHeadend Mode) to save bandwidth.</p>
+                                </div>
+                                <div class="form-check form-switch px-0">
+                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_STREAM_MANAGER" name="ENABLE_STREAM_MANAGER" {% if settings|selectattr('key', 'equalto', 'ENABLE_STREAM_MANAGER')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network & Security -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100" style="border-radius: 1rem;">
+                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
+                        <h5 class="fw-bold mb-0 text-success">
+                            <i class="bi bi-shield-lock me-2"></i> Network & Security
+                        </h5>
+                    </div>
+                    <div class="card-body px-4 pb-4">
+                        <div class="mb-3">
+                            <label class="fw-bold mb-1">Custom Proxy User-Agent</label>
+                            <input type="text" class="form-control" name="CUSTOM_USER_AGENT" value="{{ (settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|first).value if settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|list else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }}">
+                            <p class="text-muted small mt-1 mb-0">The User-Agent sent to IPTV providers when proxying segments.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-end mt-4">
+            <button type="submit" class="btn btn-primary px-5 py-2 shadow border-0" style="border-radius: 0.5rem;">
+                <i class="bi bi-save me-2"></i> Save All Settings
+            </button>
+        </div>
+    </form>
+
+    <div class="mt-5 p-4 bg-warning-subtle border-start border-warning border-4 rounded shadow-sm">
+        <h6 class="fw-bold text-warning-emphasis"><i class="bi bi-exclamation-triangle-fill me-2"></i> Important Warning</h6>
+        <p class="mb-0 text-warning-emphasis small">
+            Disabling <strong>Proxy Usage Tracking</strong> will drastically reduce server CPU and bandwidth usage, but you will LOSE all "Watch Time" and "Bandwidth" statistics for channels played through VLC or external players. 
+            The Web Player will still report heartbeats if possible.
+        </p>
+    </div>
+</div>
+{% endblock %}

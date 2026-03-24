@@ -117,7 +117,7 @@
                                 <div class="ms-2 d-flex gap-1 align-items-center">
                                     <button class="btn btn-xs btn-outline-info play-btn py-1 px-2" 
                                             style="font-size: 0.7rem;"
-                                            data-url="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" 
+                                            data-url="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}" 
                                             data-name="{{ channel.name }}"
                                             data-id="{{ channel.id }}">Play</button>
 
@@ -154,28 +154,11 @@
                                 {% endif %}
                             </div>
                         </div>
-                        <div class="input-group input-group-sm mx-auto" style="max-width: 140px;">
-                            <input type="number" id="sidebarJumpPage" class="form-control text-center" placeholder="Page..." min="1" max="{{ pagination.pages }}" value="{{ pagination.page }}">
-                            <button class="btn btn-primary px-2" type="button" onclick="sidebarJumpToPage()">Go</button>
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <script>
-            function sidebarJumpToPage() {
-                const pageNum = parseInt(document.getElementById('sidebarJumpPage').value);
-                const totalPages = parseInt("{{ pagination.pages }}");
-                if (pageNum >= 1 && pageNum <= totalPages) {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('page', pageNum);
-                    window.location.href = url.toString();
-                }
-            }
-        </script>
-
-        <!-- Column: Playlist Channels -->
         <div class="col-md-7">
             {% if profile.is_system %}
             <div class="card h-100 shadow-sm border-0 bg-light">
@@ -191,7 +174,6 @@
                 </div>
             </div>
             {% else %}
-            <!-- Existing Manual Management UI -->
             <div class="card mb-4">
                 <div class="card-header bg-dark text-white">Manage Groups</div>
                 <div class="card-body">
@@ -252,7 +234,6 @@
     </div>
 </div>
 
-<!-- Player Modal -->
 <div class="modal fade" id="playerModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content bg-dark text-white">
@@ -288,180 +269,55 @@ function copyToClipboard(id, btn) {
         }, 2000);
     });
 }
+const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));
+const video = document.getElementById('videoPlayer');
+let hls;
 
-    const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));
-    const video = document.getElementById('videoPlayer');
-    let hls;
-
-    document.addEventListener('click', function(e) {
-        const playBtn = e.target.closest('.play-btn');
-        if (playBtn) {
-            const url = playBtn.getAttribute('data-url');
-            const name = playBtn.getAttribute('data-name');
-            const chId = playBtn.getAttribute('data-id');
-
-            document.getElementById('playerTitle').textContent = 'Playing: ' + name;
-            
-            const isHls = url.toLowerCase().includes('play/') || url.toLowerCase().includes('.m3u8');
-            
-            if (isHls && Hls.isSupported()) {
-                if (hls) hls.destroy();
-                hls = new Hls();
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
-            } else {
-                if (hls) { hls.destroy(); hls = null; }
-                video.src = url;
-            }
-            playerModal.show();
-
-            // Refresh the row status after a delay since play_channel updates it in DB
-            setTimeout(() => {
-                // For simplified refresh in playlist view, we can reload this page 
-                // or just leave it for now since many rows might be showing.
-            }, 5000);
+document.addEventListener('click', function(e) {
+    const playBtn = e.target.closest('.play-btn');
+    if (playBtn) {
+        const url = playBtn.getAttribute('data-url');
+        const name = playBtn.getAttribute('data-name');
+        document.getElementById('playerTitle').textContent = 'Playing: ' + name;
+        if (url.toLowerCase().includes('.m3u8') && Hls.isSupported()) {
+            if (hls) hls.destroy();
+            hls = new Hls();
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
+        } else {
+            if (hls) { hls.destroy(); hls = null; }
+            video.src = url;
         }
-    });
-
-    const scanPlaylistBtn = document.getElementById('scanPlaylistBtn');
-    const stopScanBtn = document.getElementById('stopScanBtn');
-    let pollInterval;
-
-    function updateStatusUI() {
-        fetch("{{ url_for('health_status') }}")
-        .then(r => r.json())
-        .then(data => {
-            if (data.is_running) {
-                if (scanPlaylistBtn) scanPlaylistBtn.classList.add('d-none');
-                if (stopScanBtn) stopScanBtn.classList.remove('d-none');
-                
-                let percent = 0;
-                if (data.total > 0) percent = Math.round((data.current / data.total) * 100);
-                const progressEl = document.getElementById('scanProgressText');
-                if (progressEl) progressEl.textContent = `${percent}% (${data.current}/${data.total})`;
-                
-                const container = document.getElementById('scanStatusContainer');
-                const info = document.getElementById('currentChannelInfo');
-                if (container && info && data.current_name) {
-                    container.classList.remove('d-none');
-                    info.textContent = `Scanning: ${data.current_name}`;
-                }
-
-                if (!pollInterval) {
-                    pollInterval = setInterval(updateStatusUI, 3000);
-                }
-            } else {
-                if (scanPlaylistBtn) scanPlaylistBtn.classList.remove('d-none');
-                if (stopScanBtn) stopScanBtn.classList.add('d-none');
-                const container = document.getElementById('scanStatusContainer');
-                if (container) container.classList.add('d-none');
-                
-                if (pollInterval) {
-                    clearInterval(pollInterval);
-                    pollInterval = null;
-                }
-            }
-        })
-        .catch(err => console.error('Status fetch error:', err));
+        playerModal.show();
     }
+});
 
-    updateStatusUI();
-
-    if (scanPlaylistBtn) {
-        scanPlaylistBtn.addEventListener('click', function() {
-            this.disabled = true;
-            fetch("{{ url_for('check_now') }}", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ mode: 'all', playlist_id: "{{ profile.id }}" })
-            })
-            .then(r => r.json())
-            .then(d => {
-                this.disabled = false;
-                updateStatusUI();
-            });
-        });
-    }
-
-    if (stopScanBtn) {
-        stopScanBtn.addEventListener('click', function() {
-            if (confirm('Stop scanning?')) {
-                fetch("{{ url_for('stop_health_check') }}", {method: 'POST'})
-                .then(r => r.json())
-                .then(d => {
-                    updateStatusUI();
-                });
-            }
-        });
-    }
-
-    const el = document.getElementById('sortable-list');
-    if (el) {
-        const sortable = Sortable.create(el, {
-            animation: 150,
-            handle: '.text-muted',
-            ghostClass: 'bg-light'
-        });
-
-        document.getElementById('saveOrder').addEventListener('click', () => {
-            const entryIds = Array.from(el.children).map(li => li.getAttribute('data-id'));
-            
-            fetch("{{ url_for('playlists.reorder', playlist_id=profile.id) }}", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({entry_ids: entryIds})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if(data.status === 'ok') alert('Order saved!');
-            });
-        });
-    }
-
-    // Group Selection AJAX
-    document.querySelectorAll('.group-selector').forEach(select => {
-        select.addEventListener('change', function() {
-            const entryId = this.getAttribute('data-entry-id');
-            const groupId = this.value;
-            
-            fetch(`/playlists/update-entry-group/${entryId}`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({group_id: groupId})
-            })
-            .then(r => r.json())
-            .then(d => {
-                console.log('Group updated:', d);
-                // Optional: show a small toast or temporary visual feedback
-            });
+const scanPlaylistBtn = document.getElementById('scanPlaylistBtn');
+if (scanPlaylistBtn) {
+    scanPlaylistBtn.addEventListener('click', function() {
+        this.disabled = true;
+        fetch("{{ url_for('check_now') }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ mode: 'all', playlist_id: "{{ profile.id }}" })
+        }).then(() => {
+            this.disabled = false;
+            location.reload();
         });
     });
+}
 
-    // Group Rename Listener (Delegated)
-    document.addEventListener('click', function(e) {
-        const icon = e.target.closest('.rename-group-icon');
-        if (icon) {
-            const groupId = icon.getAttribute('data-id');
-            const currentName = icon.getAttribute('data-name');
-            const newName = prompt("Enter new name for group '" + currentName + "':", currentName);
-            
-            if (newName && newName !== currentName) {
-                fetch(`/playlists/group/rename/${groupId}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({new_name: newName})
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.status === 'ok') {
-                        location.reload();
-                    } else {
-                        alert('Error renaming group: ' + (data.message || 'Unknown error'));
-                    }
-                })
-                .catch(err => console.error('Rename error:', err));
-            }
-        }
+const el = document.getElementById('sortable-list');
+if (el) {
+    Sortable.create(el, { animation: 150, handle: '.text-muted' });
+    document.getElementById('saveOrder').addEventListener('click', () => {
+        const entryIds = Array.from(el.children).map(li => li.getAttribute('data-id'));
+        fetch("{{ url_for('playlists.reorder', playlist_id=profile.id) }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({entry_ids: entryIds})
+        }).then(r => r.json()).then(d => { if(d.status === 'ok') alert('Order saved!'); });
     });
+}
 </script>
 {% endblock %}

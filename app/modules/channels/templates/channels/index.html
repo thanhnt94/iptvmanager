@@ -166,9 +166,6 @@
             </form>
         </div>
     </div>
-            </form>
-        </div>
-    </div>
 
     <div class="card shadow-sm border-0 mb-5">
         <div class="card-body p-0">
@@ -282,7 +279,7 @@
                             <td>
                                 <div class="d-flex flex-wrap gap-1" style="max-width: 140px;">
                                     <button class="btn btn-sm btn-info play-btn flex-fill px-1" style="font-size: 0.7rem;"
-                                            data-url="{{ url_for('channels.play_channel', id=channel.id, _external=True) }}" 
+                                            data-url="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}" 
                                             data-name="{{ channel.name }}"
                                             data-format="{{ channel.stream_format or '' }}"
                                             data-id="{{ channel.id }}">Play</button>
@@ -303,9 +300,9 @@
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-success ajax-check-btn flex-fill px-1" style="font-size: 0.7rem;"
                                             data-id="{{ channel.id }}" 
-                                            data-url="{{ url_for('channels.check_channel', id=channel.id) }}">Check</button>
-                                    <a href="{{ url_for('channels.edit_channel', id=channel.id) }}" class="btn btn-sm btn-outline-primary flex-fill px-1" style="font-size: 0.7rem;">Edit</a>
-                                    <form action="{{ url_for('channels.delete_channel', id=channel.id) }}" method="POST" class="flex-fill d-grid">
+                                            data-url="{{ url_for('channels.check_channel', channel_id=channel.id) }}">Check</button>
+                                    <a href="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" class="btn btn-sm btn-outline-primary flex-fill px-1" style="font-size: 0.7rem;">Edit</a>
+                                    <form action="{{ url_for('channels.delete_channel', channel_id=channel.id) }}" method="POST" class="flex-fill d-grid">
                                         <button type="submit" class="btn btn-sm btn-outline-danger px-1" style="font-size: 0.7rem;" onclick="return confirm('Are you sure?')">Del</button>
                                     </form>
                                 </div>
@@ -527,10 +524,31 @@
                     </div>
                 </div>
             </div>
+            <div class="mt-4">
+                <h6 class="text-uppercase small fw-bold text-muted border-bottom pb-2 mb-3">Technical Specifications</h6>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="small text-muted">Resolution</div>
+                        <div id="statRes" class="fw-bold text-dark">N/A</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Format</div>
+                        <div id="statFormat" class="fw-bold text-dark">N/A</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Stream Type</div>
+                        <div id="statType" class="fw-bold text-dark">N/A</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Quality</div>
+                        <div id="statQuality" class="fw-bold text-dark">N/A</div>
+                    </div>
+                </div>
+            </div>
             <hr>
             <div class="text-muted small">
                 <i class="bi bi-info-circle me-1"></i> 
-                Watch time and bandwidth are estimated based on Web Player heartbeats and average bitrates.
+                Watch time is tracked via Server Proxy (TS links) and Web Player heartbeats. Note: HLS duration tracking requires use of the Web Player.
             </div>
         </div>
       </div>
@@ -563,6 +581,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let mpegtsPlayer = null;
     let currentChannelId = null;
     let currentStreamUrl = null;
+    let heartbeatInterval = null;
     const userApiToken = "{{ current_user.api_token }}";
 
     function updateStatusUI() {
@@ -720,6 +739,25 @@ document.addEventListener('DOMContentLoaded', function() {
         currentStreamUrl = url;
         document.getElementById('playerTitle').textContent = 'Playing: ' + name;
         overlay.classList.remove('d-none');
+
+        // Heartbeat Logic
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        if (id) {
+            const sendPing = (sec) => {
+                if (video.paused) return;
+                fetch("{{ url_for('channels.heartbeat') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel_id: parseInt(id), seconds: sec })
+                }).catch(err => console.error("Heartbeat failed:", err));
+            };
+            
+            // Initial Ping after 2 seconds to confirm playback started
+            setTimeout(() => sendPing(2), 2000);
+            
+            // Continuous Heartbeat every 10 seconds
+            heartbeatInterval = setInterval(() => sendPing(10), 10000);
+        }
         
         // Cleanup
         if (hls) { hls.destroy(); hls = null; }
@@ -732,10 +770,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const isTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts');
 
         // Logic Fallback Proxy
-        let playbackUrl = url;
-        if (isTS && !url.includes('/api/proxy')) {
-            playbackUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`;
-        }
+            playbackUrl = `/channels/play/${id}?token=${userApiToken}`;
 
         if (isHls && Hls.isSupported()) {
             hls = new Hls({ enableWorker: true, lowLatencyMode: true });
@@ -803,6 +838,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('statTime').innerText = data.stats.total_watch_time;
                     document.getElementById('statBandwidth').innerText = data.stats.bandwidth_mb + ' MB';
                     document.getElementById('statCreated').innerText = data.stats.created_at;
+                    
+                    // Technical Specs
+                    document.getElementById('statRes').innerText = data.stats.resolution;
+                    document.getElementById('statFormat').innerText = data.stats.stream_format;
+                    document.getElementById('statType').innerText = data.stats.stream_type;
+                    document.getElementById('statQuality').innerText = data.stats.quality;
+
                     document.getElementById('statsLoader').classList.add('d-none');
                     document.getElementById('statsContent').classList.remove('d-none');
                 }
@@ -908,6 +950,7 @@ document.addEventListener('DOMContentLoaded', function() {
         video.pause();
         if (hls) { hls.destroy(); hls = null; }
         if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
+        if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
     });
 
     // Quick Add Logic

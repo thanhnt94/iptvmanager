@@ -1,4 +1,8 @@
 import secrets
+import time
+import queue
+import threading
+import requests
 from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
 from app.modules.channels.models import Channel
 from app.core.database import db
@@ -72,7 +76,7 @@ class PlaylistService:
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch.name}'
                 m3u_lines.append(extinf)
                 # Wrap the stream URL
-                wrapper_params = {'id': ch.id, '_external': True}
+                wrapper_params = {'channel_id': ch.id, '_external': True}
                 if token: wrapper_params['token'] = token
                 wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 m3u_lines.append(wrapper_url)
@@ -86,14 +90,12 @@ class PlaylistService:
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch.name}'
                 m3u_lines.append(extinf)
                 # Wrap the stream URL
-                wrapper_params = {'id': ch.id, '_external': True}
+                wrapper_params = {'channel_id': ch.id, '_external': True}
                 if token: wrapper_params['token'] = token
                 wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 m3u_lines.append(wrapper_url)
             
-        return "\r\n".join(m3u_lines)
-
-        db.session.commit()
+        return "\n".join(m3u_lines)
 
     @staticmethod
     def generate_xmltv(playlist_id):
@@ -102,7 +104,7 @@ class PlaylistService:
         from app.modules.channels.models import EPGData
         from datetime import datetime, timedelta
         import xml.etree.ElementTree as ET
-
+ 
         profile = PlaylistProfile.query.get(playlist_id)
         if not profile: return ""
 
@@ -162,8 +164,6 @@ class PlaylistService:
         """
         Syncs a channel's memberships across multiple playlists with specific group IDs.
         playlist_data: {playlist_id: group_id_or_none, ...}
-        Adds for new IDs, removes for missing IDs, and updates group_id if changed.
-        Skips system playlists to avoid accidental modification.
         """
         from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
         

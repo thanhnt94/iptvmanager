@@ -779,15 +779,20 @@
         // Heartbeat Logic for Stats
         if (window.heartbeatInterval) clearInterval(window.heartbeatInterval);
         if (sId) {
-            window.heartbeatInterval = setInterval(() => {
-                if (!video.paused) {
-                    fetch('/channels/api/heartbeat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ channel_id: sId, seconds: 15 })
-                    }).catch(err => console.error("Heartbeat failed:", err));
-                }
-            }, 15000);
+            const sendPing = (sec) => {
+                if (video.paused) return;
+                fetch('/channels/api/heartbeat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel_id: parseInt(sId), seconds: sec })
+                }).catch(err => console.error("Heartbeat failed:", err));
+            };
+            
+            // Initial Ping after 2 seconds
+            setTimeout(() => sendPing(2), 2000);
+            
+            // Continuous Heartbeat every 10 seconds
+            window.heartbeatInterval = setInterval(() => sendPing(10), 10000);
         }
         
         const lowSourceUrl = sourceUrl.toLowerCase();
