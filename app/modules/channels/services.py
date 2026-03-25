@@ -33,7 +33,7 @@ class StreamManager:
         from app.modules.settings.services import SettingService
         use_sm = SettingService.get('ENABLE_STREAM_MANAGER', True)
         # Load dynamic buffer size
-        ts_buffer_size = SettingService.get('TS_BUFFER_SIZE', 128)
+        ts_buffer_size = SettingService.get('TS_BUFFER_SIZE', 512) # 512 * 4KB = 2MB
         
         with cls._lock:
             sid = url if use_sm else f"{url}_{time.time()}"
@@ -48,7 +48,8 @@ class StreamManager:
                 cls._streams[sid]['thread'].start()
             
             # Create a new client queue
-            q = queue.Queue(maxsize=3000) 
+            # Queue size tuned for high throughput: 128 chunks * 128KB approx 16MB per client
+            q = queue.Queue(maxsize=128) 
             
             # PRE-FILL (Burst-start): Fill the new client's queue with historical data from RAM
             with cls._streams[sid]['lock']:
@@ -82,13 +83,14 @@ class StreamManager:
 
             try:
                 # Use a larger stream buffer for stability
-                with session.get(url, headers=headers, stream=True, timeout=15) as r:
+                with session.get(url, headers=headers, stream=True, timeout=60) as r:
                     if r.status_code >= 400:
                         logger.error(f"StreamEngine: Source error {r.status_code}")
                         time.sleep(5)
                         continue
                     
-                    for chunk in r.iter_content(chunk_size=16384): # 16KB chunks
+                    # 32KB is a good balance for both 4K and light SD streams
+                    for chunk in r.iter_content(chunk_size=32768): 
                         if not chunk: break
                         
                         with cls._lock:

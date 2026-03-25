@@ -289,6 +289,8 @@
                                 <div class="d-flex flex-wrap gap-1" style="max-width: 140px;">
                                     <button class="btn btn-sm btn-info play-btn flex-fill px-1" style="font-size: 0.7rem;"
                                             data-url="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}"
+                                            data-stream-url="{{ channel.stream_url }}"
+                                            data-stream-type="{{ channel.stream_type or 'live' }}"
                                             data-name="{{ channel.name }}"
                                             data-id="{{ channel.id }}">🚀 Play</button>
                                     <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>                                    <button class="btn btn-sm btn-outline-primary links-btn flex-fill px-1" style="font-size: 0.7rem;"
@@ -417,12 +419,12 @@
       <div class="modal-header border-0 bg-black bg-opacity-50">
         <h5 class="modal-title fw-bold" id="playerTitle">Player</h5>
         <div class="d-flex align-items-center gap-2">
-            <select id="modalSourceSelector" class="form-select form-select-sm bg-dark text-white border-secondary shadow-none fw-bold" style="width: 140px; font-size: 0.75rem;">
-                <option value="default">SOURCE: DEFAULT</option>
-                <option value="none">SOURCE: ORIGINAL</option>
-                <option value="tracking">SOURCE: TRACKING</option>
-                <option value="hls">SOURCE: HLS PROXY</option>
-                <option value="ts">SOURCE: TS PROXY</option>
+            <select id="modalSourceSelector" class="form-select form-select-sm bg-dark text-white border-secondary shadow-none fw-bold" style="width: 160px; font-size: 0.75rem;">
+                <option value="default">🚀 Smart Gateway</option>
+                <option value="none">🔗 Original Link</option>
+                <option value="tracking">📊 Web Tracking</option>
+                <option value="hls">⚡ HLS Proxy</option>
+                <option value="ts">📺 TS Proxy</option>
             </select>
             <button id="vlcBtn" class="btn btn-sm btn-warning fw-bold px-3" style="font-size: 0.75rem;">VLC</button>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -580,11 +582,10 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentChannelName = null;
     let heartbeatInterval = null;
 
-    // Source Selector for Quick Player
     const modalSourceSelector = document.getElementById('modalSourceSelector');
     modalSourceSelector.addEventListener('change', (e) => {
         if (currentChannelId) {
-            playStream(currentOriginalUrl, currentChannelName, currentChannelId, e.target.value);
+            playStream(currentOriginalUrl, {id: currentChannelId, name: currentChannelName}, e.target.value);
         }
     });
 
@@ -655,6 +656,7 @@ document.addEventListener('DOMContentLoaded', function() {
             id: id,
             url: streamUrl,
             name: name,
+            stream_type: meta.stream_type || meta.streamType || 'live',
             forcedType: forcedType,
             token: userApiToken,
             overlay: document.getElementById('iptv-player-overlay'),
@@ -706,7 +708,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Global Click Delegate ---
     document.addEventListener('click', e => {
         const playBtn = e.target.closest('.play-btn');
-        if (playBtn) return playStream(playBtn.dataset.url, playBtn.dataset.name, playBtn.dataset.id);
+        if (playBtn) return playStream(playBtn.dataset.url, playBtn);
 
         const statsBtn = e.target.closest('.stats-btn');
         if (statsBtn) {

@@ -429,35 +429,15 @@ def play_channel(channel_id):
     channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 1 # Initial ping
     db.session.commit()
     
-    # 2. Quick health check (Ping/HEAD only)
-    try:
-        response = requests.head(channel.stream_url, timeout=3, allow_redirects=True)
-        if response.status_code >= 400:
-            channel.status = 'die'
-            # Clear metadata for dead links
-            channel.quality = None
-            channel.resolution = None
-            channel.audio_codec = None
-            channel.stream_type = 'unknown'
-            db.session.commit()
-        else:
-            # Revive if needed
-            if channel.status != 'live':
-                channel.status = 'live'
-                db.session.commit()
-            
-            # TRIGGER BACKGROUND METADATA REFRESH
-            # This updates resolution, audio codec, etc. without blocking the user
-            def _bg_check(app, cid):
-                with app.app_context():
-                    HealthCheckService.check_stream(cid)
-            
-            threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
-            
-    except Exception as e:
-        logger.error(f"Quick check failed for {channel.name}: {e}")
-        channel.status = 'die'
-        db.session.commit()
+    # 2. Background health check & Metadata refresh
+    # This ensures resolution, codecs, etc. are updated without blocking the user's playback start.
+    def _bg_check(app, cid):
+        with app.app_context():
+            from app.modules.health.services import HealthCheckService
+            HealthCheckService.check_stream(cid)
+    
+    import threading
+    threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
     
     token = request.args.get('token')
     
