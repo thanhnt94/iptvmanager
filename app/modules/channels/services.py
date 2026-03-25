@@ -13,6 +13,7 @@ logger = logging.getLogger('iptv')
 import time
 import threading
 import queue
+import psutil
 
 from collections import deque
 
@@ -126,30 +127,67 @@ class ActiveSessionManager:
     _lock = threading.Lock()
 
     @classmethod
-    def update_session(cls, channel_id, user_name, ip, session_type):
+    def update_session(cls, channel_id, user_name, ip, session_type, bandwidth_kbps=0, user_agent=None):
         key = f"{channel_id}_{ip}_{session_type}"
         now = datetime.now()
         with cls._lock:
             if key not in cls._sessions:
                 cls._sessions[key] = {
+                    'key': key, # Store the key for UI actions
                     'channel_id': channel_id,
                     'user': user_name or 'Guest',
                     'ip': ip,
                     'start_time': now,
-                    'type': session_type
+                    'type': session_type,
+                    'source': cls._parse_user_agent(user_agent)
                 }
             cls._sessions[key]['last_active'] = now
+            cls._sessions[key]['bandwidth_kbps'] = max(cls._sessions[key].get('bandwidth_kbps', 0), bandwidth_kbps)
+            if bandwidth_kbps > 0:
+                # Real-time update
+                cls._sessions[key]['bandwidth_kbps'] = bandwidth_kbps
+            if user_agent:
+                cls._sessions[key]['source'] = cls._parse_user_agent(user_agent)
 
     @classmethod
     def get_active_sessions(cls):
         now = datetime.now()
         with cls._lock:
-            # Cleanup sessions older than 30s
+            # Cleanup sessions older than 45s (allow some buffer)
             keys_to_del = [k for k, v in cls._sessions.items() 
-                           if (now - v['last_active']).total_seconds() > 30]
+                           if (now - v['last_active']).total_seconds() > 45]
             for k in keys_to_del: del cls._sessions[k]
             
             return list(cls._sessions.values())
+
+    @classmethod
+    def remove_session(cls, key):
+        with cls._lock:
+            if key in cls._sessions:
+                del cls._sessions[key]
+                return True
+        return False
+
+    @staticmethod
+    def get_server_stats():
+        try:
+            return {
+                'cpu': psutil.cpu_percent(interval=None),
+                'ram': psutil.virtual_memory().percent
+            }
+        except:
+            return {'cpu': 0, 'ram': 0}
+
+    @staticmethod
+    def _parse_user_agent(ua):
+        if not ua: return 'Web Player' # Default if missing
+        ua = ua.lower()
+        if 'vlc' in ua: return 'VLC Player'
+        if 'tivimate' in ua: return 'TiviMate'
+        if 'ott' in ua: return 'OTT Navigator'
+        if 'iptv smarter' in ua: return 'IPTV Smarters'
+        if 'mozilla' in ua or 'chrome' in ua or 'safari' in ua: return 'Web Player'
+        return 'External App'
 
 class EPGService:
     @staticmethod

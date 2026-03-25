@@ -2,41 +2,82 @@
 
 {% block content %}
 <div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-4 mb-4">
         <div>
-            <h2 class="fw-bold text-dark mb-0">Live Active Sessions</h2>
-            <p class="text-muted small">Real-time monitoring of currently playing channels.</p>
+            <h2 class="fw-bold text-dark mb-1">Live Active Sessions</h2>
+            <p class="text-muted small mb-0">Real-time monitoring and management of server load.</p>
         </div>
-        <div class="d-flex gap-2">
-            <button id="refreshBtn" class="btn btn-outline-primary shadow-sm">
+        <div class="d-flex align-items-center gap-2">
+            <button id="refreshBtn" class="btn btn-outline-primary shadow-sm rounded-pill px-3">
                 <i class="bi bi-arrow-clockwise me-1"></i> Refresh
             </button>
-            <div class="form-check form-switch d-flex align-items-center bg-white px-3 py-2 rounded border shadow-sm">
-                <input class="form-check-input me-2" type="checkbox" id="autoRefresh" checked>
-                <label class="form-check-label small fw-bold" for="autoRefresh">Auto-Update</label>
+            <div class="form-check form-switch bg-light-subtle px-3 py-2 rounded-pill border shadow-sm mb-0 d-flex align-items-center" style="min-width: 140px;">
+                <input class="form-check-input me-2 ms-0" type="checkbox" id="autoRefresh" checked>
+                <label class="form-check-label small fw-bold text-nowrap mt-1" for="autoRefresh">Auto-Update</label>
             </div>
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm" style="border-radius: 1rem; overflow: hidden;">
+    <!-- Server Health Section -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary-subtle p-2 rounded-3 me-3 text-primary">
+                                <i class="bi bi-cpu-fill fs-4"></i>
+                            </div>
+                            <h6 class="card-title mb-0 fw-bold">Server CPU Load</h6>
+                        </div>
+                        <span id="cpuLabel" class="badge bg-primary rounded-pill">0%</span>
+                    </div>
+                    <div class="progress rounded-pill" style="height: 10px; background-color: #f0f2f5;">
+                        <div id="cpuBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-info-subtle p-2 rounded-3 me-3 text-info">
+                                <i class="bi bi-memory fs-4"></i>
+                            </div>
+                            <h6 class="card-title mb-0 fw-bold">Server RAM Usage</h6>
+                        </div>
+                        <span id="ramLabel" class="badge bg-info rounded-pill">0%</span>
+                    </div>
+                    <div class="progress rounded-pill" style="height: 10px; background-color: #f0f2f5;">
+                        <div id="ramBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-dark text-white">
+                    <thead class="bg-light">
                         <tr>
-                            <th class="ps-4 py-3">Channel</th>
-                            <th>User / IP</th>
-                            <th>Source</th>
-                            <th>Started At</th>
-                            <th>Active Duration</th>
-                            <th class="pe-4 text-end">Status</th>
+                            <th class="ps-4 py-3 text-uppercase small fw-bold text-muted">Channel / ID</th>
+                            <th class="text-uppercase small fw-bold text-muted">User / IP</th>
+                            <th class="text-uppercase small fw-bold text-muted">Source App</th>
+                            <th class="text-uppercase small fw-bold text-muted">Method</th>
+                            <th class="text-uppercase small fw-bold text-muted text-center">Bandwidth</th>
+                            <th class="text-uppercase small fw-bold text-muted text-center">Duration</th>
+                            <th class="pe-4 text-end text-uppercase small fw-bold text-muted">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="sessionsTableBody">
                         <tr>
-                            <td colspan="6" class="text-center py-5">
+                            <td colspan="7" class="text-center py-5">
                                 <div class="spinner-border text-primary mb-2"></div>
-                                <p class="text-muted mb-0">Loading live sessions...</p>
+                                <p class="text-muted mb-0">Syncing with server...</p>
                             </td>
                         </tr>
                     </tbody>
@@ -45,16 +86,14 @@
         </div>
     </div>
     
-    <div class="mt-4 p-3 bg-info-subtle border border-info-subtle rounded shadow-sm">
-        <div class="d-flex align-items-center">
-            <i class="bi bi-info-circle-fill text-info fs-4 me-3"></i>
-            <div>
-                <h6 class="mb-1 fw-bold text-info-emphasis">How it works</h6>
-                <p class="mb-0 small text-info-emphasis">
-                    This page tracks active connections to the **Server Proxy** (VLC, External Players) and **Web Player** heartbeats. 
-                    Sessions that stop sending data or heartbeats for more than 30 seconds are automatically removed.
-                </p>
-            </div>
+    <div class="mt-4 p-3 bg-light border rounded-4 d-flex align-items-start gap-3">
+        <i class="bi bi-shield-check text-success fs-4"></i>
+        <div>
+            <h6 class="mb-1 fw-bold">Automatic Session Cleanup</h6>
+            <p class="mb-0 small text-muted">
+                Idle sessions are automatically purged after 45 seconds of inactivity. 
+                Bandwidth values are calculated in real-time for **TS Streams** and estimated for **HLS**.
+            </p>
         </div>
     </div>
 </div>
@@ -69,40 +108,71 @@
         return [h, m, s].map(v => v < 10 ? "0" + v : v).join(":");
     }
 
+    function getSourceIcon(source) {
+        source = (source || '').toLowerCase();
+        if (source.includes('vlc')) return '<i class="bi bi-play-circle-fill text-orange me-2"></i>';
+        if (source.includes('web')) return '<i class="bi bi-browser-chrome text-primary me-2"></i>';
+        if (source.includes('tivimate')) return '<i class="bi bi-tv-fill text-info me-2"></i>';
+        if (source.includes('smarter')) return '<i class="bi bi-phone-fill text-success me-2"></i>';
+        return '<i class="bi bi-app-indicator text-muted me-2"></i>';
+    }
+
     async function updateSessions() {
         const btn = document.getElementById('refreshBtn');
         const originalHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Updating...';
-
+        
         try {
             const resp = await fetch('/channels/api/active_sessions');
             const data = await resp.json();
             
+            // 1. Update Server Stats
+            if (data.server_stats) {
+                const s = data.server_stats;
+                document.getElementById('cpuBar').style.width = s.cpu + '%';
+                document.getElementById('cpuLabel').textContent = Math.round(s.cpu) + '%';
+                document.getElementById('cpuBar').className = `progress-bar progress-bar-striped progress-bar-animated ${s.cpu > 80 ? 'bg-danger' : 'bg-primary'}`;
+                
+                document.getElementById('ramBar').style.width = s.ram + '%';
+                document.getElementById('ramLabel').textContent = Math.round(s.ram) + '%';
+                document.getElementById('ramBar').className = `progress-bar progress-bar-striped progress-bar-animated ${s.ram > 90 ? 'bg-danger' : 'bg-info'}`;
+            }
+
+            // 2. Update Table
             const tbody = document.getElementById('sessionsTableBody');
             if (data.sessions && data.sessions.length > 0) {
                 let html = '';
                 data.sessions.forEach(s => {
-                    const typeBadge = s.type === 'Proxy' ? 'bg-primary' : 'bg-success';
+                    const methodBadge = s.type.includes('HLS') ? 'bg-indigo' : (s.type.includes('TS') ? 'bg-teal' : 'bg-blue');
+                    const bwMbps = (s.bandwidth_kbps / 1024).toFixed(2);
+                    
                     html += `
-                        <tr class="session-row">
+                        <tr class="session-row" id="row-${btoa(s.key)}">
                             <td class="ps-4">
                                 <div class="fw-bold text-dark">${s.channel_name}</div>
-                                <div class="text-muted small">ID: ${s.channel_id}</div>
+                                <div class="text-muted extra-small">ID: ${s.channel_id}</div>
                             </td>
                             <td>
-                                <div class="fw-bold">${s.user}</div>
-                                <div class="text-muted small">${s.ip}</div>
+                                <div class="fw-bold small text-dark">${s.user}</div>
+                                <div class="text-muted extra-small">${s.ip}</div>
                             </td>
                             <td>
-                                <span class="badge ${typeBadge} px-2 py-1">${s.type}</span>
+                                <div class="d-flex align-items-center small">
+                                    ${getSourceIcon(s.source)} ${s.source}
+                                </div>
                             </td>
-                            <td class="text-muted small">${s.start_time}</td>
                             <td>
-                                <div class="fw-bold text-primary session-timer" data-start="${s.duration}">${formatDuration(s.duration)}</div>
+                                <span class="badge ${methodBadge} px-2 py-1" style="font-size: 0.6rem;">${s.type}</span>
+                            </td>
+                            <td class="text-center">
+                                <div class="fw-bold ${s.bandwidth_kbps > 5000 ? 'text-danger' : 'text-success'}">${bwMbps} <span class="small fw-normal text-muted">Mbps</span></div>
+                            </td>
+                            <td class="text-center">
+                                <div class="fw-bold text-primary session-timer small" data-start="${s.duration}">${formatDuration(s.duration)}</div>
                             </td>
                             <td class="pe-4 text-end">
-                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3">Active</span>
+                                <button onclick="killSession('${s.key}')" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-1" title="Kill Session">
+                                    <i class="bi bi-x-circle-fill fs-5"></i>
+                                </button>
                             </td>
                         </tr>
                     `;
@@ -111,18 +181,35 @@
             } else {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="6" class="text-center py-5 text-muted">
-                            <i class="bi bi-wind fs-1 d-block mb-3"></i>
-                            <p class="mb-0">No active sessions at the moment.</p>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-wind fs-1 d-block mb-3 opacity-25"></i>
+                            <p class="mb-0 fw-medium">No active connections detected.</p>
                         </td>
                     </tr>
                 `;
             }
         } catch (err) {
             console.error(err);
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
+        }
+    }
+
+    async function killSession(key) {
+        if (!confirm('End this connection forcefully?')) return;
+        
+        try {
+            const resp = await fetch('/channels/api/stop_session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: key })
+            });
+            const res = await resp.json();
+            if (res.status === 'ok') {
+                updateSessions();
+            } else {
+                alert('Failed to kill session.');
+            }
+        } catch (err) {
+            console.error(err);
         }
     }
 
@@ -139,7 +226,7 @@
     function setupPolling() {
         if (pollInterval) clearInterval(pollInterval);
         if (document.getElementById('autoRefresh').checked) {
-            pollInterval = setInterval(updateSessions, 5000);
+            pollInterval = setInterval(updateSessions, 3000); // 3s for real-time feel
         }
     }
 
@@ -156,10 +243,16 @@
         background-color: rgba(var(--bs-primary-rgb), 0.03) !important;
     }
     .badge {
-        font-weight: 600;
+        font-weight: 700;
         text-transform: uppercase;
-        font-size: 0.65rem;
-        letter-spacing: 0.05rem;
+        letter-spacing: 0.03rem;
     }
+    .extra-small {
+        font-size: 0.7rem;
+    }
+    .text-orange { color: #fd7e14; }
+    .bg-indigo { background-color: #6610f2; color: white; }
+    .bg-teal { background-color: #20c997; color: white; }
+    .bg-blue { background-color: #0d6efd; color: white; }
 </style>
 {% endblock %}

@@ -584,6 +584,20 @@ def track_usage():
     mb_used = (bitrate * seconds) / 8
     channel.total_watch_seconds += seconds
     channel.total_bandwidth_mb += mb_used
+    
+    # Update Real-time Session with source info
+    from app.modules.channels.services import ActiveSessionManager
+    # Calculate kbps: bitrate (Mbps) * 1024
+    kbps = int(bitrate * 1024)
+    ActiveSessionManager.update_session(
+        channel.id, 
+        current_user.username if current_user.is_authenticated else 'Guest', 
+        request.remote_addr, 
+        'Web Player',
+        bandwidth_kbps=kbps,
+        user_agent=request.headers.get('User-Agent')
+    )
+    
     db.session.commit()
     return jsonify({'status': 'ok'})
 
@@ -609,6 +623,54 @@ def validate_proxy_access(token=None):
     if trusted: return f"Trusted IP: {ip}"
     
     return None
+
+@channels_bp.route('/api/stop_session', methods=['POST'])
+@login_required
+def stop_session_api():
+    data = request.json or {}
+    session_key = data.get('key')
+    if not session_key:
+        return jsonify({'error': 'No session key'}), 400
+    
+    from app.modules.channels.services import ActiveSessionManager
+    success = ActiveSessionManager.remove_session(session_key)
+    return jsonify({'status': 'ok' if success else 'error'})
+
+@channels_bp.route('/active')
+@login_required
+def active_sessions_page():
+    return render_template('channels/active_sessions.html')
+
+@channels_bp.route('/api/active_sessions')
+@login_required
+def get_active_sessions_api():
+    from app.modules.channels.services import ActiveSessionManager
+    from app.modules.channels.models import Channel
+    
+    sessions = ActiveSessionManager.get_active_sessions()
+    server_stats = ActiveSessionManager.get_server_stats()
+    
+    results = []
+    for s in sessions:
+        ch = Channel.query.get(s['channel_id'])
+        results.append({
+            'key': s.get('key'),
+            'channel_name': ch.name if ch else 'Unknown',
+            'channel_id': s['channel_id'],
+            'user': s['user'],
+            'ip': s['ip'],
+            'start_time': s['start_time'].strftime('%H:%M:%S'),
+            'type': s['type'],
+            'source': s.get('source', 'Unknown'),
+            'bandwidth_kbps': s.get('bandwidth_kbps', 0),
+            'duration': int((datetime.now() - s['start_time']).total_seconds())
+        })
+    
+    return jsonify({
+        'status': 'ok', 
+        'sessions': results,
+        'server_stats': server_stats
+    })
 
 @channels_bp.route('/api/proxy')
 def proxy_stream():
@@ -644,6 +706,8 @@ def proxy_stream():
     
     def generate():
         start_time = time.time()
+        bytes_total = 0
+        bytes_since_last = 0
         try:
             last_ping = 0
             while True:
@@ -652,11 +716,23 @@ def proxy_stream():
                     chunk = q.get(timeout=20) 
                     if chunk is None: break
                     yield chunk
+                    bytes_total += len(chunk)
+                    bytes_since_last += len(chunk)
                     
-                    # Heartbeat for Real-time Dashboard (every 5 seconds)
-                    if channel_id and time.time() - last_ping > 5:
-                        ActiveSessionManager.update_session(channel_id, username, request.remote_addr, 'Proxy (TS)')
+                    # Heartbeat for Real-time Dashboard (every 3 seconds for better bandwidth resolution)
+                    if channel_id and time.time() - last_ping > 3:
+                        # Calculate real-time bandwidth
+                        elapsed = time.time() - (last_ping or start_time)
+                        if elapsed > 0:
+                            # bits per second -> kbps
+                            kbps = int((bytes_since_last * 8) / (elapsed * 1024))
+                            ActiveSessionManager.update_session(
+                                channel_id, username, request.remote_addr, 'Proxy (TS)', 
+                                bandwidth_kbps=kbps,
+                                user_agent=request.headers.get('User-Agent')
+                            )
                         last_ping = time.time()
+                        bytes_since_last = 0
                 except:
                     # Source timeout or disconnect
                     break
@@ -737,71 +813,6 @@ def quick_add():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@channels_bp.route('/api/heartbeat', methods=['POST'])
-@login_required
-def heartbeat():
-    data = request.get_json()
-    channel_id = data.get('channel_id')
-    seconds = data.get('seconds', 0)
-    
-    if not channel_id:
-        return jsonify({"status": "error", "message": "Missing channel_id"}), 400
-        
-    try:
-        channel_id_int = int(channel_id)
-    except:
-        return jsonify({"status": "error", "message": "Invalid channel_id"}), 400
-
-    from app.modules.channels.models import Channel
-    channel = Channel.query.get(channel_id_int)
-    if not channel:
-        return jsonify({"status": "error", "message": "Channel not found"}), 404
-        
-    channel.total_watch_seconds = (channel.total_watch_seconds or 0) + seconds
-    
-    # Estimate bandwidth
-    bitrate = 2.0 
-    if channel.resolution:
-        res = channel.resolution.lower()
-        if '3840' in res or '4k' in res: bitrate = 25.0
-        elif '1920' in res or '1080' in res: bitrate = 8.0
-        elif '1280' in res or '720' in res: bitrate = 4.0
-    
-    channel.total_bandwidth_mb = (channel.total_bandwidth_mb or 0) + (bitrate * seconds) / 8
-    
-    # Update Real-time Session
-    from app.modules.channels.services import ActiveSessionManager
-    ActiveSessionManager.update_session(channel_id_int, current_user.username if current_user.is_authenticated else 'Guest', request.remote_addr, 'Web Player')
-    
-    db.session.commit()
-    
-    return jsonify({"status": "ok"})
-
-@channels_bp.route('/active')
-@login_required
-def active_sessions_page():
-    return render_template('channels/active_sessions.html')
-
-@channels_bp.route('/api/active_sessions')
-@login_required
-def get_active_sessions_api():
-    from app.modules.channels.services import ActiveSessionManager
-    from app.modules.channels.models import Channel
-    sessions = ActiveSessionManager.get_active_sessions()
-    
-    results = []
-    for s in sessions:
-        ch = Channel.query.get(s['channel_id'])
-        results.append({
-            'channel_name': ch.name if ch else 'Unknown',
-            'channel_id': s['channel_id'],
-            'user': s['user'],
-            'ip': s['ip'],
-            'start_time': s['start_time'].strftime('%H:%M:%S'),
-            'type': s['type'],
-            'duration': int((datetime.now() - s['start_time']).total_seconds())
-        })
-    return jsonify({"status": "ok", "sessions": results})
 
 @channels_bp.route('/api/proxy_hls_manifest')
 def proxy_hls_manifest():
@@ -824,7 +835,12 @@ def proxy_hls_manifest():
     
     try:
         from app.modules.channels.services import ActiveSessionManager
-        ActiveSessionManager.update_session(channel.id, username, request.remote_addr, 'Proxy (HLS)')
+        # Estimate bandwidth for HLS Manifest request (initial ping)
+        ActiveSessionManager.update_session(
+            channel.id, username, request.remote_addr, 'Proxy (HLS)',
+            bandwidth_kbps=2048, # Default 2Mbps for HLS until segments flow
+            user_agent=request.headers.get('User-Agent')
+        )
         
         resp = requests.get(url, headers=headers, timeout=10)
         lines = resp.text.splitlines()
@@ -880,7 +896,21 @@ def proxy_hls_segment():
     
     try:
         from app.modules.channels.services import ActiveSessionManager, HLSEngine
-        ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'Proxy (HLS)')
+        # Estimate bandwidth based on channel resolution
+        from app.modules.channels.models import Channel
+        ch = Channel.query.get(channel_id)
+        bitrate = 2.0
+        if ch and ch.resolution:
+            res = ch.resolution.lower()
+            if '3840' in res or '4k' in res: bitrate = 25.0
+            elif '1920' in res or '1080' in res: bitrate = 8.0
+            elif '1280' in res or '720' in res: bitrate = 4.0
+            
+        ActiveSessionManager.update_session(
+            int(channel_id), username, request.remote_addr, 'Proxy (HLS)',
+            bandwidth_kbps=int(bitrate * 1024),
+            user_agent=request.headers.get('User-Agent')
+        )
         
         # 1. Check if it's a Variant Playlist (m3u8)
         if '.m3u8' in url.lower() or 'playlist' in url.lower():
