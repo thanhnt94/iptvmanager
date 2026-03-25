@@ -595,7 +595,7 @@
             
             html += `
                 <div class="channel-item p-2 d-flex align-items-center gap-3 transition-all" 
-                     data-id="${ch.id}" data-url="${ch.play_url}" data-stream-url="${ch.stream_url || ''}" data-name="${ch.name}" data-logo="${ch.logo}" data-group="${ch.group}" data-status="${ch.status}" data-stream-type="${ch.stream_type || 'iptv'}" data-proxy-type="${ch.proxy_type || 'none'}">
+                     data-id="${ch.id}" data-url="${ch.play_url}" data-stream-url="${ch.stream_url || ''}" data-name="${ch.name}" data-logo="${ch.logo}" data-group="${ch.group}" data-status="${ch.status}" data-stream-type="${ch.stream_type || 'iptv'}" data-proxy-type="${ch.proxy_type || 'none'}" data-stream-format="${ch.stream_format || ''}">
                     <div class="logo-container">
                         <img src="${ch.logo || 'https://via.placeholder.com/40'}" class="w-100 h-100" style="object-fit: contain;">
                     </div>
@@ -807,6 +807,7 @@
             url: url,
             name: sName,
             stream_type: sType,
+            stream_format: meta.stream_format || '',
             forcedType: forcedType,
             token: userApiToken,
             overlay: document.getElementById('playbackOverlay'),
@@ -814,7 +815,7 @@
         });
 
         // Toggle VOD Controls - Sync with engine detection
-        const isVod = sType === 'vod' || ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '/movie/'].some(ext => url.toLowerCase().includes(ext));
+        const isVod = sType === 'vod' || ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '/movie/', '/series/'].some(ext => url.toLowerCase().includes(ext));
         if (isVod) {
             vodControl.classList.remove('d-none');
             // Small delay to ensure it's removed from DOM flow before opacity change
@@ -828,9 +829,10 @@
             if (document.getElementById('streamClock')) document.getElementById('streamClock').innerText = 'LIVE';
         }
 
-        // Update technical badges and fetch health status
-        isHls = url.toLowerCase().includes('.m3u8') || forcedType === 'hls';
-        isMpegTS = url.toLowerCase().includes('.ts') || forcedType === 'ts' || (forcedType === 'default' && !isHls);
+        // Update technical badges and fetch health status - Sync detection with core engine including sFormat
+        const sFormat = (meta.stream_format || '').toLowerCase();
+        isHls = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('playlist') || url.toLowerCase().includes('hls') || sType === 'hls' || sFormat === 'hls' || forcedType === 'hls';
+        isMpegTS = url.toLowerCase().includes('.ts') || url.toLowerCase().includes('mpegts') || url.toLowerCase().includes('output=ts') || sType === 'ts' || sFormat === 'ts' || forcedType === 'ts' || (forcedType === 'default' && !isHls);
         updateFormatBadge(url, isHls, isMpegTS, sType, sId);
         
         // Update URL for browser history if needed

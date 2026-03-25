@@ -11,8 +11,15 @@
         <video id="iptv-video-element" class="w-100 h-100" playsinline></video>
     </div>
 
-    <!-- HUD (Heads-Up Display) / Controls -->
-    <div id="iptv-player-hud" class="position-absolute bottom-0 start-0 w-100 p-3 opacity-0 transition-opacity" style="background: linear-gradient(0deg, rgba(0,0,0,0.8), transparent); z-index: 5; transition: opacity 0.3s;">
+        <!-- VOD Controls (Seek Bar) -->
+        <div id="iptv-vod-controls" class="mb-2 d-none transition-opacity" style="opacity: 0;">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span id="iptv-current-time" class="small text-white-50 ms-1" style="font-size: 0.7rem;">00:00</span>
+                <input type="range" id="iptv-seek-bar" class="form-range flex-grow-1 player-seek-bar shadow-none" min="0" value="0" step="1">
+                <span id="iptv-duration" class="small text-white-50 me-1" style="font-size: 0.7rem;">00:00</span>
+            </div>
+        </div>
+
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex gap-3 align-items-center">
                 <button id="iptv-play-pause" class="btn btn-link text-white p-0 fs-4 shadow-none"><i class="bi bi-play-fill"></i></button>
@@ -26,13 +33,26 @@
                 <button id="iptv-fullscreen" class="btn btn-link text-white p-0 fs-5 shadow-none"><i class="bi bi-fullscreen"></i></button>
             </div>
         </div>
-    </div>
 </div>
 
 <style>
     .iptv-player-container:hover #iptv-player-hud { opacity: 1 !important; }
     .transition-opacity { transition: opacity 0.3s ease-in-out; }
     #iptv-video-element::-webkit-media-controls { display:none !important; }
+    
+    .player-seek-bar {
+        height: 6px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .player-seek-bar::-webkit-slider-thumb {
+        width: 14px;
+        height: 14px;
+        background: #0d6efd;
+        border: 2px solid white;
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
 </style>
 
 <script>
@@ -76,7 +96,50 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // 4. HUD Auto-hide
+    // 4. VOD Logic
+    const vodControls = document.getElementById('iptv-vod-controls');
+    const seekBar = document.getElementById('iptv-seek-bar');
+    const currentTimeText = document.getElementById('iptv-current-time');
+    const durationText = document.getElementById('iptv-duration');
+    const liveBadge = document.getElementById('iptv-badge-live');
+
+    const formatTime = (sec) => {
+        if (!sec || isNaN(sec)) return "00:00";
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    };
+
+    video.addEventListener('timeupdate', () => {
+        if (!video.duration || isNaN(video.duration)) return;
+        seekBar.value = video.currentTime;
+        currentTimeText.innerText = formatTime(video.currentTime);
+    });
+
+    video.addEventListener('durationchange', () => {
+        if (!video.duration || isNaN(video.duration)) return;
+        seekBar.max = video.duration;
+        durationText.innerText = formatTime(video.duration);
+        
+        // Auto-show VOD controls if duration is finite
+        if (isFinite(video.duration) && video.duration > 0) {
+            vodControls.classList.remove('d-none');
+            setTimeout(() => vodControls.style.opacity = '1', 50);
+            liveBadge.innerText = 'VOD';
+            liveBadge.classList.replace('bg-danger', 'bg-info');
+            liveBadge.classList.add('text-dark');
+        } else {
+            vodControls.classList.add('d-none');
+            vodControls.style.opacity = '0';
+            liveBadge.innerText = 'LIVE';
+            liveBadge.classList.replace('bg-info', 'bg-danger');
+            liveBadge.classList.remove('text-dark');
+        }
+    });
+
+    seekBar.oninput = () => video.currentTime = seekBar.value;
+
+    // 5. HUD Auto-hide
     let hudTimeout;
     const showHUD = () => {
         hud.style.opacity = '1';

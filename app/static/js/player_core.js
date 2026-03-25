@@ -15,7 +15,7 @@ window.IPTVPlayer = {
      * @param {Object} config { id, url, name, stream_type, forcedType, token, overlayElement, statusElement }
      */
     play: function(videoElement, config, isRetry = false) {
-        const { id, url, name, stream_type, forcedType, token, overlay, statusLabel } = config;
+        const { id, url, name, stream_type, stream_format, forcedType, token, overlay, statusLabel } = config;
         console.log(`[IPTVPlayer] ${isRetry ? 'Retrying' : 'Starting'} playback for: ${name} (ID: ${id})`);
         
         // 1. Logic Cleanup
@@ -31,38 +31,50 @@ window.IPTVPlayer = {
         // 2. Identify Stream Type
         const lowUrl = (url || "").toLowerCase();
         const sType = (stream_type || 'live').toLowerCase();
+        const sFormat = (stream_format || '').toLowerCase();
         
         // Comprehensive Detection
-        const isHlsDetected = lowUrl.includes('.m3u8') || lowUrl.includes('playlist') || lowUrl.includes('hls') || sType === 'hls';
-        const isTsDetected = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts') || lowUrl.includes('output=ts') || sType === 'ts';
-        const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('/movie/') || sType === 'vod';
+        const isHlsDetected = lowUrl.includes('.m3u8') || lowUrl.includes('playlist') || lowUrl.includes('hls') || sType === 'hls' || sFormat === 'hls';
+        const isTsDetected = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts') || lowUrl.includes('output=ts') || sType === 'ts' || sFormat === 'ts';
+        const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('/movie/') || sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv';
         
         // 3. Resolve Smart URL
+        const canPlayNativeHLS = videoElement.canPlayType('application/vnd.apple.mpegurl') || videoElement.canPlayType('application/x-mpegURL');
+        const canPlayNativeTS = videoElement.canPlayType('video/mp2t') || videoElement.canPlayType('video/mp2');
+        const getHLSEngine = () => canPlayNativeHLS ? 'native' : 'hls';
+        const getTSEngine = () => canPlayNativeTS ? 'native' : 'ts';
+        
         let playbackUrl = url;
         let pEngine = 'native';
         const host = window.location.origin;
 
         if (forcedType === 'default' || !forcedType) {
-            playbackUrl = `${host}/channels/play/${id}?token=${token}`;
-            if (isHlsDetected) pEngine = 'hls';
-            else if (isTsDetected) pEngine = 'ts';
-            else pEngine = (sType === 'vod') ? 'native' : 'ts'; // Default live to TS
+            if (isHlsDetected) {
+                playbackUrl = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${token}`;
+                pEngine = getHLSEngine();
+            } else {
+                playbackUrl = `${host}/channels/play/${id}?token=${token}`;
+                pEngine = getTSEngine();
+            }
         } else if (forcedType === 'none') {
             playbackUrl = url;
-            if (isHlsDetected) pEngine = 'hls';
-            else if (isTsDetected) pEngine = 'ts';
-            else pEngine = (sType === 'vod') ? 'native' : 'ts';
+            if (isHlsDetected) pEngine = getHLSEngine();
+            else if (isTsDetected) pEngine = getTSEngine();
+            else pEngine = (sType === 'vod') ? 'native' : getTSEngine();
         } else if (forcedType === 'tracking') {
-            playbackUrl = `${host}/channels/track/${id}?token=${token}`;
-            if (isHlsDetected) pEngine = 'hls';
-            else if (isTsDetected) pEngine = 'ts';
-            else pEngine = (sType === 'vod') ? 'native' : 'ts';
+            if (isHlsDetected) {
+                playbackUrl = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${token}`;
+                pEngine = getHLSEngine();
+            } else {
+                playbackUrl = `${host}/channels/track/${id}?token=${token}`;
+                pEngine = getTSEngine();
+            }
         } else if (forcedType === 'hls') {
             playbackUrl = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${token}`;
-            pEngine = 'hls';
+            pEngine = getHLSEngine();
         } else if (forcedType === 'ts') {
             playbackUrl = `${host}/channels/play/${id}?token=${token}`;
-            pEngine = 'ts';
+            pEngine = getTSEngine();
         }
 
         // Final sanity check: If it's a proxy HLS manifest, it's DEFINITELY HLS
@@ -130,7 +142,7 @@ window.IPTVPlayer = {
                 
                 const mpegtsOption = {
                     enableStashBuffer: true,
-                    stashInitialSize: 4096, // 4MB "Extreme" initial buffer for slow Tvheadend
+                    stashInitialSize: 8192, // 8MB "VLC-level" buffer for 4K streams
                     enableWorker: true,
                     lazyLoad: false,
                     deferLoadAfterSourceOpen: false,

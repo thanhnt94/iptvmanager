@@ -232,7 +232,8 @@ def get_channel_info(channel_id):
             'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
             'stream_url': channel.stream_url,
             'playlist_id': playlist_id,
-            'stream_type': channel.stream_type or 'live'
+            'stream_type': channel.stream_type or 'live',
+            'stream_format': channel.stream_format
         }
     })
 
@@ -280,6 +281,8 @@ def player_playlist_channels(playlist_id):
                 'resolution': channel.resolution or 'SD',
                 'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
                 'stream_url': channel.stream_url,
+                'stream_type': channel.stream_type,
+                'stream_format': channel.stream_format,
                 'proxy_type': channel.proxy_type or 'none'
             })
     else:
@@ -308,6 +311,8 @@ def player_playlist_channels(playlist_id):
                 'resolution': channel.resolution or 'SD',
                 'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
                 'stream_url': channel.stream_url,
+                'stream_type': channel.stream_type,
+                'stream_format': channel.stream_format,
                 'proxy_type': channel.proxy_type or 'none'
             })
         

@@ -291,6 +291,7 @@
                                             data-url="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}"
                                             data-stream-url="{{ channel.stream_url }}"
                                             data-stream-type="{{ channel.stream_type or 'live' }}"
+                                            data-stream-format="{{ channel.stream_format or '' }}"
                                             data-name="{{ channel.name }}"
                                             data-id="{{ channel.id }}">🚀 Play</button>
                                     <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>                                    <button class="btn btn-sm btn-outline-primary links-btn flex-fill px-1" style="font-size: 0.7rem;"
@@ -657,6 +658,7 @@ document.addEventListener('DOMContentLoaded', function() {
             url: streamUrl,
             name: name,
             stream_type: meta.stream_type || meta.streamType || 'live',
+            stream_format: meta.stream_format || meta.streamFormat || '',
             forcedType: forcedType,
             token: userApiToken,
             overlay: document.getElementById('iptv-player-overlay'),
@@ -664,6 +666,27 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         playerModal.show();
+
+        // Update technical badges in the modal UI if elements exist
+        const sType = (meta.stream_type || meta.streamType || 'live').toLowerCase();
+        const sFormat = (meta.stream_format || meta.streamFormat || '').toLowerCase();
+        
+        const isHls = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('playlist') || url.toLowerCase().includes('hls') || sType === 'hls' || sFormat === 'hls' || forcedType === 'hls';
+        const isMpegTS = url.toLowerCase().includes('.ts') || url.toLowerCase().includes('mpegts') || url.toLowerCase().includes('output=ts') || sType === 'ts' || sFormat === 'ts' || forcedType === 'ts' || (forcedType === 'default' && !isHls);
+        
+        const badgeLive = document.getElementById('iptv-badge-live');
+        if (badgeLive) {
+            const isVod = sType === 'vod' || ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '/movie/', '/series/'].some(ext => url.toLowerCase().includes(ext));
+            if (isVod) {
+                badgeLive.innerText = 'VOD';
+                badgeLive.classList.replace('bg-danger', 'bg-info');
+                badgeLive.classList.add('text-dark');
+            } else {
+                badgeLive.innerText = 'LIVE';
+                badgeLive.classList.replace('bg-info', 'bg-danger');
+                badgeLive.classList.remove('text-dark');
+            }
+        }
     }
 
     // --- Quick Add ---
