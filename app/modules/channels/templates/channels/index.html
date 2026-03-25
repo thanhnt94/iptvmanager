@@ -291,10 +291,13 @@
                                             data-name="{{ channel.name }}"
                                             data-id="{{ channel.id }}">Play</button>
                                     <button class="btn btn-sm btn-warning vlc-quick-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}"><i class="bi bi-play-btn-fill"></i> VLC</button>
-                                    <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>
-                                    <button class="btn btn-sm btn-outline-secondary flex-fill px-1" style="font-size: 0.7rem;" onclick="copyChannelLink('{{ channel.id }}', '{{ current_user.api_token }}', this, 'proxy')" title="Copy Server Proxy URL">Proxy</button>
-                                    <button class="btn btn-sm btn-outline-dark flex-fill px-1" style="font-size: 0.7rem;" onclick="copyChannelLink('{{ channel.id }}', '{{ channel.stream_url }}', this, 'origin')" title="Copy Original Source URL">Origin</button>
-                                    <button class="btn btn-sm btn-outline-primary quick-add-row-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-name="{{ channel.name }}"><i class="bi bi-plus-circle-fill"></i></button>
+                                     <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>
+                                     <button class="btn btn-sm btn-outline-secondary links-btn flex-fill px-1" style="font-size: 0.7rem;" 
+                                             data-id="{{ channel.id }}" 
+                                             data-name="{{ channel.name }}"
+                                             data-url="{{ channel.stream_url }}"
+                                             title="Get Stream Links">Links</button>
+                                     <button class="btn btn-sm btn-outline-primary quick-add-row-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-name="{{ channel.name }}"><i class="bi bi-plus-circle-fill"></i></button>
                                     <button class="btn btn-sm btn-outline-success ajax-check-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-url="{{ url_for('channels.check_channel', channel_id=channel.id) }}">Check</button>
                                     <a href="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" class="btn btn-sm btn-outline-primary flex-fill px-1" style="font-size: 0.7rem;">Edit</a>
                                     <form action="{{ url_for('channels.delete_channel', channel_id=channel.id) }}" method="POST" class="flex-fill d-grid">
@@ -309,6 +312,65 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Link Management Modal -->
+<div class="modal fade" id="urlLinksModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius: 1.25rem;">
+      <div class="modal-header bg-dark text-white border-0 py-3">
+        <h5 class="modal-title fw-bold"><i class="bi bi-link-45deg me-2"></i>Stream Links</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4 bg-light-subtle">
+        <div class="mb-4">
+            <h4 id="linksChannelName" class="fw-bold text-primary mb-1"></h4>
+            <p id="linksChannelId" class="text-muted small mb-0"></p>
+        </div>
+        
+        <div class="vstack gap-3">
+            <!-- Original Link -->
+            <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
+                <label class="small text-uppercase fw-bold text-muted mb-2 d-block">1. Original Source URL</label>
+                <div class="input-group">
+                    <input type="text" id="linkOriginal" class="form-control bg-light border-0 small" readonly>
+                    <button class="btn btn-dark px-3" onclick="copyModalLink('linkOriginal', this)"><i class="bi bi-clipboard"></i> Copy</button>
+                </div>
+            </div>
+
+            <!-- Tracking Link -->
+            <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
+                <label class="small text-uppercase fw-bold text-primary mb-2 d-block">2. Web Tracking URL (Redirect)</label>
+                <div class="input-group">
+                    <input type="text" id="linkTrack" class="form-control bg-light border-0 small" readonly>
+                    <button class="btn btn-primary px-3" onclick="copyModalLink('linkTrack', this)"><i class="bi bi-clipboard"></i> Copy</button>
+                </div>
+                <div class="mt-2 x-small text-muted">Records usage statistics before redirecting to source.</div>
+            </div>
+
+            <!-- HLS Proxy Link -->
+            <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
+                <label class="small text-uppercase fw-bold text-info mb-2 d-block">3. HLS Caching Proxy URL</label>
+                <div class="input-group">
+                    <input type="text" id="linkHls" class="form-control bg-light border-0 small" readonly>
+                    <button class="btn btn-info text-white px-3" onclick="copyModalLink('linkHls', this)"><i class="bi bi-clipboard"></i> Copy</button>
+                </div>
+                <div class="mt-2 x-small text-muted">Routes through the server with RAM segment caching.</div>
+            </div>
+
+            <!-- TS Proxy Link -->
+            <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
+                <label class="small text-uppercase fw-bold text-warning mb-2 d-block">4. MPEG-TS Singleton Proxy URL</label>
+                <div class="input-group">
+                    <input type="text" id="linkTs" class="form-control bg-light border-0 small" readonly>
+                    <button class="btn btn-warning fw-bold px-3" onclick="copyModalLink('linkTs', this)"><i class="bi bi-clipboard"></i> Copy</button>
+                </div>
+                <div class="mt-2 x-small text-muted">TVHeadend-style piping to prevent multiple source connections.</div>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modals -->
@@ -444,6 +506,42 @@ document.addEventListener('DOMContentLoaded', function() {
     const playPauseBtn = document.getElementById('modalPlayPause');
     const muteBtn = document.getElementById('modalMute');
     
+    const linksModal = new bootstrap.Modal(document.getElementById('urlLinksModal'));
+    
+    // --- Link Management Logic ---
+    function openLinksModal(id, name, originalUrl) {
+        document.getElementById('linksChannelName').innerText = name;
+        document.getElementById('linksChannelId').innerText = 'Channel ID: ' + id;
+        
+        const host = window.location.origin;
+        document.getElementById('linkOriginal').value = originalUrl;
+        document.getElementById('linkTrack').value = `${host}/channels/track/${id}?token=${userApiToken}`;
+        document.getElementById('linkHls').value = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${userApiToken}`;
+        document.getElementById('linkTs').value = `${host}/channels/play/${id}?token=${userApiToken}`;
+        
+        linksModal.show();
+    }
+
+    window.copyModalLink = function(inputId, btn) {
+        const input = document.getElementById(inputId);
+        const text = input.value;
+        const originalText = btn.innerHTML;
+        
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+                btn.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
+                const oldClasses = ['btn-dark', 'btn-primary', 'btn-info', 'btn-warning'];
+                const currentClass = oldClasses.find(c => btn.classList.contains(c));
+                
+                btn.classList.replace(currentClass, 'btn-success');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.replace('btn-success', currentClass);
+                }, 2000);
+            });
+        }
+    };
+
     let hls = null;
     let mpegtsPlayer = null;
     let currentChannelId = null;
@@ -683,6 +781,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const qaBtn = e.target.closest('.quick-add-row-btn');
         if (qaBtn) openQuickAdd(qaBtn.dataset.id, qaBtn.dataset.name);
+
+        const linksBtn = e.target.closest('.links-btn');
+        if (linksBtn) openLinksModal(linksBtn.dataset.id, linksBtn.dataset.name, linksBtn.dataset.url);
     });
 
     // --- Background Scan Polling ---

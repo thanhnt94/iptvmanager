@@ -279,7 +279,8 @@ def player_playlist_channels(playlist_id):
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
                 'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
-                'stream_url': channel.stream_url
+                'stream_url': channel.stream_url,
+                'proxy_type': channel.proxy_type or 'none'
             })
     else:
         # Fetch Channels ordered by index for custom playlists
@@ -305,8 +306,9 @@ def player_playlist_channels(playlist_id):
                 'status': channel.status,
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', channel_id=channel.id),
-                'stream_url': channel.stream_url
+                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
+                'stream_url': channel.stream_url,
+                'proxy_type': channel.proxy_type or 'none'
             })
         
     return jsonify({
@@ -624,6 +626,30 @@ def validate_proxy_access(token=None):
     
     return None
 
+@channels_bp.route('/track/<int:channel_id>')
+def track_redirect(channel_id):
+    from app.modules.settings.services import SettingService
+    if not SettingService.get('ENABLE_PROXY_STATS', True):
+        return "Usage tracking is currently disabled.", 403
+        
+    token = request.args.get('token')
+    username = validate_proxy_access(token)
+    if not username:
+        return "Unauthorized: Valid token required for tracking.", 401
+        
+    channel = Channel.query.get_or_404(channel_id)
+    from app.modules.channels.services import ActiveSessionManager
+    ActiveSessionManager.update_session(
+        channel.id, 
+        username, 
+        request.remote_addr, 
+        'Direct Link (Tracked)',
+        user_agent=request.headers.get('User-Agent')
+    )
+    channel.play_count += 1
+    db.session.commit()
+    return redirect(channel.stream_url)
+
 @channels_bp.route('/api/stop_session', methods=['POST'])
 @login_required
 def stop_session_api():
@@ -702,6 +728,11 @@ def proxy_stream():
     
     # Get the broadcast queue from the manager
     from app.modules.channels.services import StreamManager
+    from app.modules.settings.services import SettingService
+    if not SettingService.get('ENABLE_TS_PROXY', True):
+        return "MPEG-TS Proxy is currently disabled.", 403
+        
+    global stream_manager
     q, sid = StreamManager.get_source_stream(url, headers=headers)
     
     def generate():
@@ -816,6 +847,10 @@ def quick_add():
 
 @channels_bp.route('/api/proxy_hls_manifest')
 def proxy_hls_manifest():
+    from app.modules.settings.services import SettingService
+    if not SettingService.get('ENABLE_HLS_PROXY', True):
+        return "HLS Proxy is currently disabled.", 403
+        
     token = request.args.get('token')
     username = validate_proxy_access(token)
     if not username:
@@ -877,6 +912,10 @@ def proxy_hls_manifest():
 
 @channels_bp.route('/api/proxy_hls_segment')
 def proxy_hls_segment():
+    from app.modules.settings.services import SettingService
+    if not SettingService.get('ENABLE_HLS_PROXY', True):
+        return "HLS Proxy is currently disabled.", 403
+        
     token = request.args.get('token')
     username = validate_proxy_access(token)
     if not username:

@@ -116,14 +116,14 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold text-primary"><i class="bi bi-cpu-fill me-1"></i>Playback & Proxy Mode</label>
                     <select name="proxy_type" class="form-select shadow-sm border-primary">
-                        <option value="default" {% if channel.proxy_type == 'default' %}selected{% endif %}>Default (Follow Global Settings)</option>
-                        <option value="direct" {% if channel.proxy_type == 'direct' %}selected{% endif %}>Direct (Speed Priority, No Tracking)</option>
-                        <option value="tvheadend" {% if channel.proxy_type == 'tvheadend' %}selected{% endif %}>Force Proxy (Always Track & Proxy)</option>
+                        <option value="none" {% if channel.proxy_type == 'none' %}selected{% endif %}>Original (Direct, No Tracking)</option>
+                        <option value="tracking" {% if channel.proxy_type == 'tracking' %}selected{% endif %}>Web Tracking (Redirect)</option>
+                        <option value="hls" {% if channel.proxy_type == 'hls' %}selected{% endif %}>HLS Caching Proxy (RAM Buffer)</option>
+                        <option value="ts" {% if channel.proxy_type == 'ts' %}selected{% endif %}>MPEG-TS Singleton Proxy (TVHeadend-style)</option>
                     </select>
                     <div class="form-text mt-2">
                         <i class="bi bi-info-circle me-1"></i>
-                        <b>Default:</b> Proxies only if enabled in <a href="{{ url_for('settings.admin_settings') }}" class="text-decoration-none">Admin Settings</a>.
-                        <br><b>Force Proxy:</b> Overrides settings to ensure tracking and connection sharing are ALWAYS active.
+                        <b>Note:</b> This sets the default link type used in your generated playlists.
                     </div>
                 </div>
 

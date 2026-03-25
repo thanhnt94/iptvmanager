@@ -296,7 +296,7 @@ class ChannelService:
             status='unknown',
             stream_type='unknown',
             stream_format=stream_format,
-            proxy_type=data.get('proxy_type', 'default')
+            proxy_type=data.get('proxy_type', 'none')
         )
         db.session.add(new_channel)
         db.session.commit()
@@ -315,7 +315,7 @@ class ChannelService:
         channel.group_name = data.get('group_name', channel.group_name)
         channel.epg_id = data.get('epg_id', channel.epg_id)
         channel.stream_url = data.get('stream_url', channel.stream_url)
-        channel.proxy_type = data.get('proxy_type', channel.proxy_type)
+        channel.proxy_type = data.get('proxy_type', channel.proxy_type or 'none')
         
         db.session.commit()
         return channel

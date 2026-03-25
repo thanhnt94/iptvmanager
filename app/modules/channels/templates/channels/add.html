@@ -43,14 +43,14 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold text-primary"><i class="bi bi-cpu-fill me-1"></i>Playback & Proxy Mode</label>
                     <select name="proxy_type" class="form-select shadow-sm border-primary">
-                        <option value="default" selected>Default (Follow Global Settings)</option>
-                        <option value="direct">Direct (Speed Priority, No Tracking)</option>
-                        <option value="tvheadend">Force Proxy (Always Track & Proxy)</option>
+                        <option value="none" selected>Original (Direct, No Tracking)</option>
+                        <option value="tracking">Web Tracking (Redirect)</option>
+                        <option value="hls">HLS Caching Proxy (RAM Buffer)</option>
+                        <option value="ts">MPEG-TS Singleton Proxy (TVHeadend-style)</option>
                     </select>
                     <div class="form-text mt-2">
                         <i class="bi bi-info-circle me-1"></i>
-                        <b>Default:</b> Proxies only if enabled in <a href="{{ url_for('settings.admin_settings') }}" class="text-decoration-none">Admin Settings</a>.
-                        <br><b>Force Proxy:</b> Overrides settings to ensure tracking and connection sharing are ALWAYS active.
+                        <b>Note:</b> This sets the default link type used in your generated playlists.
                     </div>
                 </div>
 

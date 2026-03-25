@@ -17,7 +17,7 @@ class Channel(db.Model):
     quality = db.Column(db.String(50)) # excellent, good, poor
     resolution = db.Column(db.String(50)) # e.g., 1920x1080
     audio_codec = db.Column(db.String(50)) # e.g., aac, ac3
-    proxy_type = db.Column(db.String(20), default='default') # default, direct, tvheadend
+    proxy_type = db.Column(db.String(20), default='none') # none, tracking, hls, ts
     video_codec = db.Column(db.String(50)) # e.g., h264, hevc
     bitrate = db.Column(db.Integer)        # in kbps
     error_message = db.Column(db.Text)    # Last failure reason

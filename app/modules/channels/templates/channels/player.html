@@ -104,7 +104,19 @@
                                 <span id="statusContainer" class="d-flex align-items-center gap-2 px-3 py-2 rounded-2 bg-success text-white fw-bold shadow-sm" style="font-size: 0.85rem; letter-spacing: 1px;">
                                     <i class="bi bi-broadcast"></i> <span id="statusLabel">LIVE</span>
                                 </span>
-                                <div class="d-flex align-items-center text-white gap-4 bg-white bg-opacity-10 px-4 py-2 rounded-pill shadow-inner tech-details-badge">
+                                <div class="d-flex align-items-center text-white gap-3 bg-white bg-opacity-10 px-4 py-2 rounded-pill shadow-inner tech-details-badge">
+                                    <!-- Source Selector -->
+                                    <div class="d-flex align-items-center me-2 border-end border-white border-opacity-10 pe-3">
+                                        <i class="bi bi-hdd-network me-2 text-info"></i>
+                                        <select id="sourceSelector" class="form-select form-select-sm bg-transparent border-0 text-white shadow-none p-0 fw-bold" style="font-size: 0.75rem; width: auto; min-width: 100px;">
+                                            <option value="default" class="bg-dark text-white">Default Mode</option>
+                                            <option value="none" class="bg-dark text-white">Original Source</option>
+                                            <option value="tracking" class="bg-dark text-white">Web Tracking</option>
+                                            <option value="hls" class="bg-dark text-white">HLS Proxy</option>
+                                            <option value="ts" class="bg-dark text-white">TS Proxy</option>
+                                        </select>
+                                    </div>
+
                                     <span id="formatBadge" class="badge bg-white bg-opacity-25 text-white border-0 px-2 py-1" style="font-size: 0.65rem; min-width: 45px;">TYPE</span>
                                     <span id="shieldIcon" class="d-none ms-1" title="Safety System Active"><i class="bi bi-shield-fill-check text-info fs-5"></i></span>
                                     <span class="small fw-bold border-end border-white border-opacity-25 pe-4 quality-span">
@@ -433,6 +445,7 @@
     const seekBar = document.getElementById('seekBar');
     const currentTimeText = document.getElementById('currentTime');
     const durationText = document.getElementById('duration');
+    const sourceSelector = document.getElementById('sourceSelector');
     const topControls = document.getElementById('topControls');
     const customPlayPause = document.getElementById('customPlayPause');
     const customMute = document.getElementById('customMute');
@@ -483,6 +496,14 @@
 
     toggleSidebar.addEventListener('click', () => toggleSidebarUI(false));
     openSidebar.addEventListener('click', () => toggleSidebarUI(true));
+    
+    // Source Selector Hot-Switch
+    sourceSelector.addEventListener('change', (e) => {
+        const activeItem = document.querySelector('.channel-item.active');
+        if (activeItem) {
+            playStream(activeItem.dataset.url, activeItem, e.target.value);
+        }
+    });
 
     async function loadPlaylist(playlistId, autoPlayFirst = false) {
         currentPlaylistId = playlistId;
@@ -573,7 +594,7 @@
             
             html += `
                 <div class="channel-item p-2 d-flex align-items-center gap-3 transition-all" 
-                     data-id="${ch.id}" data-url="${ch.play_url}" data-stream-url="${ch.stream_url || ''}" data-name="${ch.name}" data-logo="${ch.logo}" data-group="${ch.group}" data-status="${ch.status}" data-stream-type="${ch.stream_type || 'iptv'}">
+                     data-id="${ch.id}" data-url="${ch.play_url}" data-stream-url="${ch.stream_url || ''}" data-name="${ch.name}" data-logo="${ch.logo}" data-group="${ch.group}" data-status="${ch.status}" data-stream-type="${ch.stream_type || 'iptv'}" data-proxy-type="${ch.proxy_type || 'none'}">
                     <div class="logo-container">
                         <img src="${ch.logo || 'https://via.placeholder.com/40'}" class="w-100 h-100" style="object-fit: contain;">
                     </div>
