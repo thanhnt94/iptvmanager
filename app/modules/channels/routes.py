@@ -558,7 +558,7 @@ def get_scan_status():
     return jsonify(HealthCheckService.get_status())
 
 @channels_bp.route('/api/heartbeat', methods=['POST'])
-def track_usage():
+def heartbeat():
     """
     Heartbeat API called by web player every 15s-30s.
     Estimates bandwidth based on resolution.
