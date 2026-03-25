@@ -358,16 +358,17 @@ class HLSEngine:
         # 1. Check Cache
         with cls._lock:
             if url in cls._cache:
-                logger.debug(f"HLSEngine: Cache HIT for {url[-20:]}")
+                # logger.debug(f"HLSEngine: Cache HIT for {url[-20:]}")
                 return cls._cache[url]['data']
 
         # 2. Cache MISS: Download from source
         try:
-            logger.debug(f"HLSEngine: Cache MISS, downloading {url[-20:]}")
+            # logger.debug(f"HLSEngine: Cache MISS, downloading {url[-20:]}")
             if not headers:
-                headers = {'User-Agent': 'Mozilla/5.0 VLC/3.0.18'}
+                ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
+                headers = {'User-Agent': ua, 'Referer': url.rsplit('/', 1)[0] + '/'}
                 
-            resp = requests.get(url, headers=headers, timeout=15)
+            resp = requests.get(url, headers=headers, timeout=10, verify=False)
             if resp.status_code == 200:
                 data = resp.content
                 
@@ -375,14 +376,15 @@ class HLSEngine:
                 with cls._lock:
                     cls._cache[url] = {'data': data, 'timestamp': now}
                     
-                    # Dynamic Cleanup
-                    max_segments = SettingService.get('HLS_MAX_SEGMENTS', 50)
-                    if len(cls._cache) > max_segments:
+                    # Periodic Cleanup check
+                    if len(cls._cache) % 10 == 0:
                         cls._cleanup()
                         
                 return data
+            else:
+                logger.error(f"HLSEngine: Source returned {resp.status_code} for {url[-40:]}")
         except Exception as e:
-            logger.error(f"HLSEngine: Download error: {e}")
+            logger.error(f"HLSEngine: Download error for {url[-40:]}: {e}")
             
         return None
 

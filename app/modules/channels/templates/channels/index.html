@@ -109,7 +109,7 @@
                         <div class="row g-2">
                             <div class="col-md-3">
                                 <label class="small text-muted mb-1">Group</label>
-                                <select name="group" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <select name="group" class="form-select form-select-sm">
                                     <option value="">All Groups</option>
                                     {% for g in distinct_groups %}
                                     <option value="{{ g }}" {% if group == g %}selected{% endif %}>{{ g }}</option>
@@ -118,7 +118,7 @@
                             </div>
                             <div class="col-md-2">
                                 <label class="small text-muted mb-1">Stream Type</label>
-                                <select name="stream_type" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <select name="stream_type" class="form-select form-select-sm">
                                     <option value="">All Types</option>
                                     <option value="live" {% if stream_type == 'live' %}selected{% endif %}>Live TV</option>
                                     <option value="vod" {% if stream_type == 'vod' %}selected{% endif %}>VOD</option>
@@ -126,7 +126,7 @@
                             </div>
                             <div class="col-md-2">
                                 <label class="small text-muted mb-1">Status</label>
-                                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <select name="status" class="form-select form-select-sm">
                                     <option value="">All Statuses</option>
                                     <option value="live" {% if status == 'live' %}selected{% endif %}>Live</option>
                                     <option value="die" {% if status == 'die' %}selected{% endif %}>Die</option>
@@ -135,15 +135,16 @@
                             </div>
                             <div class="col-md-2">
                                 <label class="small text-muted mb-1">Sort By</label>
-                                <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <select name="sort" class="form-select form-select-sm">
                                     <option value="">Default</option>
                                     <option value="newest_checked" {% if sort == 'newest_checked' %}selected{% endif %}>Newest Checked</option>
                                     <option value="oldest_checked" {% if sort == 'oldest_checked' %}selected{% endif %}>Oldest Checked</option>
                                     <option value="name_asc" {% if sort == 'name_asc' %}selected{% endif %}>Name: A-Z</option>
                                 </select>
                             </div>
-                            <div class="col-md-2 d-grid">
-                                <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-danger mt-md-4">Clear All</a>
+                            <div class="col-md-2 d-grid gap-2">
+                                <button type="submit" class="btn btn-sm btn-primary mt-md-4">Apply Filters</button>
+                                <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-outline-danger">Clear All</a>
                             </div>
                         </div>
                     </div>
@@ -287,20 +288,17 @@
                             <td>
                                 <div class="d-flex flex-wrap gap-1" style="max-width: 140px;">
                                     <button class="btn btn-sm btn-info play-btn flex-fill px-1" style="font-size: 0.7rem;"
-                                            data-url="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}" 
+                                            data-url="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}"
                                             data-name="{{ channel.name }}"
-                                            data-id="{{ channel.id }}">Play</button>
-                                    <button class="btn btn-sm btn-warning vlc-quick-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}"><i class="bi bi-play-btn-fill"></i> VLC</button>
-                                     <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>
-                                     <button class="btn btn-sm btn-outline-secondary links-btn flex-fill px-1" style="font-size: 0.7rem;" 
-                                             data-id="{{ channel.id }}" 
-                                             data-name="{{ channel.name }}"
-                                             data-url="{{ channel.stream_url }}"
-                                             title="Get Stream Links">Links</button>
-                                     <button class="btn btn-sm btn-outline-primary quick-add-row-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-name="{{ channel.name }}"><i class="bi bi-plus-circle-fill"></i></button>
+                                            data-id="{{ channel.id }}">🚀 Play</button>
+                                    <button class="btn btn-sm btn-outline-info stats-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}">Stats</button>                                    <button class="btn btn-sm btn-outline-primary links-btn flex-fill px-1" style="font-size: 0.7rem;"
+                                            data-id="{{ channel.id }}"
+                                            data-name="{{ channel.name }}"
+                                            data-url="{{ channel.stream_url }}"
+                                            title="Get Smart Stream Links">🔗 Links</button>
+                                    <button class="btn btn-sm btn-outline-secondary quick-add-row-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-name="{{ channel.name }}"><i class="bi bi-plus-circle-fill"></i></button>
                                     <button class="btn btn-sm btn-outline-success ajax-check-btn flex-fill px-1" style="font-size: 0.7rem;" data-id="{{ channel.id }}" data-url="{{ url_for('channels.check_channel', channel_id=channel.id) }}">Check</button>
-                                    <a href="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" class="btn btn-sm btn-outline-primary flex-fill px-1" style="font-size: 0.7rem;">Edit</a>
-                                    <form action="{{ url_for('channels.delete_channel', channel_id=channel.id) }}" method="POST" class="flex-fill d-grid">
+                                    <a href="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" class="btn btn-sm btn-outline-primary flex-fill px-1" style="font-size: 0.7rem;">Edit</a>                                    <form action="{{ url_for('channels.delete_channel', channel_id=channel.id) }}" method="POST" class="flex-fill d-grid">
                                         <button type="submit" class="btn btn-sm btn-outline-danger px-1" style="font-size: 0.7rem;" onclick="return confirm('Are you sure?')">Del</button>
                                     </form>
                                 </div>
@@ -329,30 +327,44 @@
         </div>
         
         <div class="vstack gap-3">
+            <!-- Smart Gateway Link (NEW) -->
+            <div class="link-card p-3 bg-white border border-primary border-opacity-25 rounded-3 shadow-sm">
+                <label class="small text-uppercase fw-bold text-primary mb-2 d-block">🚀 1. Smart Gateway URL (Recommended)</label>
+                <div class="input-group">
+                    <input type="text" id="linkSmart" class="form-control bg-light border-0 small fw-bold" readonly>
+                    <button class="btn btn-outline-warning px-3" onclick="vlcModalPlay('linkSmart')"><i class="bi bi-play-btn-fill"></i> VLC</button>
+                    <button class="btn btn-primary px-3" onclick="copyModalLink('linkSmart', this)"><i class="bi bi-clipboard"></i> Copy</button>
+                </div>
+                <div class="mt-2 x-small text-muted">Intelligently chooses the best proxy/redirect based on format.</div>
+            </div>
+
             <!-- Original Link -->
             <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
-                <label class="small text-uppercase fw-bold text-muted mb-2 d-block">1. Original Source URL</label>
+                <label class="small text-uppercase fw-bold text-muted mb-2 d-block">2. Original Source URL</label>
                 <div class="input-group">
                     <input type="text" id="linkOriginal" class="form-control bg-light border-0 small" readonly>
+                    <button class="btn btn-outline-warning px-3" onclick="vlcModalPlay('linkOriginal')"><i class="bi bi-play-btn-fill"></i> VLC</button>
                     <button class="btn btn-dark px-3" onclick="copyModalLink('linkOriginal', this)"><i class="bi bi-clipboard"></i> Copy</button>
                 </div>
             </div>
 
             <!-- Tracking Link -->
             <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
-                <label class="small text-uppercase fw-bold text-primary mb-2 d-block">2. Web Tracking URL (Redirect)</label>
+                <label class="small text-uppercase fw-bold text-secondary mb-2 d-block">3. Web Tracking URL (Redirect Only)</label>
                 <div class="input-group">
                     <input type="text" id="linkTrack" class="form-control bg-light border-0 small" readonly>
-                    <button class="btn btn-primary px-3" onclick="copyModalLink('linkTrack', this)"><i class="bi bi-clipboard"></i> Copy</button>
+                    <button class="btn btn-outline-warning px-3" onclick="vlcModalPlay('linkTrack')"><i class="bi bi-play-btn-fill"></i> VLC</button>
+                    <button class="btn btn-secondary px-3" onclick="copyModalLink('linkTrack', this)"><i class="bi bi-clipboard"></i> Copy</button>
                 </div>
                 <div class="mt-2 x-small text-muted">Records usage statistics before redirecting to source.</div>
             </div>
 
             <!-- HLS Proxy Link -->
             <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
-                <label class="small text-uppercase fw-bold text-info mb-2 d-block">3. HLS Caching Proxy URL</label>
+                <label class="small text-uppercase fw-bold text-info mb-2 d-block">4. HLS Caching Proxy URL</label>
                 <div class="input-group">
                     <input type="text" id="linkHls" class="form-control bg-light border-0 small" readonly>
+                    <button class="btn btn-outline-warning px-3" onclick="vlcModalPlay('linkHls')"><i class="bi bi-play-btn-fill"></i> VLC</button>
                     <button class="btn btn-info text-white px-3" onclick="copyModalLink('linkHls', this)"><i class="bi bi-clipboard"></i> Copy</button>
                 </div>
                 <div class="mt-2 x-small text-muted">Routes through the server with RAM segment caching.</div>
@@ -360,9 +372,10 @@
 
             <!-- TS Proxy Link -->
             <div class="link-card p-3 bg-white border rounded-3 shadow-sm">
-                <label class="small text-uppercase fw-bold text-warning mb-2 d-block">4. MPEG-TS Singleton Proxy URL</label>
+                <label class="small text-uppercase fw-bold text-warning mb-2 d-block">5. MPEG-TS Singleton Proxy URL</label>
                 <div class="input-group">
                     <input type="text" id="linkTs" class="form-control bg-light border-0 small" readonly>
+                    <button class="btn btn-outline-warning px-3" onclick="vlcModalPlay('linkTs')"><i class="bi bi-play-btn-fill"></i> VLC</button>
                     <button class="btn btn-warning fw-bold px-3" onclick="copyModalLink('linkTs', this)"><i class="bi bi-clipboard"></i> Copy</button>
                 </div>
                 <div class="mt-2 x-small text-muted">TVHeadend-style piping to prevent multiple source connections.</div>
@@ -403,26 +416,20 @@
     <div class="modal-content bg-dark text-white border-0">
       <div class="modal-header border-0 bg-black bg-opacity-50">
         <h5 class="modal-title fw-bold" id="playerTitle">Player</h5>
-        <div class="d-flex gap-2">
-            <button id="vlcBtn" class="btn btn-sm btn-warning fw-bold px-3">VLC</button>
+        <div class="d-flex align-items-center gap-2">
+            <select id="modalSourceSelector" class="form-select form-select-sm bg-dark text-white border-secondary shadow-none fw-bold" style="width: 140px; font-size: 0.75rem;">
+                <option value="default">SOURCE: DEFAULT</option>
+                <option value="none">SOURCE: ORIGINAL</option>
+                <option value="tracking">SOURCE: TRACKING</option>
+                <option value="hls">SOURCE: HLS PROXY</option>
+                <option value="ts">SOURCE: TS PROXY</option>
+            </select>
+            <button id="vlcBtn" class="btn btn-sm btn-warning fw-bold px-3" style="font-size: 0.75rem;">VLC</button>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
       </div>
       <div class="modal-body p-0 bg-black position-relative" style="min-height: 400px;">
-        <video id="videoPlayer" playsinline class="w-100 h-100" style="max-height: 500px; object-fit: contain;"></video>
-        <div id="playerOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none">
-            <div class="spinner-border text-primary"></div>
-            <div class="mt-2 small fw-bold text-white-50">BUFFERING...</div>
-        </div>
-        <div id="playerHUD" class="position-absolute bottom-0 start-0 w-100 p-3 opacity-0 transition-opacity" style="background: linear-gradient(0deg, rgba(0,0,0,0.8), transparent);">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex gap-3">
-                    <button id="modalPlayPause" class="btn btn-link text-white p-0 fs-5"><i class="bi bi-play-fill"></i></button>
-                    <button id="modalMute" class="btn btn-link text-white p-0 fs-5"><i class="bi bi-volume-up-fill"></i></button>
-                </div>
-                <div class="small fw-bold opacity-75">LIVE</div>
-            </div>
-        </div>
+        {% include "_player_component.html" %}
       </div>
     </div>
   </div>
@@ -500,8 +507,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Shared State
     const userApiToken = "{{ current_user.api_token }}";
     const playerModal = new bootstrap.Modal(document.getElementById('playerModal'));
-    const video = document.getElementById('videoPlayer');
-    const overlay = document.getElementById('playerOverlay');
+    const video = document.getElementById('iptv-video-element');
+    const overlay = document.getElementById('iptv-player-overlay');
     const hud = document.getElementById('playerHUD');
     const playPauseBtn = document.getElementById('modalPlayPause');
     const muteBtn = document.getElementById('modalMute');
@@ -510,17 +517,41 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // --- Link Management Logic ---
     function openLinksModal(id, name, originalUrl) {
+        currentChannelId = id; // Store for VLC play
         document.getElementById('linksChannelName').innerText = name;
         document.getElementById('linksChannelId').innerText = 'Channel ID: ' + id;
-        
+
         const host = window.location.origin;
+        document.getElementById('linkSmart').value = `${host}/channels/play/${id}?token=${userApiToken}`;
         document.getElementById('linkOriginal').value = originalUrl;
         document.getElementById('linkTrack').value = `${host}/channels/track/${id}?token=${userApiToken}`;
         document.getElementById('linkHls').value = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${userApiToken}`;
-        document.getElementById('linkTs').value = `${host}/channels/play/${id}?token=${userApiToken}`;
-        
+        document.getElementById('linkTs').value = `${host}/channels/api/proxy?url=${encodeURIComponent(originalUrl)}&channel_id=${id}&token=${userApiToken}`;
+
         linksModal.show();
     }
+    window.vlcModalPlay = function(inputId) {
+        const url = document.getElementById(inputId).value;
+        if (!url) return;
+        
+        // 1. Attempt Server-side launch (Best for local usage)
+        if (currentChannelId) {
+            fetch(`/channels/play_vlc/${currentChannelId}`, { method: 'POST' })
+            .then(resp => resp.json())
+            .then(data => {
+                if (!data.success) {
+                    // 2. Fallback: Browser protocol handler (For remote usage)
+                    // Some VLC installs use vlc:// protocol
+                    window.location.href = `vlc://${url}`;
+                }
+            })
+            .catch(err => {
+                window.location.href = `vlc://${url}`;
+            });
+        } else {
+            window.location.href = `vlc://${url}`;
+        }
+    };
 
     window.copyModalLink = function(inputId, btn) {
         const input = document.getElementById(inputId);
@@ -545,23 +576,39 @@ document.addEventListener('DOMContentLoaded', function() {
     let hls = null;
     let mpegtsPlayer = null;
     let currentChannelId = null;
+    let currentOriginalUrl = null;
+    let currentChannelName = null;
     let heartbeatInterval = null;
+
+    // Source Selector for Quick Player
+    const modalSourceSelector = document.getElementById('modalSourceSelector');
+    modalSourceSelector.addEventListener('change', (e) => {
+        if (currentChannelId) {
+            playStream(currentOriginalUrl, currentChannelName, currentChannelId, e.target.value);
+        }
+    });
 
     // --- HUD Logic ---
     let hudTimeout;
     function showHUD() {
+        if (!hud) return;
         hud.classList.remove('opacity-0');
         clearTimeout(hudTimeout);
         hudTimeout = setTimeout(() => hud.classList.add('opacity-0'), 3000);
     }
     video.parentElement.addEventListener('mousemove', showHUD);
     video.parentElement.addEventListener('click', showHUD);
+    video.parentElement.addEventListener('contextmenu', showHUD);
+    video.parentElement.addEventListener('touchstart', showHUD, {passive: true});
 
     if (playPauseBtn) playPauseBtn.addEventListener('click', () => video.paused ? video.play() : video.pause());
     if (muteBtn) muteBtn.addEventListener('click', () => { video.muted = !video.muted; muteBtn.innerHTML = video.muted ? '<i class="bi bi-volume-mute-fill"></i>' : '<i class="bi bi-volume-up-fill"></i>'; });
     video.addEventListener('play', () => { if(playPauseBtn) playPauseBtn.innerHTML = '<i class="bi bi-pause-fill"></i>'; });
     video.addEventListener('pause', () => { if(playPauseBtn) playPauseBtn.innerHTML = '<i class="bi bi-play-fill"></i>'; });
-    video.addEventListener('waiting', () => overlay.classList.remove('d-none'));
+    video.addEventListener('waiting', () => {
+        overlay.classList.remove('d-none');
+        document.getElementById('iptv-player-status').innerHTML = 'BUFFERING...';
+    });
     video.addEventListener('playing', () => overlay.classList.add('d-none'));
 
     // --- Core UI Functions ---
@@ -588,85 +635,32 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => row.classList.remove('table-success'), 2000);
     }
 
-    function playStream(url, name, id) {
+    function playStream(url, metaInput = {}, forcedType = 'default') {
+        const meta = metaInput && metaInput.dataset ? {...metaInput.dataset} : (typeof metaInput === 'string' ? {name: metaInput} : {...metaInput});
+        const id = meta.id || meta.id_ || '';
+        const name = meta.name || '';
+        const streamUrl = meta.stream_url || meta.streamUrl || meta.url || url || '';
+
         currentChannelId = id;
+        currentOriginalUrl = streamUrl;
+        currentChannelName = name;
+
+        if (forcedType === 'default') {
+            modalSourceSelector.value = 'default';
+        }
         document.getElementById('playerTitle').textContent = 'Playing: ' + name;
-        overlay.classList.remove('d-none');
-
-        if (heartbeatInterval) clearInterval(heartbeatInterval);
-        if (id) {
-            const sendPing = (sec) => {
-                if (video.paused) return;
-                fetch("{{ url_for('channels.heartbeat') }}", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ channel_id: parseInt(id), seconds: sec })
-                }).catch(() => {});
-            };
-            setTimeout(() => sendPing(2), 2000);
-            heartbeatInterval = setInterval(() => sendPing(10), 10000);
-        }
         
-        if (hls) { hls.destroy(); hls = null; }
-        if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
-        video.pause(); video.removeAttribute('src'); video.load();
+        // Use Shared Engine
+        window.IPTVPlayer.play(document.getElementById('iptv-video-element'), {
+            id: id,
+            url: streamUrl,
+            name: name,
+            forcedType: forcedType,
+            token: userApiToken,
+            overlay: document.getElementById('iptv-player-overlay'),
+            statusLabel: document.getElementById('iptv-player-status')
+        });
 
-        const playbackUrl = `/channels/play/${id}?token=${userApiToken}`;
-        const urlLower = url.toLowerCase();
-        const isHls = urlLower.includes('.m3u8') || urlLower.includes('playlist') || urlLower.includes('hls');
-        const isTS = urlLower.includes('.ts') || urlLower.includes('type=ts') || urlLower.includes('mpegts');
-
-        console.log(`Starting playback: ${name} (ID: ${id}) - Type: ${isHls ? 'HLS' : (isTS ? 'TS' : 'Direct')}`);
-
-        if (isHls && Hls.isSupported()) {
-            hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,
-                backBufferLength: 60,
-                manifestLoadingMaxRetry: 10,
-                manifestLoadingRetryDelay: 1000
-            });
-            hls.loadSource(playbackUrl);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(e => console.error("Play failed", e)));
-            hls.on(Hls.Events.ERROR, (event, data) => {
-                if (data.fatal) {
-                    switch (data.type) {
-                        case Hls.ErrorTypes.NETWORK_ERROR: hls.startLoad(); break;
-                        case Hls.ErrorTypes.MEDIA_ERROR: hls.recoverMediaError(); break;
-                        default: playStream(url, name, id); break;
-                    }
-                }
-            });
-        } else if (isTS && mpegts.getFeatureList().mseLivePlayback) {
-            mpegtsPlayer = mpegts.createPlayer({
-                type: 'mse',
-                isLive: true,
-                url: playbackUrl,
-                cors: true
-            }, {
-                enableWorker: true,
-                enableStashBuffer: false, // Low latency
-                stashInitialSize: 128,
-                lazyLoad: false
-            });
-            mpegtsPlayer.attachMediaElement(video);
-            mpegtsPlayer.load();
-            mpegtsPlayer.play().catch(() => {
-                // Fallback to direct video src if MSE fails
-                video.src = playbackUrl;
-                video.play().catch(e => console.error("Direct play failed", e));
-            });
-            mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
-                console.error("MPEGTS Error", type, detail, info);
-                // Auto-reconnect on TS error
-                setTimeout(() => playStream(url, name, id), 2000);
-            });
-        } else {
-            // Direct playback for MP4 or other native formats
-            video.src = playbackUrl;
-            video.play().catch(e => console.error("Native play failed", e));
-        }
         playerModal.show();
     }
 

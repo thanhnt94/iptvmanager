@@ -488,8 +488,7 @@ def play_channel(channel_id):
                 trusted.last_seen = db.func.now()
             db.session.commit()
 
-    # 3. SMART REDIRECT & PROXY LOGIC
-    # Determine if we should use the proxy based on proxy_type and stream format
+    # 3. SMART REDIRECT & PROXY LOGIC (The "Smart Brain")
     url_low = channel.stream_url.lower()
     format_low = (channel.stream_format or '').lower()
     
@@ -502,24 +501,36 @@ def play_channel(channel_id):
     enable_hls_proxy = SettingService.get('ENABLE_HLS_PROXY', True)
     
     proxy_type = getattr(channel, 'proxy_type', 'default')
-    use_proxy = False
     
-    if proxy_type == 'tvheadend':
-        use_proxy = True
-    elif proxy_type == 'direct':
-        use_proxy = False
-    else: 
-        # Default mode with specific format toggles
-        if is_hls:
-            use_proxy = enable_hls_proxy or enable_stats
-        elif is_ts:
-            use_proxy = enable_ts_proxy or enable_stats
-
-    if use_proxy:
-        if is_hls:
-            return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token))
+    # 3.1 Force Modes (If user explicitly set them)
+    if proxy_type == 'hls':
+        return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token))
+    elif proxy_type == 'ts' or proxy_type == 'tvheadend':
         return redirect(url_for('channels.proxy_stream', url=channel.stream_url, token=token, channel_id=channel.id))
+    elif proxy_type == 'tracking':
+        return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
+    elif proxy_type == 'direct' or proxy_type == 'none':
+        return redirect(channel.stream_url)
         
+    # 3.2 Smart "Default" Mode Logic
+    if is_hls:
+        if enable_hls_proxy:
+            # Full HLS Proxy with Caching
+            return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token))
+        elif enable_stats:
+            # Fallback to Tracking only (No proxy, but server still knows who is watching)
+            return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
+    elif is_ts:
+        if enable_ts_proxy:
+            # Full TS Singleton Proxy
+            return redirect(url_for('channels.proxy_stream', url=channel.stream_url, token=token, channel_id=channel.id))
+        elif enable_stats:
+            # Fallback to Tracking
+            return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
+    
+    # Final Fallback: Direct Play
+    if enable_stats:
+        return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
     return redirect(channel.stream_url)
 
 @channels_bp.route('/api/stats/<int:channel_id>')
@@ -845,68 +856,88 @@ def quick_add():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+def rewrite_hls_manifest(content, base_url, channel_id, token):
+    """Common helper to rewrite HLS manifest URLs to proxy URLs."""
+    lines = content.splitlines()
+    new_lines = []
+
+    for line in lines:
+        line = line.strip()
+        if not line: continue
+
+        if line.startswith('#'):
+            # Handle Encryption Keys
+            if 'URI=' in line:
+                import re
+                match = re.search(r'URI=["\']?(.*?)["\']?(?:,|$)', line)
+                if match:
+                    key_url = match.group(1)
+                    if not key_url.startswith('http'):
+                        if key_url.startswith('/'):
+                            from urllib.parse import urlparse
+                            p = urlparse(base_url) # base_url already contains host
+                            key_url = f"{p.scheme}://{p.netloc}{key_url}"
+                        else:
+                            key_url = base_url + key_url
+
+                    proxied_key = url_for('channels.proxy_hls_segment', channel_id=channel_id, url=key_url, token=token, _external=True)
+                    line = line.replace(match.group(1), proxied_key)
+            new_lines.append(line)
+        else:
+            # It's a segment or variant playlist
+            seg_url = line
+            if not seg_url.startswith('http'):
+                if seg_url.startswith('/'):
+                    from urllib.parse import urlparse
+                    p = urlparse(base_url)
+                    seg_url = f"{p.scheme}://{p.netloc}{seg_url}"
+                else:
+                    seg_url = base_url + seg_url
+
+            new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
+
+    return "\n".join(new_lines)
+
 @channels_bp.route('/api/proxy_hls_manifest')
 def proxy_hls_manifest():
     from app.modules.settings.services import SettingService
     if not SettingService.get('ENABLE_HLS_PROXY', True):
         return "HLS Proxy is currently disabled.", 403
-        
+
     token = request.args.get('token')
     username = validate_proxy_access(token)
     if not username:
         return "Unauthorized", 401
-        
+
     channel_id = request.args.get('channel_id')
     channel = Channel.query.get_or_404(channel_id)
-    
-    # URL Priority: explicit param > channel default
+
     url = request.args.get('url') or channel.stream_url
     if not url:
         return "No URL provided", 400
-    
+
     from app.modules.settings.services import SettingService
     ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
     headers = { 'User-Agent': ua }
-    
+
     try:
         from app.modules.channels.services import ActiveSessionManager
-        # Estimate bandwidth for HLS Manifest request (initial ping)
         ActiveSessionManager.update_session(
             channel.id, username, request.remote_addr, 'Proxy (HLS)',
-            bandwidth_kbps=2048, # Default 2Mbps for HLS until segments flow
+            bandwidth_kbps=2048,
             user_agent=request.headers.get('User-Agent')
         )
-        
+
         resp = requests.get(url, headers=headers, timeout=10)
-        lines = resp.text.splitlines()
-        new_lines = []
-        
-        # Robust Base URL (remove bit after last slash, before query)
         pure_url = url.split('?')[0]
         base_url = pure_url.rsplit('/', 1)[0] + '/'
-        
-        for line in lines:
-            line = line.strip()
-            if not line: continue
-            
-            if not line.startswith('#'):
-                # It's a segment or variant playlist
-                seg_url = line
-                if not seg_url.startswith('http'):
-                    if seg_url.startswith('/'):
-                        # Absolute path on same host
-                        from urllib.parse import urlparse
-                        p = urlparse(url)
-                        seg_url = f"{p.scheme}://{p.netloc}{seg_url}"
-                    else:
-                        seg_url = base_url + seg_url
-                
-                # Rewrite to proxy
-                new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
-            else:
-                new_lines.append(line)
-        
-        return "\n".join(new_lines), 200, {'Content-Type': 'application/x-mpegURL'}
+
+        rewritten = rewrite_hls_manifest(resp.text, base_url, channel_id, token)
+        return Response(
+            rewritten, 
+            mimetype='application/vnd.apple.mpegurl',
+            headers={'Access-Control-Allow-Origin': '*'}
+        )
     except Exception as e:
         return str(e), 500
 
@@ -915,27 +946,25 @@ def proxy_hls_segment():
     from app.modules.settings.services import SettingService
     if not SettingService.get('ENABLE_HLS_PROXY', True):
         return "HLS Proxy is currently disabled.", 403
-        
+
     token = request.args.get('token')
     username = validate_proxy_access(token)
     if not username:
         return "Unauthorized", 401
-        
+
     channel_id = request.args.get('channel_id')
     url = request.args.get('url')
-    
+
     if not channel_id or not url:
         return "Missing params", 400
-        
+
     from app.modules.settings.services import SettingService
-    # Use standard browser UA to prevent 403 from strict IPTV panels
     default_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
     ua = SettingService.get('CUSTOM_USER_AGENT', default_ua)
     headers = { 'User-Agent': ua }
-    
+
     try:
         from app.modules.channels.services import ActiveSessionManager, HLSEngine
-        # Estimate bandwidth based on channel resolution
         from app.modules.channels.models import Channel
         ch = Channel.query.get(channel_id)
         bitrate = 2.0
@@ -944,48 +973,43 @@ def proxy_hls_segment():
             if '3840' in res or '4k' in res: bitrate = 25.0
             elif '1920' in res or '1080' in res: bitrate = 8.0
             elif '1280' in res or '720' in res: bitrate = 4.0
-            
+
         ActiveSessionManager.update_session(
             int(channel_id), username, request.remote_addr, 'Proxy (HLS)',
             bandwidth_kbps=int(bitrate * 1024),
             user_agent=request.headers.get('User-Agent')
         )
-        
+
         # 1. Check if it's a Variant Playlist (m3u8)
         if '.m3u8' in url.lower() or 'playlist' in url.lower():
-            # Must handle recursively just like the manifest
             resp = requests.get(url, headers=headers, timeout=10)
-            lines = resp.text.splitlines()
-            new_lines = []
             pure_url = url.split('?')[0]
             base_url = pure_url.rsplit('/', 1)[0] + '/'
-            
-            for line in lines:
-                line = line.strip()
-                if not line.startswith('#') and line:
-                    seg_url = line
-                    if not seg_url.startswith('http'):
-                        seg_url = base_url + seg_url
-                    new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
-                else:
-                    new_lines.append(line)
-            return "\n".join(new_lines), 200, {'Content-Type': 'application/x-mpegURL'}
+
+            rewritten = rewrite_hls_manifest(resp.text, base_url, channel_id, token)
+            return Response(
+                rewritten, 
+                mimetype='application/vnd.apple.mpegurl',
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
 
         # 2. It's a Media Segment (ts, m4s). Use Cache Engine.
         data = HLSEngine.get_segment(url, headers=headers)
-        
+
         if data:
-            # Track duration (approximation: 5-10 seconds per segment request)
-            channel = Channel.query.get(channel_id)
-            if channel:
-                channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 8 
+            if ch:
+                ch.total_watch_seconds = (ch.total_watch_seconds or 0) + 8 
                 db.session.commit()
-            
+
             content_type = 'video/mp2t'
             if url.lower().endswith('.m4s'): content_type = 'video/iso.segment'
             if url.lower().endswith('.aac'): content_type = 'audio/aac'
-            
-            return Response(data, content_type=content_type)
+
+            return Response(
+                data, 
+                content_type=content_type,
+                headers={'Access-Control-Allow-Origin': '*'}
+            )
         else:
             return redirect(url)
 

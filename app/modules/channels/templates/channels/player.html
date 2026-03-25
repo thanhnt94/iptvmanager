@@ -74,7 +74,7 @@
                         </div>
                     </div>
 
-                    <div id="playbackOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none">
+                    <div id="playbackOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none" style="pointer-events: none; z-index: 1005;">
                         <div class="spinner-grow text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
                         <h5 class="fw-bold text-white letter-spacing-1">BUFFERING...</h5>
                     </div>
@@ -118,7 +118,6 @@
                                     </div>
 
                                     <span id="formatBadge" class="badge bg-white bg-opacity-25 text-white border-0 px-2 py-1" style="font-size: 0.65rem; min-width: 45px;">TYPE</span>
-                                    <span id="shieldIcon" class="d-none ms-1" title="Safety System Active"><i class="bi bi-shield-fill-check text-info fs-5"></i></span>
                                     <span class="small fw-bold border-end border-white border-opacity-25 pe-4 quality-span">
                                         <i class="bi bi-speedometer2 me-2"></i> <span id="qualityLabel">Checking...</span>
                                     </span>
@@ -768,14 +767,52 @@
         if (h > 0) return `${h}:${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
         return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
     }
-    function playStream(url, metaInput = {}) {
+    function playStream(url, metaInput = {}, forcedType = null) {
         // Handle metaInput which can be a DOM element or a plain object
         const meta = metaInput && metaInput.dataset ? {...metaInput.dataset} : {...metaInput};
         
         // Normalize for consistent detection (handles both API snake_case and Dataset camelCase)
         const sId = meta.id || meta.id_ || '';
-        const sourceUrl = meta.stream_url || meta.streamUrl || meta.url || url || '';
+        const streamUrl = meta.stream_url || meta.streamUrl || meta.url || url || '';
+        const lowSourceUrl = (streamUrl || "").toLowerCase();
         const sType = meta.stream_type || meta.streamType || 'live';
+        const isHlsDetected = lowSourceUrl.includes('.m3u8') || lowSourceUrl.includes('playlist') || lowSourceUrl.includes('hls');
+        const isTsDetected = lowSourceUrl.includes('.ts') || lowSourceUrl.includes('mpegts') || lowSourceUrl.includes('type=ts');
+        const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv'].some(ext => lowSourceUrl.includes(ext));
+
+        let playbackUrl = streamUrl;
+        let pEngine = 'native';
+
+        if (forcedType === 'default' || !forcedType) {
+            // THE SMART GATEWAY
+            playbackUrl = `${window.location.origin}/channels/play/${sId}?token=${userApiToken}`;
+            if (isHlsDetected) pEngine = 'hls';
+            else if (isTsDetected || sType === 'iptv' || sType === 'live') pEngine = 'ts';
+            else pEngine = 'native';
+        } else if (forcedType === 'none') {
+            playbackUrl = streamUrl;
+            if (isHlsDetected) pEngine = 'hls';
+            else if (isTsDetected || sType === 'iptv' || sType === 'live') pEngine = 'ts';
+            else pEngine = 'native';
+        } else if (forcedType === 'tracking') {
+            playbackUrl = `${window.location.origin}/channels/track/${sId}?token=${userApiToken}`;
+            pEngine = isHlsDetected ? 'hls' : (isTsDetected || sType !== 'vod' ? 'ts' : 'native');
+        } else if (forcedType === 'hls') {
+            playbackUrl = `${window.location.origin}/channels/api/proxy_hls_manifest?channel_id=${sId}&token=${userApiToken}`;
+            pEngine = 'hls';
+        } else if (forcedType === 'ts') {
+            playbackUrl = `${window.location.origin}/channels/play/${sId}?token=${userApiToken}`;
+            pEngine = 'ts';
+        }
+        
+        if (!playbackUrl) {
+            console.warn("playStream: No URL to play");
+            overlay.innerHTML = '<div class="text-warning"><h5>NO STREAM URL</h5></div>';
+            return;
+        }
+
+        const isHls = pEngine === 'hls';
+        const isMpegTS = pEngine === 'ts';
         const sName = meta.name || '';
         const sGroup = meta.group || '';
         const sLogo = meta.logo || '';
@@ -816,37 +853,8 @@
             window.heartbeatInterval = setInterval(() => sendPing(10), 10000);
         }
         
-        const lowSourceUrl = sourceUrl.toLowerCase();
-        const isIPTV = sType === 'iptv' || sType === 'live';
-        const isMovieFile = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv'].some(ext => lowSourceUrl.includes(ext));
-        const finalSType = (isIPTV && isMovieFile) ? 'vod' : sType;
-
-        // Detection based on ORIGINAL source
-        const hasHlsSign = lowSourceUrl.includes('m3u8') || lowSourceUrl.includes('playlist') || lowSourceUrl.includes('/hls') || lowSourceUrl.includes('chunklist') || lowSourceUrl.includes('.m3u');
-        const hasTsSign = lowSourceUrl.includes('.ts') || lowSourceUrl.includes('mpegts') || lowSourceUrl.includes('type=ts');
-        const isHls = hasHlsSign;
-        const isMpegTS = hasTsSign || (isIPTV && !isHls);
-        
-        // SMART PROXY WRAPPING: 
-        // Always wrap .ts links with our high-performance proxy to prevent "3-second cutoff"
-        let playbackUrl = url || sourceUrl;
-        
-        // Prevent double proxying
-        const isAlreadyProxied = playbackUrl.includes('/channels/api/proxy');
-        
-        if (isMpegTS && !isAlreadyProxied) {
-            console.log("MPEG-TS detected: Forcing Proxy Relay for stability...");
-            // Use encodeURIComponent to safely wrap the original URL and include the token
-            playbackUrl = `/channels/api/proxy?url=${encodeURIComponent(playbackUrl)}&token=${userApiToken}`;
-            const shieldIcon = document.getElementById('shieldIcon');
-            if (shieldIcon) shieldIcon.classList.remove('d-none'); // Show shield
-        }
-        
+        // sType already defined above
         currentStreamUrl = playbackUrl; // Global tracking for refresh
-        
-        // UI Updates
-        if (finalSType === 'vod') vodControl.classList.remove('d-none');
-        else vodControl.classList.add('d-none');
         
         if (sId) window.history.replaceState({}, '', `?id=${sId}`);
 
@@ -854,9 +862,6 @@
         infoBar.dataset.currentId = sId;
         infoBar.dataset.status = 'checking'; 
         
-        const statusLabel = document.getElementById('statusLabel');
-        const shieldIcon = document.getElementById('shieldIcon');
-        if (shieldIcon) shieldIcon.classList.add('d-none');
         if (statusLabel) {
             statusLabel.innerText = 'CHECKING...';
             statusLabel.className = 'badge bg-secondary';
@@ -876,7 +881,7 @@
         
         const formatBadge = document.getElementById('formatBadge');
         if (formatBadge) {
-            const detectUrl = sourceUrl || playbackUrl;
+            const detectUrl = playbackUrl || streamUrl;
             let extension = detectUrl.split('?')[0].split('.').pop().toUpperCase();
             if (extension.length > 5 || extension.includes('/') || extension === 'PLAY' || !isNaN(extension)) {
                 if (isHls) extension = 'HLS';
@@ -892,10 +897,10 @@
             else formatBadge.className = 'badge bg-secondary text-white';
         }
 
-        if (finalSType) {
-            streamTypeBadge.innerText = finalSType.toUpperCase();
+        if (sType) {
+            streamTypeBadge.innerText = sType.toUpperCase();
             streamTypeBadge.style.display = 'inline-block';
-            streamTypeBadge.className = `badge rounded-pill ${finalSType === 'vod' ? 'bg-warning text-dark' : 'bg-info text-dark'} border-0 px-3 py-1 shadow-sm fw-bold`;
+            streamTypeBadge.className = `badge rounded-pill ${sType === 'vod' ? 'bg-warning text-dark' : 'bg-info text-dark'} border-0 px-3 py-1 shadow-sm fw-bold`;
         } else {
             streamTypeBadge.style.display = 'none';
         }
@@ -928,13 +933,9 @@
                 });
                 hls.on(Hls.Events.ERROR, function (event, data) {
                     if (data.fatal) {
-                        console.warn("HLS fatal error, status:", infoBar.dataset.status);
-                        // If still checking, just wait for the check to finish or try fallback
-                        if (infoBar.dataset.status === 'checking') {
-                             console.log("Still checking, skipping early HLS error.");
-                        } else {
-                             tryBridgeFallback(playbackUrl, meta);
-                        }
+                        console.warn("HLS fatal error:", data.type);
+                        overlay.classList.remove('d-none');
+                        overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM ERROR</h5><p class="small opacity-75">HLS playback failed. Try another source.</p></div>';
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -965,98 +966,26 @@
                 mpegtsPlayer.play().then(() => {
                     overlay.classList.add('d-none');
                     updateStatusToLive(infoBar.dataset.currentId);
-                }).catch(e => {
-                    console.warn("MPEG-TS Play failed, trying fallback:", e);
-                    tryNativeFallback(playbackUrl, meta);
-                });
+                }).catch(e => console.warn(e));
                 
                 mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
-                    console.warn("mpegts error, status:", infoBar.dataset.status);
-                    if (infoBar.dataset.status === 'checking') {
-                         console.log("Still checking, skipping early TS error.");
-                    } else {
-                         tryBridgeFallback(playbackUrl, meta);
-                    }
+                    console.warn("MPEG-TS error:", type, detail);
+                    overlay.classList.remove('d-none');
+                    overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>STREAM ERROR</h5><p class="small opacity-75">TS playback failed. Try another source.</p></div>';
                 });
             } catch (e) {
                 console.error("MPEG-TS Init failed:", e);
-                tryNativeFallback(playbackUrl, meta);
+                overlay.classList.remove('d-none');
+                overlay.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle display-4 mb-3"></i><h5>INIT ERROR</h5></div>';
             }
         } else {
-            tryNativeFallback(playbackUrl, meta);
+            // Direct playback for MP4 or other native formats
+            video.src = playbackUrl;
+            video.play().then(() => overlay.classList.add('d-none')).catch(e => {
+                overlay.classList.remove('d-none');
+                overlay.innerHTML = '<div class="text-danger"><h5>NATIVE PLAYBACK FAILED</h5></div>';
+            });
         }
-    }
-
-    function tryNativeFallback(url, meta = {}) {
-        // NATIVE DIRECT PLAYBACK (For MP4/VOD or TS fallback)
-        video.src = url;
-        video.load();
-        
-        // Internal Error listener for Native Fallback
-        const onNativeError = () => {
-            video.removeEventListener('error', onNativeError);
-            console.warn("Native playback failed, current status:", infoBar.dataset.status);
-            
-            if (infoBar.dataset.status === 'checking') {
-                 console.log("Still checking, suppressing early Native error UI.");
-            } else {
-                 tryBridgeFallback(url, meta);
-            }
-        };
-        video.addEventListener('error', onNativeError);
-
-        video.play().then(() => {
-            video.removeEventListener('error', onNativeError);
-            overlay.classList.add('d-none');
-            const activeId = document.getElementById('channelInfo').dataset.currentId;
-            updateStatusToLive(activeId);
-        }).catch(e => {
-            // Already handled by onNativeError or will be
-        });
-    }
-
-    function tryBridgeFallback(url, meta) {
-        if (fallbackTriggered) {
-             console.error("Fallback already tried and failed.");
-             overlay.innerHTML = '<div class="text-warning"><i class="bi bi-patch-question display-4 mb-3"></i><h5>INCOMPATIBLE FORMAT</h5><p class="small opacity-75">Try "Play with VLC" for maximum compatibility.</p></div>';
-             return;
-        }
-        fallbackTriggered = true;
-        
-        const shieldIcon = document.getElementById('shieldIcon');
-        if (shieldIcon) shieldIcon.classList.remove('d-none'); // Show active shield
-        
-        console.log("Activating Auto-Bridge (Proxy) Fallback for link...");
-        const bridgeUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}`;
-        
-        overlay.innerHTML = '<div class="spinner-border text-info" role="status"></div><div class="mt-3 fw-bold text-white letter-spacing-1">ACTIVATING BRIDGE...</div>';
-        
-        setTimeout(() => {
-            currentStreamUrl = bridgeUrl;
-            const isHls = url.toLowerCase().includes('m3u8');
-            const isTS = url.toLowerCase().includes('.ts') || url.toLowerCase().includes('mpegts');
-
-            if (isHls && Hls.isSupported()) {
-                if (hls) hls.destroy();
-                hls = new Hls();
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(bridgeUrl));
-                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
-                hls.on(Hls.Events.ERROR, (e, d) => { if(d.fatal) tryNativeFallback(bridgeUrl, meta); });
-            } else if (isTS && mpegts.getFeatureList().mseLivePlayback) {
-                if (mpegtsPlayer) mpegtsPlayer.destroy();
-                mpegtsPlayer = mpegts.createPlayer({ type: 'mse', isLive: true, url: bridgeUrl });
-                mpegtsPlayer.attachMediaElement(video);
-                mpegtsPlayer.load();
-                mpegtsPlayer.play().then(() => overlay.classList.add('d-none')).catch(() => tryNativeFallback(bridgeUrl, meta));
-            } else {
-                video.src = bridgeUrl;
-                video.load();
-                video.play().then(() => overlay.classList.add('d-none')).catch(() => {
-                    overlay.innerHTML = '<div class="text-warning"><i class="bi bi-patch-question display-4 mb-3"></i><h5>INCOMPATIBLE FORMAT</h5><p class="small opacity-75">Try "Play with VLC" for maximum compatibility.</p></div>';
-                });
-            }
-        }, 500);
     }
 
     // Search Logic
@@ -1114,7 +1043,9 @@
     }
     
     playerArea.addEventListener('mousemove', showHUD);
-    playerArea.addEventListener('touchstart', showHUD);
+    playerArea.addEventListener('click', showHUD);
+    playerArea.addEventListener('contextmenu', showHUD);
+    playerArea.addEventListener('touchstart', showHUD, {passive: true});
     playerArea.addEventListener('mouseleave', hideHUD);
     
     infoBar.addEventListener('mouseenter', () => {
@@ -1290,8 +1221,6 @@
         // Note: isMpegTS and currentStreamUrl are accessible here if globally defined
         if (typeof isMpegTS !== 'undefined' && isMpegTS && !video.ended) {
             console.log("Live TS paused, performing auto-refresh to stay live...");
-            const shieldIcon = document.getElementById('shieldIcon');
-            if (shieldIcon) shieldIcon.classList.remove('d-none'); // Feature in use
             
             setTimeout(() => {
                 if (video.paused && currentStreamUrl) {

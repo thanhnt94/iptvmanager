@@ -1,0 +1,90 @@
+<!-- Shared IPTV Player Component -->
+<div id="iptv-player-container" class="iptv-player-container border rounded bg-dark overflow-hidden shadow-lg position-relative">
+    <!-- Overlay for Buffering/Errors -->
+    <div id="iptv-player-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-black bg-opacity-75 d-none" style="z-index: 10;">
+        <div class="spinner-border text-primary mb-3"></div>
+        <div id="iptv-player-status" class="small fw-bold text-white-50 text-center px-3 text-uppercase">CONNECTING...</div>
+    </div>
+
+    <!-- Video Element -->
+    <div class="ratio ratio-16x9 bg-black d-flex align-items-center justify-content-center">
+        <video id="iptv-video-element" class="w-100 h-100" playsinline></video>
+    </div>
+
+    <!-- HUD (Heads-Up Display) / Controls -->
+    <div id="iptv-player-hud" class="position-absolute bottom-0 start-0 w-100 p-3 opacity-0 transition-opacity" style="background: linear-gradient(0deg, rgba(0,0,0,0.8), transparent); z-index: 5; transition: opacity 0.3s;">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex gap-3 align-items-center">
+                <button id="iptv-play-pause" class="btn btn-link text-white p-0 fs-4 shadow-none"><i class="bi bi-play-fill"></i></button>
+                <div class="d-flex align-items-center gap-2">
+                    <button id="iptv-mute" class="btn btn-link text-white p-0 fs-5 shadow-none"><i class="bi bi-volume-up-fill"></i></button>
+                    <input type="range" id="iptv-volume-slider" class="form-range d-none d-md-inline-block" style="width: 80px;" min="0" max="1" step="0.1" value="1">
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span id="iptv-badge-live" class="badge bg-danger rounded-pill px-2 py-1 small fw-bold" style="font-size: 0.65rem;">LIVE</span>
+                <button id="iptv-fullscreen" class="btn btn-link text-white p-0 fs-5 shadow-none"><i class="bi bi-fullscreen"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .iptv-player-container:hover #iptv-player-hud { opacity: 1 !important; }
+    .transition-opacity { transition: opacity 0.3s ease-in-out; }
+    #iptv-video-element::-webkit-media-controls { display:none !important; }
+</style>
+
+<script>
+/**
+ * UI Logic for the Shared Component
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const video = document.getElementById('iptv-video-element');
+    const hud = document.getElementById('iptv-player-hud');
+    const playBtn = document.getElementById('iptv-play-pause');
+    const muteBtn = document.getElementById('iptv-mute');
+    const volSlider = document.getElementById('iptv-volume-slider');
+    const fsBtn = document.getElementById('iptv-fullscreen');
+    const container = document.getElementById('iptv-player-container');
+
+    // 1. Play/Pause
+    const togglePlay = () => video.paused ? video.play() : video.pause();
+    playBtn.onclick = togglePlay;
+    video.onclick = togglePlay;
+
+    video.onplay = () => playBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
+    video.onpause = () => playBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
+
+    // 2. Volume
+    muteBtn.onclick = () => {
+        video.muted = !video.muted;
+        muteBtn.innerHTML = video.muted ? '<i class="bi bi-volume-mute-fill"></i>' : '<i class="bi bi-volume-up-fill"></i>';
+    };
+    volSlider.oninput = (e) => {
+        video.volume = e.target.value;
+        video.muted = false;
+        muteBtn.innerHTML = video.volume == 0 ? '<i class="bi bi-volume-mute-fill"></i>' : '<i class="bi bi-volume-up-fill"></i>';
+    };
+
+    // 3. Fullscreen
+    fsBtn.onclick = () => {
+        if (!document.fullscreenElement) {
+            container.requestFullscreen().catch(err => alert(`Error: ${err.message}`));
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    // 4. HUD Auto-hide
+    let hudTimeout;
+    const showHUD = () => {
+        hud.style.opacity = '1';
+        clearTimeout(hudTimeout);
+        hudTimeout = setTimeout(() => { if(!video.paused) hud.style.opacity = '0'; }, 3000);
+    };
+    container.onmousemove = showHUD;
+    container.onclick = showHUD;
+    video.onplaying = showHUD;
+});
+</script>

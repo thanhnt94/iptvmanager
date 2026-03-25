@@ -41,19 +41,19 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-bold text-primary"><i class="bi bi-cpu-fill me-1"></i>Playback & Proxy Mode</label>
-                    <select name="proxy_type" class="form-select shadow-sm border-primary">
-                        <option value="none" selected>Original (Direct, No Tracking)</option>
-                        <option value="tracking">Web Tracking (Redirect)</option>
-                        <option value="hls">HLS Caching Proxy (RAM Buffer)</option>
-                        <option value="ts">MPEG-TS Singleton Proxy (TVHeadend-style)</option>
-                    </select>
-                    <div class="form-text mt-2">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <b>Note:</b> This sets the default link type used in your generated playlists.
-                    </div>
+                   <label class="form-label fw-bold text-primary"><i class="bi bi-cpu-fill me-1"></i>Playback & Proxy Mode</label>
+                   <select name="proxy_type" class="form-select shadow-sm border-primary">
+                       <option value="default" selected>🚀 Smart Gateway (Recommended - Auto Proxy/Stats)</option>
+                       <option value="none">Original (Direct, No Tracking)</option>
+                       <option value="tracking">Web Tracking (Redirect Only)</option>
+                       <option value="hls">HLS Caching Proxy (RAM Buffer)</option>
+                       <option value="ts">MPEG-TS Singleton Proxy (TVHeadend-style)</option>
+                   </select>
+                   <div class="form-text mt-2">
+                       <i class="bi bi-info-circle me-1"></i>
+                       <b>Note:</b> Smart mode chooses the best method based on format and global settings.
+                   </div>
                 </div>
-
                 <div class="mb-4">
                     <label class="form-label fw-bold">Playlist Memberships & Groups</label>
                     <div class="border rounded bg-light" style="max-height: 350px; overflow-y: auto;">
@@ -121,12 +121,7 @@
                         <span class="text-white small fw-bold">LIVE PREVIEW</span>
                         <button class="btn btn-xs btn-outline-light py-0 px-2" id="reloadPlayer" style="font-size: 0.7rem;">Reload</button>
                     </div>
-                    <div class="ratio ratio-16x9 bg-black d-flex align-items-center justify-content-center">
-                        <video id="videoPlayer" class="w-100 h-100" playsinline></video>
-                        <!-- Buffering Overlay -->
-                        <div id="playerOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none">
-                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                        </div>
+                    {% include "_player_component.html" %}
                     </div>
                     <div id="playerStatus" class="p-2 text-center text-white-50 small" style="font-size: 0.75rem;">
                         Waiting for URL...
@@ -151,9 +146,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const streamInput = document.getElementById('streamUrlInput');
     const logoInput = document.getElementById('logoUrlInput');
     const logoPreview = document.getElementById('logoPreview');
-    const video = document.getElementById('videoPlayer');
-    const playerStatus = document.getElementById('playerStatus');
-    const overlay = document.getElementById('playerOverlay');
+    const video = document.getElementById('iptv-video-element');
+    const playerStatus = document.getElementById('iptv-player-status');
+    const overlay = document.getElementById('iptv-player-overlay');
     const reloadBtn = document.getElementById('reloadPlayer');
     const userApiToken = "{{ current_user.api_token }}";
     
@@ -174,59 +169,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        playerStatus.textContent = "Loading stream...";
-        overlay.classList.remove('d-none');
-        
-        // Cleanup
-        if (hls) { hls.destroy(); hls = null; }
-        if (mpegtsPlayer) { mpegtsPlayer.destroy(); mpegtsPlayer = null; }
-        video.pause();
-        video.src = "";
-
-        const lowUrl = url.toLowerCase();
-        const isHls = lowUrl.includes('.m3u8') || lowUrl.includes('playlist');
-        const isTS = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts');
-
-        let playbackUrl = url;
-        // Auto-proxy TS for preview stability
-        if (isTS && !url.includes('/api/proxy')) {
-            playbackUrl = `/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`;
-        }
-
-        if (isHls && Hls.isSupported()) {
-            hls = new Hls({ enableWorker: true });
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(playbackUrl));
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play().catch(()=>{});
-                playerStatus.textContent = "Streaming live (HLS)...";
-            });
-            hls.on(Hls.Events.ERROR, (e, data) => {
-                if (data.fatal) {
-                    playerStatus.innerHTML = `<span class="text-danger">Failed to load HLS. Trying Proxy...</span>`;
-                    if (!playbackUrl.includes('/api/proxy')) {
-                        loadStream(`/channels/api/proxy?url=${encodeURIComponent(url)}&token=${userApiToken}`);
-                    }
-                }
-            });
-        } else if (isTS && mpegts.getFeatureList().mseLivePlayback) {
-            mpegtsPlayer = mpegts.createPlayer({ type: 'mse', isLive: true, url: playbackUrl });
-            mpegtsPlayer.attachMediaElement(video);
-            mpegtsPlayer.load();
-            mpegtsPlayer.play().then(() => {
-                playerStatus.textContent = "Streaming live (TS)...";
-            }).catch(() => {
-                video.src = playbackUrl;
-                video.play().catch(()=>{});
-            });
-        } else {
-            video.src = playbackUrl;
-            video.play().then(() => {
-                playerStatus.textContent = "Streaming live (Direct)...";
-            }).catch(()=>{
-                playerStatus.innerHTML = `<span class="text-warning">Format not supported by browser.</span>`;
-            });
-        }
+        // Use Common Engine
+        window.IPTVPlayer.play(video, {
+            id: null, // Preview mode, no ID for heartbeats
+            url: url,
+            name: "Preview",
+            forcedType: 'none', // Direct link for preview
+            token: userApiToken,
+            overlay: overlay,
+            statusLabel: playerStatus
+        });
     }
 
     video.addEventListener('playing', () => overlay.classList.add('d-none'));

@@ -94,19 +94,22 @@ class PlaylistService:
             for ch in channels:
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch.name}'
                 m3u_lines.append(extinf)
-                # Wrap the stream URL based on channel's proxy_type
-                wrapper_params = {'channel_id': ch.id, '_external': True}
-                if token: wrapper_params['token'] = token
+                # ALL CHANNELS NOW USE THE SMART GATEWAY BY DEFAULT
+                wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
                 
-                ptype = ch.proxy_type or 'none'
-                if ptype == 'none':
+                ptype = ch.proxy_type or 'default'
+                
+                if ptype == 'none' or ptype == 'direct':
+                    # Only use raw URL if explicitly set to direct
                     wrapper_url = ch.stream_url
                 elif ptype == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
                 elif ptype == 'hls':
                     wrapper_url = url_for('channels.proxy_hls_manifest', **wrapper_params)
-                else: # 'ts'
+                else: # 'default' or 'ts'
+                    # The Smart Brain Gateway
                     wrapper_url = url_for('channels.play_channel', **wrapper_params)
+                
                 m3u_lines.append(wrapper_url)
         else:
             # Regular playlist uses its entries
@@ -117,19 +120,22 @@ class PlaylistService:
                 group_name = entry.group.name if entry.group else ch.group_name or ""
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch.name}'
                 m3u_lines.append(extinf)
-                # Wrap the stream URL based on channel's proxy_type
-                wrapper_params = {'channel_id': ch.id, '_external': True}
-                if token: wrapper_params['token'] = token
+                # ALL CHANNELS NOW USE THE SMART GATEWAY BY DEFAULT
+                wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
                 
-                ptype = ch.proxy_type or 'none'
-                if ptype == 'none':
+                ptype = ch.proxy_type or 'default'
+                
+                if ptype == 'none' or ptype == 'direct':
+                    # Only use raw URL if explicitly set to direct
                     wrapper_url = ch.stream_url
                 elif ptype == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
                 elif ptype == 'hls':
                     wrapper_url = url_for('channels.proxy_hls_manifest', **wrapper_params)
-                else: # 'ts'
+                else: # 'default' or 'ts'
+                    # The Smart Brain Gateway
                     wrapper_url = url_for('channels.play_channel', **wrapper_params)
+                
                 m3u_lines.append(wrapper_url)
             
         return "\n".join(m3u_lines)
