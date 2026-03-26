@@ -15,7 +15,7 @@ window.IPTVPlayer = {
      * @param {Object} config { id, url, name, stream_type, forcedType, token, overlayElement, statusElement }
      */
     play: function(videoElement, config, isRetry = false) {
-        const { id, url, name, stream_type, stream_format, forcedType, token, overlay, statusLabel } = config;
+        const { id, url, name, stream_type, stream_format, forcedType, token, overlay, statusLabel, onError, onStall } = config;
         console.log(`[IPTVPlayer] ${isRetry ? 'Retrying' : 'Starting'} playback for: ${name} (ID: ${id})`);
         
         // 1. Logic Cleanup
@@ -181,6 +181,7 @@ window.IPTVPlayer = {
                 }).catch(err => {
                     if (statusLabel) statusLabel.innerText = "TS PLAY ERROR";
                     if (overlay) overlay.classList.remove('d-none');
+                    if (onError) onError(err);
                 });
             } else {
                 videoElement.src = playbackUrl;
@@ -190,16 +191,20 @@ window.IPTVPlayer = {
                 }).catch(err => {
                     if (statusLabel) statusLabel.innerText = "CANNOT PLAY STREAM";
                     if (overlay) overlay.classList.remove('d-none');
+                    if (onError) onError(err);
                 });
             }
         } catch (err) {
             console.error("Player Engine Error:", err);
             if (statusLabel) statusLabel.innerText = err.message;
             if (overlay) overlay.classList.remove('d-none');
+            if (onError) onError(err);
         }
 
-        // 7. Video Element listeners for stalls (with debounce)
+        // 7. Video Element listeners for stalls (with nested logic)
         let bufferingTimer = null;
+        let stallSuggestionTimer = null;
+        
         videoElement.onwaiting = () => {
              if (bufferingTimer) return;
              bufferingTimer = setTimeout(() => {
@@ -208,18 +213,37 @@ window.IPTVPlayer = {
                     if (overlay) overlay.classList.remove('d-none');
                 }
                 bufferingTimer = null;
-             }, 800); // Only show overlay if stuck for > 800ms
+             }, 800); 
+
+             // Suggest VLC if stalling for > 5s
+             if (!stallSuggestionTimer) {
+                 stallSuggestionTimer = setTimeout(() => {
+                     if (videoElement.readyState < 3 && !videoElement.paused) {
+                         if (onStall) onStall("Performance issue detected");
+                     }
+                 }, 5000);
+             }
         };
+
+        videoElement.onerror = (e) => {
+            if (!videoElement.src || videoElement.src === window.location.href || videoElement.src.length < 5) return;
+            const err = videoElement.error;
+            console.error("[IPTVPlayer] Video Element Error:", err);
+            if (onError) onError(err);
+        };
+
         videoElement.onplaying = () => {
              if (bufferingTimer) { clearTimeout(bufferingTimer); bufferingTimer = null; }
+             if (stallSuggestionTimer) { clearTimeout(stallSuggestionTimer); stallSuggestionTimer = null; }
              if (overlay) overlay.classList.add('d-none');
              if (statusLabel && !statusLabel.innerText.includes('LIVE')) {
                   statusLabel.innerText = "LIVE";
              }
         };
+
         videoElement.onstalled = () => {
-             // onstalled is often too sensitive, just log it
              console.log("[IPTVPlayer] Stream stalled");
+             // Stalled doesn't always mean "broken", but we should notify if it lasts
         };
     },
     
@@ -244,8 +268,12 @@ window.IPTVPlayer = {
         }
         if (videoElement) {
             videoElement.pause();
+            videoElement.onwaiting = null;
+            videoElement.onplaying = null;
+            videoElement.onerror = null;
+            videoElement.onstalled = null;
             videoElement.src = "";
-            videoElement.load();
+            try { videoElement.load(); } catch(e) {}
         }
         this.currentId = null;
     }

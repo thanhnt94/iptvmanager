@@ -74,9 +74,15 @@
                         </div>
                     </div>
 
-                    <div id="playbackOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none" style="pointer-events: none; z-index: 1005;">
-                        <div class="spinner-grow text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
+                    <div id="playbackOverlay" class="position-absolute top-50 start-50 translate-middle text-center d-none" style="z-index: 1005;">
+                        <div id="iptv-player-spinner" class="spinner-border text-primary mb-3" style="width: 2.5rem; height: 2.5rem;"></div>
                         <h5 class="fw-bold text-white letter-spacing-1" id="iptv-player-status">BUFFERING...</h5>
+                        <div id="vlcFallback" class="mt-3 d-none">
+                            <button id="vlcFallbackBtn" class="btn btn-warning fw-bold px-4 py-2 shadow-lg hvr-grow">
+                                <i class="bi bi-play-btn-fill me-2"></i>MỞ BẰNG VLC
+                            </button>
+                            <div class="text-white-50 small mt-2">Dùng VLC để có độ ổn định cao nhất</div>
+                        </div>
                     </div>
                 </div>
 
@@ -461,7 +467,8 @@
     let currentStreamUrl = null;
     let currentStatusController = null;
     let fallbackTriggered = false;
-    const initialChannelId = {{ initial_id | tojson | safe if initial_id else 'null' }};
+    let playbackAbortController = null;
+    const initialChannelId = parseInt("{{ initial_id or 'null' }}") || null;
     const userApiToken = "{{ current_user.api_token if current_user.is_authenticated else '' }}";
     let isMpegTS = false;
     let isHls = false;
@@ -769,73 +776,114 @@
         if (h > 0) return `${h}:${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
         return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
     }
-    function playStream(url, metaInput = {}, forcedType = null) {
+    async function playStream(url, metaInput = {}, forcedType = null) {
         const meta = metaInput && metaInput.dataset ? {...metaInput.dataset} : (typeof metaInput === 'string' ? {name: metaInput} : {...metaInput});
         const sId = meta.id || meta.id_ || '';
         const sName = meta.name || '';
-        const sType = meta.stream_type || meta.streamType || 'live';
         
-        forcedType = forcedType || sourceSelector.value;
+        // 1. Abort previous & Cleanup
+        if (playbackAbortController) playbackAbortController.abort();
+        playbackAbortController = new AbortController();
+        const { signal } = playbackAbortController;
+
+        window.IPTVPlayer.stop(video);
+
+        // 2. Immediate UI Reset (After stop, so listeners can't overwrite)
         currentStreamUrl = url;
+        forcedType = forcedType || sourceSelector.value;
         
-        // Immediate UI Reset
         idleScreen.classList.add('d-none');
         videoContainer.classList.remove('d-none');
         infoBar.classList.remove('d-none');
         
-        // Reset Overlay to default spinner state
-        overlay.innerHTML = `
-            <div class="spinner-grow text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
-            <h5 class="fw-bold text-white letter-spacing-1" id="iptv-player-status">CONNECTING...</h5>
-        `;
+        const statusLabel = document.getElementById('iptv-player-status');
+        const spinner = document.getElementById('iptv-player-spinner');
+        const vlcFallback = document.getElementById('vlcFallback');
+        const vlcFallbackBtn = document.getElementById('vlcFallbackBtn');
+
+        vlcFallback.classList.add('d-none');
         overlay.classList.remove('d-none');
+        spinner.classList.remove('d-none');
+        statusLabel.innerText = "VERIFYING STREAM...";
+        statusLabel.className = "fw-bold text-white letter-spacing-1";
+
+        // 3. Performing backend check (Check-First)
+        let freshMeta = {...meta};
+        try {
+            const checkResp = await fetch(`/channels/check/${sId}?ajax=1`, { 
+                method: 'POST',
+                signal: signal
+            });
+            const checkData = await checkResp.json();
+            
+            if (checkData.success) {
+                if (checkData.status === 'die') {
+                    statusLabel.innerText = "LINK BROKEN (SERVER OFFLINE)";
+                    statusLabel.className = "fw-bold text-danger letter-spacing-1";
+                    spinner.classList.add('d-none');
+                    vlcFallback.classList.remove('d-none');
+                    return; // Link broken, do not play
+                }
+                
+                // Update with fresh metadata from live check
+                freshMeta.stream_type = checkData.stream_type;
+                freshMeta.stream_format = checkData.stream_format;
+                console.log("[Player] Fresh Metadata Checked:", checkData);
+            }
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            console.warn("Check-First failed, falling back to cached metadata", err);
+        }
+
+        // 3. Update UI Info Bar - Using final values after Check
+        const sType = freshMeta.stream_type || 'live';
+        const sFormat = freshMeta.stream_format || '';
         
-        // Update Info Bar & Persist Metadata for Recovery
+        updateFormatBadge(url, false, false, sType, sId); // Temporary, engine will refine
+        
         infoBar.dataset.currentId = sId;
-        infoBar.dataset.name = sName;
-        infoBar.dataset.group = meta.group || 'General';
-        infoBar.dataset.logo = meta.logo || '';
-        infoBar.dataset.streamType = meta.streamType || '';
-        
-        document.getElementById('currentName').textContent = sName;
-        document.getElementById('currentGroup').textContent = meta.group || 'General';
-        document.getElementById('currentLogo').src = meta.logo || 'https://via.placeholder.com/100';
-        
-        // Use Global Engine
+        document.getElementById('currentName').innerText = sName;
+        document.getElementById('currentGroup').innerText = freshMeta.group || '';
+        document.getElementById('currentLogo').src = freshMeta.logo || 'https://via.placeholder.com/100';
+        document.getElementById('channelInfo').classList.remove('d-none');
+        document.getElementById('idleScreen').classList.add('d-none');
+        document.getElementById('videoContainer').classList.remove('d-none');
+
+        // 4. Start Playback
         window.IPTVPlayer.play(video, {
             id: sId,
             url: url,
             name: sName,
             stream_type: sType,
-            stream_format: meta.stream_format || '',
+            stream_format: sFormat,
             forcedType: forcedType,
             token: userApiToken,
-            overlay: document.getElementById('playbackOverlay'),
-            statusLabel: document.getElementById('iptv-player-status')
+            overlay: overlay,
+            statusLabel: statusLabel,
+            onError: (err) => {
+                statusLabel.innerText = "PLAYBACK ERROR";
+                statusLabel.className = "fw-bold text-danger letter-spacing-1";
+                spinner.classList.add('d-none');
+                vlcFallback.classList.remove('d-none');
+            },
+            onStall: (msg) => {
+                statusLabel.innerText = "STALLED - TRY VLC";
+                vlcFallback.classList.remove('d-none');
+            }
         });
 
-        // Toggle VOD Controls - Sync with engine detection
-        const isVod = sType === 'vod' || ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '/movie/', '/series/'].some(ext => url.toLowerCase().includes(ext));
-        if (isVod) {
-            vodControl.classList.remove('d-none');
-            // Small delay to ensure it's removed from DOM flow before opacity change
-            setTimeout(() => vodControl.classList.remove('opacity-0'), 50);
-            if (document.getElementById('statusLabel')) document.getElementById('statusLabel').innerText = 'VOD';
-            if (document.getElementById('streamClock')) document.getElementById('streamClock').innerText = 'MOVIE/VOD';
-        } else {
-            vodControl.classList.add('d-none');
-            vodControl.classList.add('opacity-0');
-            if (document.getElementById('statusLabel')) document.getElementById('statusLabel').innerText = 'LIVE';
-            if (document.getElementById('streamClock')) document.getElementById('streamClock').innerText = 'LIVE';
-        }
-
-        // Update technical badges and fetch health status - Sync detection with core engine including sFormat
-        const sFormat = (meta.stream_format || '').toLowerCase();
-        isHls = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('playlist') || url.toLowerCase().includes('hls') || sType === 'hls' || sFormat === 'hls' || forcedType === 'hls';
-        isMpegTS = url.toLowerCase().includes('.ts') || url.toLowerCase().includes('mpegts') || url.toLowerCase().includes('output=ts') || sType === 'ts' || sFormat === 'ts' || forcedType === 'ts' || (forcedType === 'default' && !isHls);
+        // 5. Update UI Technical Badges
+        const isHls = url.toLowerCase().includes('.m3u8') || sType === 'hls' || sFormat === 'hls' || forcedType === 'hls';
+        const isMpegTS = url.toLowerCase().includes('.ts') || sType === 'ts' || sFormat === 'ts' || forcedType === 'ts' || (forcedType === 'default' && !isHls);
         updateFormatBadge(url, isHls, isMpegTS, sType, sId);
-        
-        // Update URL for browser history if needed
+
+        // 6. VLC Fallback Button Action
+        vlcFallbackBtn.onclick = () => {
+            const vlcBtn = document.getElementById('vlcBtn');
+            if (vlcBtn) vlcBtn.click();
+        };
+
+        // 7. Update browser history
         if (sId) {
             const newUrl = new URL(window.location.href);
             newUrl.searchParams.set('id', sId);

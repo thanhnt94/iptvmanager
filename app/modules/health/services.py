@@ -11,11 +11,18 @@ logger = logging.getLogger('iptv')
 
 class HealthCheckService:
     @staticmethod
-    def check_stream(channel_id):
+    def check_stream(channel_id, force=False):
         """Checks the connectivity and technical specs of a single stream URL."""
         channel = Channel.query.get(channel_id)
         if not channel:
             return
+            
+        # 1. Skip if checked very recently (within 30s) unless forced
+        if not force and channel.last_checked_at:
+            delta = (datetime.utcnow() - channel.last_checked_at).total_seconds()
+            if delta < 30 and channel.status == 'live':
+                logger.debug(f"Skipping check for {channel.name}, checked {delta:.1f}s ago.")
+                return
             
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -42,32 +49,38 @@ class HealthCheckService:
                 except:
                     ping_ok = False
 
+            # 2. Latency/Connectivity check
             if ping_ok:
                 channel.latency = latency
+                channel.status = 'live'  # URL is responsive
                 if latency < 500: channel.quality = 'excellent'
                 elif latency < 1500: channel.quality = 'good'
                 else: channel.quality = 'poor'
             
-            # Use ffprobe as the source of truth for "Live" (must have actual media)
+            # 3. Stream Specs via FFprobe
             success = HealthCheckService._update_stream_specs(channel)
             
-            if success:
-                channel.status = 'live'
-                channel.error_message = None # Clear error on success
-                # Fallback quality if latency check was blocked but stream is live
-                if not channel.quality:
-                    channel.quality = 'excellent'
-            else:
-                channel.status = 'die'
-                channel.error_message = "FFprobe failed to extract streams. Stream might be offline or unsupported."
+            if not success:
+                if not ping_ok:
+                    channel.status = 'die'
+                    channel.error_message = "Stream is unreachable (Ping/HEAD failed)."
+                else:
+                    # ping_ok but ffprobe failed - let it be LIVE but unverified
+                    channel.status = 'live'
+                    channel.error_message = "FFprobe failed to extract specs, but URL is responsive."
+                
                 channel.quality = None
-                channel.latency = None
+                # Don't clear latency if ping_ok was True
+                if not ping_ok: channel.latency = None
                 channel.resolution = None
                 channel.audio_codec = None
                 channel.video_codec = None
                 channel.bitrate = None
-                channel.stream_type = 'unknown'
-                channel.stream_format = None
+                # Don't reset stream_type/format here if they were already known? 
+                # Actually, reset if we want fresh data
+            else:
+                channel.status = 'live'
+                channel.error_message = None
                 
         except Exception as e:
             error_msg = str(e)
@@ -104,8 +117,9 @@ class HealthCheckService:
             '-print_format', 'json', 
             '-show_streams', '-show_format',
             '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            '-probesize', '1000000', 
+            '-probesize', '512000', 
             '-analyzeduration', '1000000',
+            '-timeout', '8000000', # 8 seconds internal timeout
             channel.stream_url
         ]
         

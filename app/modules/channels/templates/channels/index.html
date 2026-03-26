@@ -637,13 +637,30 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => row.classList.remove('table-success'), 2000);
     }
 
-    function playStream(url, metaInput = {}, forcedType = 'default') {
+    async function playStream(url, metaInput = {}, forcedType = 'default') {
         const meta = metaInput && metaInput.dataset ? {...metaInput.dataset} : (typeof metaInput === 'string' ? {name: metaInput} : {...metaInput});
+        const initialChannelId = Number("{{ initial_id or 'null' }}") || null;
+        
         const id = meta.id || meta.id_ || '';
         const name = meta.name || '';
         const streamUrl = meta.stream_url || meta.streamUrl || meta.url || url || '';
 
-        currentChannelId = id;
+        // 1. Abort previous & Setup
+        if (window.quickPlayerAbort) window.quickPlayerAbort.abort();
+        window.quickPlayerAbort = new AbortController();
+        const { signal } = window.quickPlayerAbort;
+
+        const modalVideo = document.getElementById('iptv-video-element');
+        const modalOverlay = document.getElementById('iptv-player-overlay');
+        const modalStatusLabel = document.getElementById('iptv-player-status');
+        const modalSpinner = document.getElementById('iptv-player-spinner');
+        const modalVlcFallback = document.getElementById('iptv-vlc-fallback');
+        const modalVlcFallbackBtn = document.getElementById('iptv-vlc-fallback-btn');
+
+        // 2. Cleanup & Initial UI Reset
+        window.IPTVPlayer.stop(modalVideo);
+
+        currentChannelId = id || initialChannelId;
         currentOriginalUrl = streamUrl;
         currentChannelName = name;
 
@@ -652,24 +669,78 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         document.getElementById('playerTitle').textContent = 'Playing: ' + name;
         
-        // Use Shared Engine
-        window.IPTVPlayer.play(document.getElementById('iptv-video-element'), {
-            id: id,
-            url: streamUrl,
-            name: name,
-            stream_type: meta.stream_type || meta.streamType || 'live',
-            stream_format: meta.stream_format || meta.streamFormat || '',
-            forcedType: forcedType,
-            token: userApiToken,
-            overlay: document.getElementById('iptv-player-overlay'),
-            statusLabel: document.getElementById('iptv-player-status')
-        });
+        modalVlcFallback.classList.add('d-none');
+        modalOverlay.classList.remove('d-none');
+        modalSpinner.classList.remove('d-none');
+        modalStatusLabel.innerText = "VERIFYING STREAM...";
+        modalStatusLabel.className = "fw-bold text-white letter-spacing-1";
 
         playerModal.show();
 
-        // Update technical badges in the modal UI if elements exist
-        const sType = (meta.stream_type || meta.streamType || 'live').toLowerCase();
-        const sFormat = (meta.stream_format || meta.streamFormat || '').toLowerCase();
+        // 3. Performing backend check (Check-First)
+        let freshMeta = {...meta};
+        try {
+            const checkResp = await fetch(`/channels/check/${id}?ajax=1`, { 
+                method: 'POST',
+                signal: signal 
+            });
+            const checkData = await checkResp.json();
+            
+            if (checkData.success) {
+                if (checkData.status === 'die') {
+                    modalStatusLabel.innerText = "LINK BROKEN (SERVER OFFLINE)";
+                    modalStatusLabel.className = "small fw-bold text-danger text-center px-3 text-uppercase letter-spacing-1";
+                    modalSpinner.classList.add('d-none');
+                    modalVlcFallback.classList.remove('d-none');
+                    return;
+                }
+                freshMeta.stream_type = checkData.stream_type;
+                freshMeta.stream_format = checkData.stream_format;
+            }
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            console.warn("Check failed", err);
+        }
+
+        const sType = freshMeta.stream_type || 'live';
+        const sFormat = freshMeta.stream_format || '';
+
+        // 4. Start Playback
+        window.IPTVPlayer.play(modalVideo, {
+            id: id,
+            url: url,
+            name: name,
+            stream_type: sType,
+            stream_format: sFormat,
+            forcedType: forcedType,
+            token: userApiToken,
+            overlay: modalOverlay,
+            statusLabel: modalStatusLabel,
+            onError: (err) => {
+                modalStatusLabel.innerText = "PLAYBACK ERROR";
+                modalStatusLabel.className = "small fw-bold text-danger text-center px-3 text-uppercase letter-spacing-1";
+                modalSpinner.classList.add('d-none');
+                modalVlcFallback.classList.remove('d-none');
+            },
+            onStall: (msg) => {
+                modalStatusLabel.innerText = "STALLED - TRY VLC";
+                modalVlcFallback.classList.remove('d-none');
+            }
+        });
+
+        // 4. VLC Fallback Setup
+        modalVlcFallbackBtn.onclick = () => {
+            fetch(`/channels/play_vlc/${id}`, { method: 'POST' })
+                .then(resp => resp.json())
+                .then(data => {
+                    if (!data.success) {
+                        const absUrl = new URL(streamUrl, window.location.origin).href;
+                        window.location.href = `vlc://${absUrl}`;
+                    }
+                });
+        };
+
+        // 5. Update technical badges in the modal UI if elements exist
         
         const isHls = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('playlist') || url.toLowerCase().includes('hls') || sType === 'hls' || sFormat === 'hls' || forcedType === 'hls';
         const isMpegTS = url.toLowerCase().includes('.ts') || url.toLowerCase().includes('mpegts') || url.toLowerCase().includes('output=ts') || sType === 'ts' || sFormat === 'ts' || forcedType === 'ts' || (forcedType === 'default' && !isHls);

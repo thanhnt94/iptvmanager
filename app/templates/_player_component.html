@@ -2,8 +2,13 @@
 <div id="iptv-player-container" class="iptv-player-container border rounded bg-dark overflow-hidden shadow-lg position-relative">
     <!-- Overlay for Buffering/Errors -->
     <div id="iptv-player-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-black bg-opacity-75 d-none" style="z-index: 10;">
-        <div class="spinner-border text-primary mb-3"></div>
-        <div id="iptv-player-status" class="small fw-bold text-white-50 text-center px-3 text-uppercase">CONNECTING...</div>
+        <div id="iptv-player-spinner" class="spinner-border text-primary mb-3"></div>
+        <div id="iptv-player-status" class="small fw-bold text-white text-center px-3 text-uppercase letter-spacing-1">CONNECTING...</div>
+        <div id="iptv-vlc-fallback" class="mt-3 d-none text-center">
+            <button id="iptv-vlc-fallback-btn" class="btn btn-sm btn-warning fw-bold px-3 py-1 shadow-sm">
+                <i class="bi bi-play-btn-fill me-1"></i>VLC FALLBACK
+            </button>
+        </div>
     </div>
 
     <!-- Video Element -->
