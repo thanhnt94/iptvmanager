@@ -254,12 +254,32 @@
         </div>
     </form>
 
-    <div class="mt-5 p-4 bg-warning-subtle border-start border-warning border-4 rounded shadow-sm">
-        <h6 class="fw-bold text-warning-emphasis"><i class="bi bi-exclamation-triangle-fill me-2"></i> Technical Warning</h6>
-        <p class="mb-0 text-warning-emphasis small">
-            Background scans utilize <strong>FFmpeg/ffprobe</strong> on the server. Running scans with 0s delay may impact server performance.
-            Scans will continue to run even if you close this browser tab.
-        </p>
+    </div>
+
+    <!-- Backup & Restore Database -->
+    <div class="card shadow-sm border-0 mb-4 mt-5" style="border-radius: 1rem; overflow: hidden;">
+        <div class="card-header bg-dark text-white fw-bold py-3 px-4">
+            <i class="bi bi-database-gear me-2"></i>Backup & Restore Database
+        </div>
+        <div class="card-body p-4">
+            <div class="row g-4">
+                <div class="col-md-6 border-end">
+                    <h6 class="fw-bold text-success mb-2"><i class="bi bi-cloud-download me-2"></i>Export (Backup)</h6>
+                    <p class="small text-muted mb-3">Tải xuống toàn bộ dữ liệu hiện tại (Channels, Playlists, Users, Settings...) dưới dạng file JSON.</p>
+                    <a href="{{ url_for('settings.export_backup') }}" class="btn btn-success fw-bold shadow-sm"><i class="bi bi-download me-2"></i>Tải file Backup (.json)</a>
+                </div>
+                <div class="col-md-6 ps-md-4">
+                    <h6 class="fw-bold text-danger mb-2"><i class="bi bi-cloud-upload me-2"></i>Import (Restore)</h6>
+                    <p class="small text-danger fw-bold mb-3"><i class="bi bi-exclamation-triangle me-1"></i>Cảnh báo: Hành động này sẽ XÓA TOÀN BỘ dữ liệu hiện tại và thay thế bằng dữ liệu từ file backup!</p>
+                    <form id="restoreForm">
+                        <div class="input-group">
+                            <input type="file" class="form-control shadow-none" id="backupFile" accept=".json" required>
+                            <button class="btn btn-danger fw-bold shadow-sm" type="submit" id="restoreBtn"><i class="bi bi-arrow-counterclockwise me-2"></i>Khôi phục</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -456,6 +476,45 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     // Poll more frequently (every 2s) for better real-time feel
     setInterval(pollScanStatus, 2000); pollScanStatus();
+
+    // --- Backup & Restore Logic ---
+    const restoreForm = document.getElementById('restoreForm');
+    if (restoreForm) {
+        restoreForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!confirm('BẠN CÓ CHẮC CHẮN KHÔNG?\n\nToàn bộ dữ liệu hiện tại sẽ bị xóa sạch và thay thế bằng file này. Vui lòng đảm bảo bạn đang giữ quyền Admin trong file backup mới để không bị mất quyền truy cập!')) return;
+            
+            const fileInput = document.getElementById('backupFile');
+            const formData = new FormData();
+            formData.append('backup_file', fileInput.files[0]);
+            
+            const btn = document.getElementById('restoreBtn');
+            const origText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý...';
+            btn.disabled = true;
+
+            fetch("{{ url_for('settings.import_backup') }}", {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.message);
+                if(data.success) {
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                alert('Lỗi mạng hoặc server!');
+                console.error(err);
+            })
+            .finally(() => {
+                btn.innerHTML = origText;
+                btn.disabled = false;
+                fileInput.value = '';
+            });
+        });
+    }
 });
 </script>
 {% endblock %}

@@ -87,3 +87,45 @@ def toggle_setting_api():
         SettingService.set(key, 'true' if value else 'false', type='bool')
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
+
+from flask import Response
+from .services import BackupService
+from datetime import datetime
+
+@settings_bp.route('/backup/export')
+@login_required
+def export_backup():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+        
+    json_data = BackupService.export_database()
+    filename = f"iptv_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    
+    return Response(
+        json_data,
+        mimetype="application/json",
+        headers={"Content-disposition": f"attachment; filename={filename}"}
+    )
+
+@settings_bp.route('/backup/import', methods=['POST'])
+@login_required
+def import_backup():
+    if current_user.role != 'admin':
+        return jsonify({"success": False, "message": "Unauthorized"}), 403
+        
+    if 'backup_file' not in request.files:
+        return jsonify({"success": False, "message": "Không tìm thấy file!"})
+        
+    file = request.files['backup_file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "Chưa chọn file!"})
+        
+    if not file.filename.endswith('.json'):
+        return jsonify({"success": False, "message": "Chỉ chấp nhận file .json!"})
+        
+    try:
+        json_data = file.read().decode('utf-8')
+        success, msg = BackupService.import_database(json_data)
+        return jsonify({"success": success, "message": msg})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Lỗi đọc file: {str(e)}"})
