@@ -1,68 +1,81 @@
 <!-- Shared IPTV Player Component -->
-<div id="iptv-player-container" class="iptv-player-container border rounded bg-dark overflow-hidden shadow-lg position-relative">
+<div id="iptv-player-container" class="group relative bg-black rounded-[1.5rem] overflow-hidden shadow-2xl border border-white/10 aspect-video select-none">
     <!-- Overlay for Buffering/Errors -->
-    <div id="iptv-player-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-black bg-opacity-75 d-none" style="z-index: 10;">
-        <div id="iptv-player-spinner" class="spinner-border text-primary mb-3"></div>
-        <div id="iptv-player-status" class="small fw-bold text-white text-center px-3 text-uppercase letter-spacing-1">CONNECTING...</div>
-        <div id="iptv-vlc-fallback" class="mt-3 d-none text-center">
-            <button id="iptv-vlc-fallback-btn" class="btn btn-sm btn-warning fw-bold px-3 py-1 shadow-sm">
-                <i class="bi bi-play-btn-fill me-1"></i>VLC FALLBACK
+    <div id="iptv-player-overlay" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm hidden transition-all duration-300">
+        <div id="iptv-player-spinner" class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4 shadow-lg shadow-blue-500/20"></div>
+        <div id="iptv-player-status" class="text-[10px] font-black tracking-[3px] text-white/60 uppercase">Connecting...</div>
+        <div id="iptv-vlc-fallback" class="mt-6 hidden">
+            <button id="iptv-vlc-fallback-btn" class="bg-gradient-to-br from-amber-500 to-orange-600 text-white text-[10px] font-black uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-xl hover:scale-105 active:scale-95 transition-all">
+                <i class="bi bi-play-btn-fill mr-2"></i>VLC Fallback
             </button>
         </div>
     </div>
 
     <!-- Video Element -->
-    <div class="ratio ratio-16x9 bg-black d-flex align-items-center justify-content-center">
-        <video id="iptv-video-element" class="w-100 h-100" playsinline></video>
+    <div class="absolute inset-0 flex items-center justify-center bg-black">
+        <video id="iptv-video-element" class="w-full h-full object-contain" playsinline></video>
     </div>
 
+    <!-- Interactive HUD Layer -->
+    <div id="iptv-player-hud" class="absolute inset-0 z-10 flex flex-col justify-end p-6 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-500 opacity-0 group-hover:opacity-100">
         <!-- VOD Controls (Seek Bar) -->
-        <div id="iptv-vod-controls" class="mb-2 d-none transition-opacity" style="opacity: 0;">
-            <div class="d-flex align-items-center gap-2 mb-1">
-                <span id="iptv-current-time" class="small text-white-50 ms-1" style="font-size: 0.7rem;">00:00</span>
-                <input type="range" id="iptv-seek-bar" class="form-range flex-grow-1 player-seek-bar shadow-none" min="0" value="0" step="1">
-                <span id="iptv-duration" class="small text-white-50 me-1" style="font-size: 0.7rem;">00:00</span>
+        <div id="iptv-vod-controls" class="mb-4 hidden">
+            <div class="flex items-center gap-4 mb-2">
+                <span id="iptv-current-time" class="text-[10px] font-black text-white/60 tabular-nums">00:00</span>
+                <input type="range" id="iptv-seek-bar" class="flex-grow h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400 transition-all" min="0" value="0" step="1">
+                <span id="iptv-duration" class="text-[10px] font-black text-white/60 tabular-nums">00:00</span>
             </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="d-flex gap-3 align-items-center">
-                <button id="iptv-play-pause" class="btn btn-link text-white p-0 fs-4 shadow-none"><i class="bi bi-play-fill"></i></button>
-                <div class="d-flex align-items-center gap-2">
-                    <button id="iptv-mute" class="btn btn-link text-white p-0 fs-5 shadow-none"><i class="bi bi-volume-up-fill"></i></button>
-                    <input type="range" id="iptv-volume-slider" class="form-range d-none d-md-inline-block" style="width: 80px;" min="0" max="1" step="0.1" value="1">
+        <div class="flex justify-between items-center bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-3 px-5 shadow-2xl">
+            <div class="flex gap-6 align-items-center">
+                <button id="iptv-play-pause" class="text-white hover:text-blue-400 transition-all transform active:scale-75">
+                    <i class="bi bi-play-fill text-2xl"></i>
+                </button>
+                <div class="flex items-center gap-4 group/vol">
+                    <button id="iptv-mute" class="text-white hover:text-blue-400 transition-all">
+                        <i class="bi bi-volume-up-fill text-xl"></i>
+                    </button>
+                    <input type="range" id="iptv-volume-slider" class="w-0 group-hover/vol:w-20 overflow-hidden transition-all duration-300 h-1 bg-white/20 rounded-full appearance-none cursor-pointer accent-blue-500" min="0" max="1" step="0.1" value="1">
                 </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <span id="iptv-badge-live" class="badge bg-danger rounded-pill px-2 py-1 small fw-bold" style="font-size: 0.65rem;">LIVE</span>
-                <button id="iptv-fullscreen" class="btn btn-link text-white p-0 fs-5 shadow-none"><i class="bi bi-fullscreen"></i></button>
+            
+            <div class="flex items-center gap-4">
+                <div class="flex flex-col items-end mr-2">
+                    <span id="iptv-badge-live" class="text-[9px] font-black text-white px-2 py-0.5 rounded-full bg-rose-600 shadow-lg shadow-rose-600/30 uppercase tracking-widest">Live</span>
+                </div>
+                <button id="iptv-fullscreen" class="text-white hover:text-blue-400 transition-all transform active:scale-75">
+                    <i class="bi bi-fullscreen text-lg"></i>
+                </button>
             </div>
         </div>
+    </div>
 </div>
 
 <style>
-    .iptv-player-container:hover #iptv-player-hud { opacity: 1 !important; }
-    .transition-opacity { transition: opacity 0.3s ease-in-out; }
+    /* Prevent default controls from showing */
     #iptv-video-element::-webkit-media-controls { display:none !important; }
     
-    .player-seek-bar {
-        height: 6px;
-        background: rgba(255,255,255,0.2);
-        border-radius: 3px;
-        cursor: pointer;
-    }
-    .player-seek-bar::-webkit-slider-thumb {
+    /* Custom Seek Bar Styling */
+    #iptv-seek-bar::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
         width: 14px;
         height: 14px;
-        background: #0d6efd;
+        background: #3b82f6;
         border: 2px solid white;
-        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        transition: transform 0.1s ease;
+    }
+    #iptv-seek-bar:hover::-webkit-slider-thumb {
+        transform: scale(1.2);
     }
 </style>
 
 <script>
 /**
- * UI Logic for the Shared Component
+ * UI Logic for the Tailwind-based Shared Player Component
  */
 document.addEventListener('DOMContentLoaded', function() {
     const video = document.getElementById('iptv-video-element');
@@ -72,42 +85,52 @@ document.addEventListener('DOMContentLoaded', function() {
     const volSlider = document.getElementById('iptv-volume-slider');
     const fsBtn = document.getElementById('iptv-fullscreen');
     const container = document.getElementById('iptv-player-container');
-
-    // 1. Play/Pause
-    const togglePlay = () => video.paused ? video.play() : video.pause();
-    playBtn.onclick = togglePlay;
-    video.onclick = togglePlay;
-
-    video.onplay = () => playBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
-    video.onpause = () => playBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
-
-    // 2. Volume
-    muteBtn.onclick = () => {
-        video.muted = !video.muted;
-        muteBtn.innerHTML = video.muted ? '<i class="bi bi-volume-mute-fill"></i>' : '<i class="bi bi-volume-up-fill"></i>';
-    };
-    volSlider.oninput = (e) => {
-        video.volume = e.target.value;
-        video.muted = false;
-        muteBtn.innerHTML = video.volume == 0 ? '<i class="bi bi-volume-mute-fill"></i>' : '<i class="bi bi-volume-up-fill"></i>';
-    };
-
-    // 3. Fullscreen
-    fsBtn.onclick = () => {
-        if (!document.fullscreenElement) {
-            container.requestFullscreen().catch(err => alert(`Error: ${err.message}`));
-        } else {
-            document.exitFullscreen();
-        }
-    };
-
-    // 4. VOD Logic
     const vodControls = document.getElementById('iptv-vod-controls');
     const seekBar = document.getElementById('iptv-seek-bar');
     const currentTimeText = document.getElementById('iptv-current-time');
     const durationText = document.getElementById('iptv-duration');
     const liveBadge = document.getElementById('iptv-badge-live');
 
+    // Safe HUD access
+    const setHUDOpacity = (op) => {
+        if (hud) hud.style.opacity = op;
+    };
+
+    // 1. Play/Pause
+    const togglePlay = () => video.paused ? video.play() : video.pause();
+    if(playBtn) playBtn.onclick = togglePlay;
+    if(video) video.onclick = togglePlay;
+
+    video.onplay = () => { if(playBtn) playBtn.innerHTML = '<i class="bi bi-pause-fill text-2xl"></i>'; };
+    video.onpause = () => { if(playBtn) playBtn.innerHTML = '<i class="bi bi-play-fill text-2xl"></i>'; };
+
+    // 2. Volume
+    if(muteBtn) {
+        muteBtn.onclick = () => {
+            video.muted = !video.muted;
+            muteBtn.innerHTML = video.muted ? '<i class="bi bi-volume-mute-fill text-xl"></i>' : '<i class="bi bi-volume-up-fill text-xl"></i>';
+        };
+    }
+    if(volSlider) {
+        volSlider.oninput = (e) => {
+            video.volume = e.target.value;
+            video.muted = false;
+            if(muteBtn) muteBtn.innerHTML = video.volume == 0 ? '<i class="bi bi-volume-mute-fill text-xl"></i>' : '<i class="bi bi-volume-up-fill text-xl"></i>';
+        };
+    }
+
+    // 3. Fullscreen
+    if(fsBtn) {
+        fsBtn.onclick = () => {
+            if (!document.fullscreenElement) {
+                container.requestFullscreen().catch(err => console.error(`Error: ${err.message}`));
+            } else {
+                document.exitFullscreen();
+            }
+        };
+    }
+
+    // 4. VOD Logic
     const formatTime = (sec) => {
         if (!sec || isNaN(sec)) return "00:00";
         const m = Math.floor(sec / 60);
@@ -117,42 +140,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
     video.addEventListener('timeupdate', () => {
         if (!video.duration || isNaN(video.duration)) return;
-        seekBar.value = video.currentTime;
-        currentTimeText.innerText = formatTime(video.currentTime);
+        if(seekBar) seekBar.value = video.currentTime;
+        if(currentTimeText) currentTimeText.innerText = formatTime(video.currentTime);
     });
 
     video.addEventListener('durationchange', () => {
         if (!video.duration || isNaN(video.duration)) return;
-        seekBar.max = video.duration;
-        durationText.innerText = formatTime(video.duration);
+        if(seekBar) seekBar.max = video.duration;
+        if(durationText) durationText.innerText = formatTime(video.duration);
         
-        // Auto-show VOD controls if duration is finite
         if (isFinite(video.duration) && video.duration > 0) {
-            vodControls.classList.remove('d-none');
-            setTimeout(() => vodControls.style.opacity = '1', 50);
-            liveBadge.innerText = 'VOD';
-            liveBadge.classList.replace('bg-danger', 'bg-info');
-            liveBadge.classList.add('text-dark');
+            if(vodControls) vodControls.classList.remove('hidden');
+            if(liveBadge) {
+                liveBadge.innerText = 'VOD';
+                liveBadge.classList.replace('bg-rose-600', 'bg-blue-600');
+            }
         } else {
-            vodControls.classList.add('d-none');
-            vodControls.style.opacity = '0';
-            liveBadge.innerText = 'LIVE';
-            liveBadge.classList.replace('bg-info', 'bg-danger');
-            liveBadge.classList.remove('text-dark');
+            if(vodControls) vodControls.classList.add('hidden');
+            if(liveBadge) {
+                liveBadge.innerText = 'LIVE';
+                liveBadge.classList.replace('bg-blue-600', 'bg-rose-600');
+            }
         }
     });
 
-    seekBar.oninput = () => video.currentTime = seekBar.value;
+    if(seekBar) seekBar.oninput = () => video.currentTime = seekBar.value;
 
-    // 5. HUD Auto-hide
+    // 5. HUD Auto-hide Improvement
     let hudTimeout;
     const showHUD = () => {
-        hud.style.opacity = '1';
+        setHUDOpacity('1');
         clearTimeout(hudTimeout);
-        hudTimeout = setTimeout(() => { if(!video.paused) hud.style.opacity = '0'; }, 3000);
+        hudTimeout = setTimeout(() => { if(!video.paused) setHUDOpacity('0'); }, 3000);
     };
-    container.onmousemove = showHUD;
-    container.onclick = showHUD;
-    video.onplaying = showHUD;
+    
+    container.addEventListener('mousemove', showHUD);
+    container.addEventListener('click', showHUD);
+    video.addEventListener('playing', showHUD);
 });
 </script>

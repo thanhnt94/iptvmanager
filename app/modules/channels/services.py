@@ -233,7 +233,8 @@ class EPGService:
 class ChannelService:
     @staticmethod
     def get_all_channels(page=1, per_page=50, search=None, group_filter=None, stream_type_filter=None, 
-                         status_filter=None, quality_filter=None, res_filter=None, audio_filter=None, sort=None):
+                         status_filter=None, quality_filter=None, res_filter=None, audio_filter=None, 
+                         sort=None, is_original_filter=None, format_filter=None):
         query = Channel.query
         if search:
             if search.isdigit():
@@ -253,6 +254,14 @@ class ChannelService:
             query = query.filter(Channel.resolution == res_filter)
         if audio_filter:
             query = query.filter(Channel.audio_codec == audio_filter)
+            
+        if is_original_filter == '1':
+            query = query.filter(Channel.is_original == True)
+        elif is_original_filter == '0':
+            query = query.filter(db.or_(Channel.is_original == False, Channel.is_original == None))
+            
+        if format_filter:
+            query = query.filter(Channel.stream_format == format_filter)
             
         # Sorting logic
         if sort == 'newest_checked':
@@ -287,6 +296,12 @@ class ChannelService:
     def get_distinct_audio_codecs():
         aud = db.session.query(Channel.audio_codec).distinct().all()
         return sorted([a[0] for a in aud if a[0]])
+
+    @staticmethod
+    def get_distinct_formats():
+        """Returns a list of all unique stream formats (hls, ts, etc.) in the database."""
+        formats = db.session.query(Channel.stream_format).distinct().all()
+        return sorted([f[0] for f in formats if f[0]])
 
     @staticmethod
     def create_channel(data):

@@ -4,77 +4,172 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPTV Playlist Manager</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <style>
-        body { background-color: #f8f9fa; }
-        .navbar { margin-bottom: 2rem; }
-        @media (max-width: 768px) {
-            .navbar { margin-bottom: 0.5rem !important; }
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            DEFAULT: '#3b82f6',
+                            dark: '#2563eb',
+                        },
+                        slate: {
+                            950: '#020617',
+                        }
+                    },
+                    backdropBlur: {
+                        'xs': '2px',
+                    }
+                }
+            }
         }
+    </script>
+    
+    <!-- Bootstrap Icons (Still needed for icons) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <style>
+        /* Page-specific CSS injection */
+        {% block extra_css %}{% endblock %}
     </style>
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="{{ url_for('index') }}">
-                <span class="text-primary">IPTV</span> Manager
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('index') }}">Home</a>
-                    </li>
-                    {% if current_user.is_authenticated %}
-                        <li class="nav-item"><a class="nav-link fw-bold text-warning" href="{{ url_for('channels.web_player') }}"><i class="bi bi-play-circle-fill me-1"></i>Web Player</a></li>
-                        {% if current_user.role == 'admin' %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('ingestion.import_channels') }}">Import</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.index') }}">Channels</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('channels.extractor_page') }}">Link Grabber</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('playlists.index') }}">Playlists</a></li>
-                        <li class="nav-item"><a class="nav-link text-info" href="{{ url_for('channels.active_sessions_page') }}"><i class="bi bi-broadcast me-1"></i>Live</a></li>
-                        <li class="nav-item"><a class="nav-link text-warning" href="{{ url_for('settings.admin_settings') }}"><i class="bi bi-gear-fill me-1"></i>Settings</a></li>
-                        <li class="nav-item"><a class="nav-link fw-bold text-info" href="{{ url_for('auth.admin_users') }}"><i class="bi bi-people-fill me-1"></i>Users</a></li>
-                        {% else %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.dashboard') }}">Dashboard</a></li>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+    <!-- Unified Layout Wrapper -->
+    <div class="min-h-screen">
+        <!-- Modern Tailwind Navbar -->
+        <nav class="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-xl border-b border-white/10 py-3 shadow-2xl">
+            <div class="max-w-[1440px] mx-auto px-4 md:px-8 flex items-center justify-between">
+                <!-- Brand -->
+                <a class="flex items-center gap-3 transition-transform hover:scale-[1.02]" href="{{ url_for('index') }}">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-xl shadow-lg shadow-blue-500/20">
+                        <i class="bi bi-broadcast"></i>
+                    </div>
+                    <div class="hidden sm:block leading-tight pt-0.5">
+                        <span class="block text-white font-extrabold text-xl tracking-tight">IPTV</span>
+                        <span class="block text-white/40 text-[10px] uppercase font-bold tracking-widest -mt-0.5">Manager Pro</span>
+                    </div>
+                </a>
+                
+                <!-- Mobile Toggle -->
+                <button class="md:hidden text-white/70 p-2 hover:bg-white/10 rounded-lg transition-colors" id="mobileMenuToggle">
+                    <i class="bi bi-list text-2xl"></i>
+                </button>
+                
+                <!-- Navigation Links & User Actions -->
+                <div class="hidden md:flex items-center gap-6">
+                    <div class="flex items-center gap-1">
+                        <a href="{{ url_for('index') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if request.path == url_for('index') %}bg-blue-600 text-white shadow-lg shadow-blue-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
+                            <i class="bi bi-house-door me-1.5"></i> Home
+                        </a>
+                        {% if current_user.is_authenticated %}
+                            <a href="{{ url_for('channels.active_sessions_page') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'active_sessions' in request.path %}bg-emerald-500 text-white shadow-lg shadow-emerald-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
+                                <i class="bi bi-broadcast me-1.5"></i> Live
+                            </a>
+                            <a href="{{ url_for('settings.admin_settings') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'settings' in request.path %}bg-amber-500 text-white shadow-lg shadow-amber-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
+                                <i class="bi bi-gear-fill me-1.5"></i> Settings
+                            </a>
+                            <a href="{{ url_for('auth.admin_users') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'admin_users' in request.path %}bg-sky-500 text-white shadow-lg shadow-sky-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
+                                <i class="bi bi-people-fill me-1.5"></i> Users
+                            </a>
                         {% endif %}
-                    {% endif %}
-                </ul>
-                <ul class="navbar-nav ms-auto">
+                    </div>
+
+                    <div class="h-6 w-px bg-white/10 mx-2"></div>
+
                     {% if current_user.is_authenticated %}
-                    <li class="nav-item d-flex align-items-center">
-                        <span class="badge bg-primary me-3">Admin: {{ current_user.username }}</span>
-                        <a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a>
-                    </li>
+                        <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-300">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+                                {{ current_user.username }}
+                            </div>
+                            <a href="{{ url_for('auth.logout') }}" class="px-4 py-1.5 rounded-lg border border-rose-500/30 text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">
+                                Logout
+                            </a>
+                        </div>
                     {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('auth.login') }}">Login</a>
-                    </li>
+                        <a href="{{ url_for('auth.login') }}" class="px-6 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">
+                            Login
+                        </a>
                     {% endif %}
-                </ul>
+                </div>
             </div>
-        </div>
-    </nav>
+
+            <!-- Mobile Menu -->
+            <div id="mobileMenu" class="hidden md:hidden border-t border-white/5 bg-slate-900/95 backdrop-blur-2xl p-6 animate-in slide-in-from-top-4 duration-300">
+                <div class="flex flex-col gap-4">
+                    <a href="{{ url_for('index') }}" class="flex items-center gap-3 p-3 rounded-xl {% if request.path == url_for('index') %}bg-blue-600 text-white{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+                        <i class="bi bi-house-door text-xl"></i>
+                        <span class="font-black uppercase tracking-widest text-xs">Home</span>
+                    </a>
+                    {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('channels.active_sessions_page') }}" class="flex items-center gap-3 p-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white">
+                            <i class="bi bi-broadcast text-xl"></i>
+                            <span class="font-black uppercase tracking-widest text-xs">Live</span>
+                        </a>
+                        <a href="{{ url_for('settings.admin_settings') }}" class="flex items-center gap-3 p-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white">
+                            <i class="bi bi-gear-fill text-xl"></i>
+                            <span class="font-black uppercase tracking-widest text-xs">Settings</span>
+                        </a>
+                        <a href="{{ url_for('auth.admin_users') }}" class="flex items-center gap-3 p-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white">
+                            <i class="bi bi-people-fill text-xl"></i>
+                            <span class="font-black uppercase tracking-widest text-xs">Users</span>
+                        </a>
+                        <div class="h-px bg-white/5 my-2"></div>
+                        <a href="{{ url_for('auth.logout') }}" class="flex items-center gap-3 p-3 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-colors">
+                            <i class="bi bi-box-arrow-left text-xl"></i>
+                            <span class="font-black uppercase tracking-widest text-xs">Logout ({{ current_user.username }})</span>
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('auth.login') }}" class="p-4 rounded-xl bg-blue-600 text-white text-center font-black uppercase tracking-widest text-xs">
+                            Login
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </nav>
     
-    <div class="container mt-3">
+    <div class="max-w-[1440px] mx-auto px-4 md:px-8 mt-6">
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             {% for message in messages %}
-              <div class="alert alert-info alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              <div class="mb-4 p-4 rounded-2xl bg-blue-100/50 border border-blue-200 text-blue-800 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                <div class="flex items-center gap-3">
+                    <i class="bi bi-info-circle-fill text-lg"></i>
+                    <span class="text-sm font-bold">{{ message }}</span>
+                </div>
+                <button onclick="this.parentElement.remove()" class="text-blue-400 hover:text-blue-600 transition-colors p-1">
+                    <i class="bi bi-x-lg"></i>
+                </button>
               </div>
             {% endfor %}
           {% endif %}
         {% endwith %}
     </div>
     
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    {% block content %}{% endblock %}
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        // Mobile Menu Logic
+        const mobileToggle = document.getElementById('mobileMenuToggle');
+        const mobileMenu = document.getElementById('mobileMenu');
+        if (mobileToggle && mobileMenu) {
+            mobileToggle.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+        }
+    </script>
+    
     <!-- Shared IPTV Player Engine -->
     <script src="{{ url_for('static', filename='js/player_core.js') }}"></script>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

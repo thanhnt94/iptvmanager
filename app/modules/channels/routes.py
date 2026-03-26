@@ -59,6 +59,8 @@ def index():
     res_filter = request.args.get('resolution', '')
     audio = request.args.get('audio', '')
     sort = request.args.get('sort', '')
+    is_original = request.args.get('is_original', '')
+    stream_format = request.args.get('format', '')
 
     pagination = ChannelService.get_all_channels(
         page=page, 
@@ -69,7 +71,9 @@ def index():
         quality_filter=quality,
         res_filter=res_filter,
         audio_filter=audio,
-        sort=sort
+        sort=sort,
+        is_original_filter=is_original,
+        format_filter=stream_format
     )
     
     # Calculate stats
@@ -83,6 +87,7 @@ def index():
     distinct_groups = ChannelService.get_distinct_groups()
     distinct_res = ChannelService.get_distinct_resolutions()
     distinct_audio = ChannelService.get_distinct_audio_codecs()
+    distinct_formats = ChannelService.get_distinct_formats()
     
     from app.modules.playlists.models import PlaylistProfile
     playlists = PlaylistProfile.query.all()
@@ -98,11 +103,14 @@ def index():
                            status_filter=status,
                            quality_filter=quality,
                            res_filter=res_filter,
+                           is_original=is_original,
                            audio_filter=audio,
                            sort=sort,
+                           stream_format=stream_format,
                            distinct_groups=distinct_groups,
                            distinct_res=distinct_res,
                            distinct_audio=distinct_audio,
+                           distinct_formats=distinct_formats,
                            playlists=playlists)
 
 @channels_bp.route('/add', methods=['GET', 'POST'])
@@ -219,6 +227,22 @@ def clean_dead_channels():
         'success': True,
         'deleted_count': count,
         'message': f'Đã xoá thành công {count} kênh die.'
+    })
+
+@channels_bp.route('/api/toggle_original/<int:channel_id>', methods=['POST'])
+@login_required
+def toggle_original(channel_id):
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+        
+    channel = Channel.query.get_or_404(channel_id)
+    channel.is_original = not channel.is_original
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'is_original': channel.is_original,
+        'message': f'Đã cập nhật trạng thái bảo vệ cho kênh: {channel.name}'
     })
 
 @channels_bp.route('/web-player')

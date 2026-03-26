@@ -35,8 +35,8 @@ window.IPTVPlayer = {
         
         // Comprehensive Detection
         const isHlsDetected = lowUrl.includes('.m3u8') || lowUrl.includes('playlist') || lowUrl.includes('hls') || sType === 'hls' || sFormat === 'hls';
-        const isTsDetected = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts') || lowUrl.includes('output=ts') || sType === 'ts' || sFormat === 'ts';
-        const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('/movie/') || sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv';
+        const isTsDetected = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts') || lowUrl.includes('output=ts') || lowUrl.includes('.flv') || sType === 'ts' || sFormat === 'ts' || sFormat === 'flv';
+        const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('/movie/') || sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv';
         
         // 3. Resolve Smart URL
         const canPlayNativeHLS = videoElement.canPlayType('application/vnd.apple.mpegurl') || videoElement.canPlayType('application/x-mpegURL');
@@ -84,7 +84,7 @@ window.IPTVPlayer = {
         this.currentUrl = playbackUrl;
         
         // 4. UI Feedback
-        if (overlay) overlay.classList.remove('d-none');
+        if (overlay) overlay.classList.remove('hidden');
         if (statusLabel) statusLabel.innerText = "CONNECTING...";
 
         // 5. Start Heartbeat
@@ -118,13 +118,22 @@ window.IPTVPlayer = {
                 this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     videoElement.play().catch(()=>{});
                     if (statusLabel) statusLabel.innerText = "LIVE (HLS)";
-                    if (overlay) overlay.classList.add('d-none');
+                    if (overlay) overlay.classList.add('hidden');
                 });
                 this.hls.on(Hls.Events.ERROR, (e, data) => {
+                    console.error("[IPTVPlayer] HLS Error:", data);
                     if (data.fatal) {
-                        if (statusLabel) statusLabel.innerText = `HLS ERROR: ${data.type}`;
-                        if (overlay) overlay.classList.remove('d-none');
-                        console.error("HLS Fatal:", data);
+                        if (statusLabel) statusLabel.innerText = `HLS FATAL: ${data.details}`;
+                        if (overlay) overlay.classList.remove('hidden');
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR: this.hls.startLoad(); break;
+                            case Hls.ErrorTypes.MEDIA_ERROR: this.hls.recoverMediaError(); break;
+                            default: this.stop(videoElement); break;
+                        }
+                    } else if (data.details === 'levelParsingError' || data.details === 'manifestParsingError') {
+                        if (statusLabel) statusLabel.innerText = "STREAM SYNC ISSUE (MISMATCH)";
+                    } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                        if (statusLabel) statusLabel.innerText = "NETWORK GLITCH (RETRYING...)";
                     }
                 });
             } else if (pEngine === 'ts') {
@@ -134,7 +143,7 @@ window.IPTVPlayer = {
                 
                 // Optimized for high-bitrate Tvheadend / IPTV
                 const mpegtsConfig = {
-                    type: 'mse',
+                    type: lowUrl.includes('.flv') || sFormat === 'flv' ? 'flv' : 'mpegts',
                     isLive: sType !== 'vod',
                     url: playbackUrl,
                     cors: true
@@ -161,6 +170,7 @@ window.IPTVPlayer = {
 
                 this.mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
                     console.error(`[IPTVPlayer] TS Error: ${type} - ${detail}`, info);
+                    const errorMsg = info && info.msg ? info.msg : detail;
                     
                     if (retryCount < MAX_RETRIES) {
                         retryCount++;
@@ -169,35 +179,35 @@ window.IPTVPlayer = {
                              if (this.currentId === id) this.play(videoElement, config, true); 
                         }, 2000);
                     } else {
-                        if (statusLabel) statusLabel.innerText = "TS ERROR: " + type;
-                        if (overlay) overlay.classList.remove('d-none');
+                        if (statusLabel) statusLabel.innerText = "TS ERROR: " + errorMsg;
+                        if (overlay) overlay.classList.remove('hidden');
                     }
                 });
 
                 this.mpegtsPlayer.play().then(() => {
                     if (statusLabel) statusLabel.innerText = "LIVE (TS)";
-                    if (overlay) overlay.classList.add('d-none');
+                    if (overlay) overlay.classList.add('hidden');
                     retryCount = 0;
                 }).catch(err => {
                     if (statusLabel) statusLabel.innerText = "TS PLAY ERROR";
-                    if (overlay) overlay.classList.remove('d-none');
+                    if (overlay) overlay.classList.remove('hidden');
                     if (onError) onError(err);
                 });
             } else {
                 videoElement.src = playbackUrl;
                 videoElement.play().then(() => {
                     if (statusLabel) statusLabel.innerText = "PLAYING (NATIVE)";
-                    if (overlay) overlay.classList.add('d-none');
+                    if (overlay) overlay.classList.add('hidden');
                 }).catch(err => {
                     if (statusLabel) statusLabel.innerText = "CANNOT PLAY STREAM";
-                    if (overlay) overlay.classList.remove('d-none');
+                    if (overlay) overlay.classList.remove('hidden');
                     if (onError) onError(err);
                 });
             }
         } catch (err) {
             console.error("Player Engine Error:", err);
             if (statusLabel) statusLabel.innerText = err.message;
-            if (overlay) overlay.classList.remove('d-none');
+            if (overlay) overlay.classList.remove('hidden');
             if (onError) onError(err);
         }
 
@@ -210,7 +220,7 @@ window.IPTVPlayer = {
              bufferingTimer = setTimeout(() => {
                 if (videoElement.paused || videoElement.readyState < 3) {
                     if (statusLabel) statusLabel.innerText = "BUFFERING...";
-                    if (overlay) overlay.classList.remove('d-none');
+                    if (overlay) overlay.classList.remove('hidden');
                 }
                 bufferingTimer = null;
              }, 800); 
@@ -235,7 +245,7 @@ window.IPTVPlayer = {
         videoElement.onplaying = () => {
              if (bufferingTimer) { clearTimeout(bufferingTimer); bufferingTimer = null; }
              if (stallSuggestionTimer) { clearTimeout(stallSuggestionTimer); stallSuggestionTimer = null; }
-             if (overlay) overlay.classList.add('d-none');
+             if (overlay) overlay.classList.add('hidden');
              if (statusLabel && !statusLabel.innerText.includes('LIVE')) {
                   statusLabel.innerText = "LIVE";
              }
