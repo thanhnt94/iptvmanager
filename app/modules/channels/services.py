@@ -316,7 +316,8 @@ class ChannelService:
             status='unknown',
             stream_type='unknown',
             stream_format=stream_format,
-            proxy_type=data.get('proxy_type', 'none')
+            proxy_type=data.get('proxy_type', 'none'),
+            is_original=data.get('is_original') == 'true' or data.get('is_original') == '1' or data.get('is_original') == 'on'
         )
         db.session.add(new_channel)
         db.session.commit()
@@ -336,6 +337,12 @@ class ChannelService:
         channel.epg_id = data.get('epg_id', channel.epg_id)
         channel.stream_url = data.get('stream_url', channel.stream_url)
         channel.proxy_type = data.get('proxy_type', channel.proxy_type or 'none')
+        
+        if 'is_original' in data:
+            channel.is_original = data.get('is_original') == 'true' or data.get('is_original') == '1' or data.get('is_original') == 'on'
+        else:
+            # If not in data (checkbox unchecked), set to False
+            channel.is_original = False
         
         db.session.commit()
         return channel

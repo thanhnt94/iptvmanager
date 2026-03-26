@@ -198,6 +198,29 @@ def delete_channel(channel_id):
     flash('Channel deleted successfully.', 'success')
     return redirect(url_for('channels.index'))
 
+@channels_bp.route('/api/clean_dead_channels', methods=['POST'])
+@login_required
+def clean_dead_channels():
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+        
+    # Find channels that are 'die' and NOT 'is_original'
+    # We use (Channel.is_original == False) | (Channel.is_original == None) for safety
+    query = Channel.query.filter(
+        Channel.status == 'die',
+        db.or_(Channel.is_original == False, Channel.is_original == None)
+    )
+    
+    count = query.count()
+    query.delete(synchronize_session=False)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'deleted_count': count,
+        'message': f'Đã xoá thành công {count} kênh die.'
+    })
+
 @channels_bp.route('/web-player')
 @channels_bp.route('/web-player/<int:channel_id>')
 @login_required

@@ -41,6 +41,7 @@
         <h2 class="action-header-title">Channel Management</h2>
         <div class="d-flex mobile-scroll-actions gap-2 align-items-center">
             <a href="{{ url_for('channels.extractor_page') }}" class="btn btn-sm btn-outline-info">Link Grabber</a>
+            <button id="cleanDeadBtn" class="btn btn-sm btn-outline-danger shadow-sm"><i class="bi bi-trash-fill me-1"></i>Dọn dẹp kênh Die</button>
             <a href="{{ url_for('channels.add_channel') }}" class="btn btn-sm btn-success">Add Channel</a>
             <a href="{{ url_for('ingestion.import_channels') }}" class="btn btn-sm btn-primary">Import</a>
         </div>
@@ -246,7 +247,12 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <div class="fw-bold text-dark lh-sm" style="font-size: 0.95rem;">{{ channel.name }}</div>
+                                <div class="fw-bold text-dark lh-sm" style="font-size: 0.95rem;">
+                                    {{ channel.name }}
+                                    {% if channel.is_original %}
+                                    <span class="badge bg-success shadow-sm ms-1" style="font-size: 0.65rem;" title="Protected Original Channel"><i class="bi bi-shield-lock-fill"></i> Gốc</span>
+                                    {% endif %}
+                                </div>
                                 <div class="d-flex flex-wrap gap-1 mt-1">
                                     <span class="text-muted" style="font-size: 0.75rem;">ID: {{ channel.id }}</span>
                                     <span class="badge bg-light text-dark d-lg-none" style="font-size: 0.7rem;">{{ channel.group_name }}</span>
@@ -906,10 +912,37 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.checkAllBtn').forEach(btn => {
         btn.addEventListener('click', e => {
             if (!confirm('Start batch check of visible channels?')) return;
-            const btns = Array.from(document.querySelectorAll('.ajax-check-btn'));
             btns.forEach((b, i) => setTimeout(() => b.click(), i * 300));
         });
     });
+
+    const cleanBtn = document.getElementById('cleanDeadBtn');
+    if (cleanBtn) {
+        cleanBtn.addEventListener('click', async () => {
+            if (!confirm('Bạn có chắc chắn muốn xoá TẤT CẢ các kênh có trạng thái "die" (ngoại trừ các kênh gốc được bảo vệ)?\n\nHành động này không thể hoàn tác!')) return;
+            
+            cleanBtn.disabled = true;
+            const originalHtml = cleanBtn.innerHTML;
+            cleanBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang dọn...';
+            
+            try {
+                const resp = await fetch('/channels/api/clean_dead_channels', { method: 'POST' });
+                const data = await resp.json();
+                if (data.success) {
+                    alert(data.message);
+                    window.location.reload();
+                } else {
+                    alert('Lỗi: ' + (data.message || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Đã xảy ra lỗi khi kết nối với máy chủ.');
+            } finally {
+                cleanBtn.disabled = false;
+                cleanBtn.innerHTML = originalHtml;
+            }
+        });
+    }
 
     document.getElementById('vlcBtn').addEventListener('click', function() {
         if (currentChannelId) {

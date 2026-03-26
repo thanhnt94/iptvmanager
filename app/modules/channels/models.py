@@ -22,6 +22,7 @@ class Channel(db.Model):
     bitrate = db.Column(db.Integer)        # in kbps
     error_message = db.Column(db.Text)    # Last failure reason
     last_checked_at = db.Column(db.DateTime)
+    is_original = db.Column(db.Boolean, default=False)
     
     # Stats fields
     play_count = db.Column(db.Integer, default=0)
