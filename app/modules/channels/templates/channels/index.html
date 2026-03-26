@@ -687,6 +687,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const checkData = await checkResp.json();
             
             if (checkData.success) {
+                updateRowUI(id, checkData);
                 if (checkData.status === 'die') {
                     modalStatusLabel.innerText = "LINK BROKEN (SERVER OFFLINE)";
                     modalStatusLabel.className = "small fw-bold text-danger text-center px-3 text-uppercase letter-spacing-1";

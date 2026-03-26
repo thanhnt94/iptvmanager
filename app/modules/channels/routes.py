@@ -644,6 +644,15 @@ def track_redirect(channel_id):
     )
     channel.play_count += 1
     db.session.commit()
+
+    # Background health check
+    def _bg_check(app, cid):
+        with app.app_context():
+            from app.modules.health.services import HealthCheckService
+            HealthCheckService.check_stream(cid)
+    import threading
+    threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
+
     return redirect(channel.stream_url)
 
 @channels_bp.route('/api/stop_session', methods=['POST'])
@@ -722,6 +731,15 @@ def proxy_stream():
         'Connection': 'keep-alive',
     }
     
+    # Background health check & Metadata refresh
+    if channel_id:
+        def _bg_check(app, cid):
+            with app.app_context():
+                from app.modules.health.services import HealthCheckService
+                HealthCheckService.check_stream(cid)
+        import threading
+        threading.Thread(target=_bg_check, args=(current_app._get_current_object(), int(channel_id))).start()
+
     # Get the broadcast queue from the manager
     from app.modules.channels.services import StreamManager
     from app.modules.settings.services import SettingService
@@ -904,6 +922,14 @@ def proxy_hls_manifest():
     from app.modules.settings.services import SettingService
     ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
     headers = { 'User-Agent': ua }
+
+    # Background health check
+    def _bg_check(app, cid):
+        with app.app_context():
+            from app.modules.health.services import HealthCheckService
+            HealthCheckService.check_stream(cid)
+    import threading
+    threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
 
     try:
         from app.modules.channels.services import ActiveSessionManager
