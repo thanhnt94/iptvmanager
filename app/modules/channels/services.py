@@ -48,8 +48,8 @@ class StreamManager:
                 cls._streams[sid]['thread'].start()
             
             # Create a new client queue
-            # Queue size tuned for high throughput: 128 chunks * 128KB approx 16MB per client
-            q = queue.Queue(maxsize=128) 
+            # Increased size to 256 for better depth and fewer drops
+            q = queue.Queue(maxsize=256) 
             
             # PRE-FILL (Burst-start): Fill the new client's queue with historical data from RAM
             with cls._streams[sid]['lock']:
@@ -72,6 +72,9 @@ class StreamManager:
         if not headers or 'User-Agent' not in headers:
             if not headers: headers = {}
             headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        
+        # Ensure persistent connection
+        headers['Connection'] = 'keep-alive'
 
         while True:
             # Cleanup check
@@ -89,8 +92,8 @@ class StreamManager:
                         time.sleep(5)
                         continue
                     
-                    # 32KB is a good balance for both 4K and light SD streams
-                    for chunk in r.iter_content(chunk_size=32768): 
+                    # 128KB chunks for better stability and lower CPU overhead
+                    for chunk in r.iter_content(chunk_size=131072): 
                         if not chunk: break
                         
                         with cls._lock:
@@ -101,14 +104,29 @@ class StreamManager:
                             
                             # Distribute to all connected clients
                             with cls._streams[sid]['lock']:
-                                for q in cls._streams[sid]['clients'][:]:
+                                clients = cls._streams[sid]['clients'][:]
+                                is_single_client = len(clients) == 1
+                                
+                                for q in clients:
                                     try:
-                                        if q.full():
-                                            # If client is too slow, drop oldest to maintain real-time
-                                            try: q.get_nowait()
-                                            except: pass
-                                        q.put_nowait(chunk)
-                                    except:
+                                        if is_single_client:
+                                            # Case A0: Single client - Block longer to apply TCP Backpressure to source
+                                            # We don't want to drop packets for 1 guy, we want the source to slow down.
+                                            q.put(chunk, timeout=15.0)
+                                        else:
+                                            # Case B0: Multiple clients - Short block, drop block if full
+                                            try:
+                                                q.put(chunk, timeout=0.1)
+                                            except queue.Full:
+                                                # "Smart Drop": Evict 20% of queue at once (continuity-error aware)
+                                                # Helping player to catch up and re-sync faster
+                                                drop_count = max(1, q.maxsize // 5)
+                                                for _ in range(drop_count):
+                                                    try: q.get_nowait()
+                                                    except: break
+                                                q.put_nowait(chunk)
+                                    except Exception:
+                                        # Client likely disconnected during loop
                                         pass
             except Exception as e:
                 logger.error(f"StreamEngine: Connection lost for {url}: {e}")

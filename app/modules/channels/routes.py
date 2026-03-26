@@ -10,6 +10,7 @@ from app.modules.playlists.services import PlaylistService
 from app.core.database import db
 import time
 import logging
+import queue
 
 channels_bp = Blueprint('channels', __name__, template_folder='templates')
 logger = logging.getLogger('iptv')
@@ -758,7 +759,11 @@ def proxy_stream():
             while True:
                 try:
                     # Timeout ensures we don't hang if the source dies
-                    chunk = q.get(timeout=20) 
+                    try:
+                        chunk = q.get(timeout=20) 
+                    except queue.Empty:
+                        continue # Source is slow, just keep waiting...
+                        
                     if chunk is None: break
                     yield chunk
                     bytes_total += len(chunk)
@@ -778,8 +783,8 @@ def proxy_stream():
                             )
                         last_ping = time.time()
                         bytes_since_last = 0
-                except:
-                    # Source timeout or disconnect
+                except Exception as e:
+                    # Real error or disconnect
                     break
         finally:
             # Clean up: remove this client from the broadcast list
