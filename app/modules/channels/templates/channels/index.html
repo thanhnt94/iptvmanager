@@ -115,9 +115,19 @@
                     
                     <button type="submit" class="btn-premium px-12 py-4">Search</button>
                     
-                    <button type="button" id="toggleFiltersBtn" class="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-all">
+                    <button type="button" id="toggleFiltersBtn" class="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-all" title="Toggle Filters">
                         <i class="bi bi-gear-fill text-xl"></i>
                     </button>
+
+                    <!-- View Mode Toggle -->
+                    <div class="flex items-center bg-white/5 p-1 rounded-2xl border border-white/10 h-[62px]">
+                        <button type="button" id="setViewList" class="flex items-center justify-center w-12 h-11 rounded-xl transition-all text-white/40 hover:text-white" title="List View">
+                            <i class="bi bi-list-ul text-2xl"></i>
+                        </button>
+                        <button type="button" id="setViewGrid" class="flex items-center justify-center w-12 h-11 rounded-xl transition-all text-white/40 hover:text-white" title="Gallery View">
+                            <i class="bi bi-grid-3x3-gap-fill text-xl"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Advanced Filters -->
@@ -229,10 +239,118 @@
         <i class="bi bi-arrow-up-short text-3xl"></i>
     </button>
     
-    <!-- Channel List Container -->
-    <div class="space-y-6">
-        <!-- Mobile View (High-Density List) -->
-        <div class="space-y-2 lg:hidden">
+    <!-- Channel View Containers -->
+    <div id="view-container-root">
+        <!-- 1. Grid/Gallery View -->
+        <div id="grid-view-container" class="hidden">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+                {% for channel in channels %}
+                <div class="glass-card group/card overflow-hidden flex flex-col h-full hover:-translate-y-2 transition-all duration-500 hover:shadow-[0_20px_50px_rgba(37,99,235,0.15)] relative" id="grid-card-{{ channel.id }}">
+                    <!-- Media/Logo Header -->
+                    <div class="aspect-video bg-slate-900/50 relative overflow-hidden flex items-center justify-center group/media border-b border-white/5">
+                        {% if channel.logo_url %}
+                        <img src="{{ channel.logo_url }}" class="w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-110" alt="{{ channel.name }}" onerror="this.src='/static/img/placeholder.png'">
+                        {% else %}
+                        <div class="flex flex-col items-center gap-3 text-white/10">
+                            <i class="bi bi-broadcast text-5xl"></i>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Hover Overlay with Actions -->
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent opacity-0 group-hover/media:opacity-100 transition-all duration-300 flex items-center justify-center gap-3">
+                            <button class="play-btn w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-600/40 hover:scale-110 active:scale-95 transition-all"
+                                    data-url="{{ url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True) }}"
+                                    data-stream-url="{{ channel.stream_url }}"
+                                    data-stream-type="{{ channel.stream_type or 'live' }}"
+                                    data-id="{{ channel.id }}">
+                                <i class="bi bi-play-fill text-3xl"></i>
+                            </button>
+                        </div>
+
+                        <!-- Status Badge Top Right -->
+                        <div class="absolute top-3 right-3">
+                            {% if channel.status == 'live' %}
+                            <span class="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider shadow-lg shadow-emerald-500/30">
+                                <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span> LIVE
+                            </span>
+                            {% elif channel.status == 'die' %}
+                            <span class="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-500 text-white text-[10px] font-black uppercase tracking-wider">
+                                OFFLINE
+                            </span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Protection Indicator -->
+                        {% if channel.is_original %}
+                        <div class="absolute top-3 left-3 w-7 h-7 rounded-lg bg-amber-400 text-amber-950 flex items-center justify-center shadow-lg shadow-amber-400/30" title="Protected Channel">
+                            <i class="bi bi-shield-lock-fill text-sm"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Card Body -->
+                    <div class="p-4 flex-grow flex flex-col justify-between gap-4">
+                        <div>
+                            <div class="flex items-start justify-between gap-2 mb-1">
+                                <h4 class="text-white font-black text-sm uppercase tracking-tight line-clamp-1 group-hover/card:text-blue-400 transition-colors">{{ channel.name }}</h4>
+                                <span class="text-[10px] font-bold text-white/30 shrink-0 mt-0.5">#{{ channel.id }}</span>
+                            </div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="px-2 py-0.5 rounded-md bg-white/5 text-[10px] font-black text-white/50 border border-white/5 uppercase truncate max-w-[120px]">{{ channel.group_name }}</span>
+                                <span class="px-1.5 py-0.5 rounded border {% if channel.stream_type == 'vod' %}border-sky-500/30 text-sky-400 bg-sky-500/5{% else %}border-blue-500/30 text-blue-400 bg-blue-500/5{% endif %} text-[9px] font-black uppercase">
+                                    {{ channel.stream_type or 'LIVE' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Card Footer/Actions -->
+                        <div class="flex items-center justify-between pt-3 border-t border-white/5">
+                            <div class="flex items-center gap-1">
+                                <button class="stats-btn w-8 h-8 rounded-lg bg-white/5 text-sky-400/60 hover:text-sky-400 hover:bg-sky-400/10 border border-white/5 transition-all" data-id="{{ channel.id }}" title="Stats">
+                                    <i class="bi bi-bar-chart-fill text-xs"></i>
+                                </button>
+                                <button class="links-btn w-8 h-8 rounded-lg bg-white/5 text-blue-400/60 hover:text-blue-400 hover:bg-blue-400/10 border border-white/5 transition-all" data-id="{{ channel.id }}" data-name="{{ channel.name }}" data-url="{{ channel.stream_url }}" title="Links">
+                                    <i class="bi bi-link-45deg text-base"></i>
+                                </button>
+                            </div>
+                            
+                            <div class="flex items-center gap-1">
+                                <button onclick="toggleOriginal({{ channel.id }}, this)" 
+                                        class="w-8 h-8 flex items-center justify-center rounded-lg border border-white/5 transition-all original-toggle-btn {% if channel.is_original %}text-amber-400 bg-amber-400/10 border-amber-400/20{% else %}text-white/20 bg-white/5 hover:text-white/40{% endif %}"
+                                        title="Toggle Original Protection">
+                                    <i class="bi {% if channel.is_original %}bi-star-fill{% else %}bi-star{% endif %} text-[10px]"></i>
+                                </button>
+                                
+                                <div class="relative group/mini-menu">
+                                    <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-white/40 border border-white/5 hover:bg-white/10">
+                                        <i class="bi bi-three-dots-vertical text-xs"></i>
+                                    </button>
+                                    <div class="absolute bottom-full right-0 mb-2 w-48 hidden group-hover/mini-menu:block z-[110] animate-in fade-in slide-in-from-bottom-2 origin-bottom-right">
+                                        <div class="glass-panel p-2 shadow-2xl border-white/10">
+                                            <a href="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-black uppercase text-white/70 hover:bg-blue-600 hover:text-white transition-all mb-1">
+                                                <i class="bi bi-pencil-square"></i> Edit Channel
+                                            </a>
+                                            <button class="quick-add-row-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-black uppercase text-white/70 hover:bg-emerald-600 hover:text-white transition-all" data-id="{{ channel.id }}" data-name="{{ channel.name }}">
+                                                <i class="bi bi-plus-circle"></i> Add to Playlist
+                                            </button>
+                                            <button class="ajax-check-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-black uppercase text-white/70 hover:bg-amber-600 hover:text-white transition-all mt-1" data-id="{{ channel.id }}" data-url="{{ url_for('channels.check_channel', channel_id=channel.id) }}">
+                                                <i class="bi bi-shield-check"></i> Check Status
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 2. Original List View -->
+        <div id="list-view-container">
+            <!-- Mobile View (High-Density List) -->
+            <div class="space-y-2 lg:hidden">
             {% for channel in channels %}
             <div class="glass-panel p-3 flex items-center gap-3 group/card relative hover:z-[70] transition-all" id="card-{{ channel.id }}">
                 <!-- Protection Indicator (Subtle Glow) -->
@@ -469,6 +587,7 @@
                 </table>
             </div>
         </div>
+    </div>
     </div>
 </div>
 </div>
@@ -770,6 +889,34 @@ document.addEventListener('DOMContentLoaded', function() {
             playStream(currentOriginalUrl, {id: currentChannelId, name: currentChannelName}, e.target.value);
         }
     });
+
+    // --- View Mode Management ---
+    const listBtn = document.getElementById('setViewList');
+    const gridBtn = document.getElementById('setViewGrid');
+    const listContainer = document.getElementById('list-view-container');
+    const gridContainer = document.getElementById('grid-view-container');
+
+    function setViewMode(mode, save = true) {
+        if (mode === 'grid') {
+            listContainer.classList.add('hidden');
+            gridContainer.classList.remove('hidden');
+            gridBtn.className = 'flex items-center justify-center w-12 h-11 rounded-xl transition-all text-white bg-blue-600 shadow-lg shadow-blue-600/40 border border-blue-500/50';
+            listBtn.className = 'flex items-center justify-center w-12 h-11 rounded-xl transition-all text-white/40 hover:text-white';
+        } else {
+            gridContainer.classList.add('hidden');
+            listContainer.classList.remove('hidden');
+            listBtn.className = 'flex items-center justify-center w-12 h-11 rounded-xl transition-all text-white bg-blue-600 shadow-lg shadow-blue-600/40 border border-blue-500/50';
+            gridBtn.className = 'flex items-center justify-center w-12 h-11 rounded-xl transition-all text-white/40 hover:text-white';
+        }
+        if (save) localStorage.setItem('iptv_view_mode', mode);
+    }
+
+    listBtn.addEventListener('click', () => setViewMode('list'));
+    gridBtn.addEventListener('click', () => setViewMode('grid'));
+
+    // Initial load
+    const savedMode = localStorage.getItem('iptv_view_mode') || 'list';
+    setViewMode(savedMode, false);
 
     // --- Filter Toggle Persistence ---
     const filterPanel = document.getElementById('advancedFilters');
