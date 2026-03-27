@@ -15,37 +15,8 @@ import queue
 channels_bp = Blueprint('channels', __name__, template_folder='templates')
 logger = logging.getLogger('iptv')
 
-def validate_proxy_access(token=None):
-    """
-    Validates if a request is authorized to play a stream.
-    Returns the username/identity if valid, else None.
-    """
-    if current_user.is_authenticated:
-        return current_user.username
-    
-    if not token:
-        # Fallback to IP trust
-        from app.modules.auth.models import TrustedIP
-        ip = request.remote_addr
-        trusted = TrustedIP.query.filter_by(ip_address=ip).first()
-        if trusted:
-            return f"Trusted IP: {ip}"
-        return None
-
-    from app.modules.auth.models import User
-    from app.modules.playlists.models import PlaylistProfile
-    
-    # Check User API Token
-    user = User.query.filter_by(api_token=token).first()
-    if user:
-        return user.username
-        
-    # Check Playlist Security Token
-    playlist = PlaylistProfile.query.filter_by(security_token=token).first()
-    if playlist:
-        return f"Playlist: {playlist.name}"
-        
-    return None
+# --- Removed Duplicate validate_proxy_access (Consolidated at L666) ---
+# --- End of duplicate removal ---
 
 @channels_bp.route('/')
 @login_required
@@ -547,12 +518,11 @@ def play_channel(channel_id):
         
     # 3.2 Smart "Default" Mode Logic
     if is_hls:
-        if enable_hls_proxy:
-            # Full HLS Proxy with Caching
-            return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token))
-        elif enable_stats:
-            # Fallback to Tracking only (No proxy, but server still knows who is watching)
+        # USER REQUEST: For HLS, prioritize Tracking/Redirect in "Smart" mode
+        # This is more reliable than full manifest proxying for most direct clients.
+        if enable_stats:
             return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
+        return redirect(channel.stream_url)
     elif is_ts:
         if enable_ts_proxy:
             # Full TS Singleton Proxy
@@ -603,11 +573,14 @@ def get_scan_status():
     from app.modules.health.services import HealthCheckService
     return jsonify(HealthCheckService.get_status())
 
-@channels_bp.route('/api/heartbeat', methods=['POST'])
-def heartbeat():
+_heartbeat_throttles = {} # (ip, channel_id) -> last_time
+
+@channels_bp.route('/api/player_ping', methods=['POST'])
+def player_ping():
     """
-    Heartbeat API called by web player every 15s-30s.
+    Heartbeat API called by web player every 20s.
     Estimates bandwidth based on resolution.
+    Includes server-side throttling (max 1 per 10s per IP/Channel) to prevent storms.
     """
     data = request.json or {}
     channel_id = data.get('channel_id')
@@ -615,6 +588,20 @@ def heartbeat():
     
     if not channel_id:
         return jsonify({'error': 'No channel_id'}), 400
+
+    # 1. Server-side Throttling
+    now = time.time()
+    ip = request.remote_addr
+    throttle_key = (ip, channel_id)
+    last_time = _heartbeat_throttles.get(throttle_key, 0)
+    
+    # If less than 10 seconds since last ping, ignore but return OK to satisfy client
+    if now - last_time < 10:
+        return jsonify({'status': 'throttled', 'info': 'too frequent'})
+    
+    _heartbeat_throttles[throttle_key] = now
+    
+    # 2. Process Heartbeat
         
     channel = Channel.query.get(channel_id)
     if not channel:

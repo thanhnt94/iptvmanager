@@ -7,6 +7,9 @@ window.IPTVPlayer = {
     hls: null,
     mpegtsPlayer: null,
     heartbeatInterval: null,
+    heartbeatTimeout: null,
+    retryCount: 0,
+    lastPlayTime: 0,
     currentUrl: null,
     currentId: null,
     
@@ -15,8 +18,22 @@ window.IPTVPlayer = {
      * @param {Object} config { id, url, name, stream_type, forcedType, token, overlayElement, statusElement }
      */
     play: function(videoElement, config, isRetry = false) {
+        const now = Date.now();
         const { id, url, name, stream_type, stream_format, forcedType, token, overlay, statusLabel, onError, onStall } = config;
-        console.log(`[IPTVPlayer] ${isRetry ? 'Retrying' : 'Starting'} playback for: ${name} (ID: ${id})`);
+        
+        if (!isRetry) {
+            this.retryCount = 0;
+            this.lastPlayTime = 0;
+            console.log(`[IPTVPlayer] Starting playback for: ${name} (ID: ${id})`);
+        } else {
+            console.log(`[IPTVPlayer] Retrying (${this.retryCount}) for: ${name}`);
+            // Safety: Don't retry too fast
+            if (now - this.lastPlayTime < 1500) {
+                console.warn("[IPTVPlayer] Throttling rapid retry");
+                return;
+            }
+        }
+        this.lastPlayTime = now;
         
         // 1. Logic Cleanup
         if (!isRetry) {
@@ -33,10 +50,10 @@ window.IPTVPlayer = {
         const sType = (stream_type || 'live').toLowerCase();
         const sFormat = (stream_format || '').toLowerCase();
         
-        // Comprehensive Detection (Prioritize extensions/specific flags)
-        const isHlsDetected = lowUrl.includes('.m3u8') || lowUrl.includes('m3u8') || (lowUrl.includes('hls') && !lowUrl.includes('type=ts') && !lowUrl.includes('output=ts')) || sType === 'hls' || sFormat === 'hls';
-        const isTsDetected = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts') || lowUrl.includes('output=ts') || lowUrl.includes('.flv') || sType === 'ts' || sFormat === 'ts' || sFormat === 'flv';
-        const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('/movie/') || sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv';
+        // Comprehensive Detection (Prioritize backend flags, then extensions)
+        const isHlsDetected = sType === 'hls' || sFormat === 'hls' || lowUrl.includes('.m3u8') || lowUrl.includes('m3u8');
+        const isTsDetected = sType === 'ts' || sFormat === 'ts' || sFormat === 'flv' || lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('.flv');
+        const isNativeDetected = sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv' || ['.mp4', '.mkv', '.mov', '.avi', '.wmv'].some(ext => lowUrl.includes(ext));
         
         // Expose explicit LIVE state for UI components
         videoElement._isExplicitLive = !isNativeDetected;
@@ -97,18 +114,26 @@ window.IPTVPlayer = {
         if (overlay) overlay.classList.remove('hidden');
         if (statusLabel) statusLabel.innerText = "CONNECTING...";
 
-        // 5. Start Heartbeat
+        // 5. Start Heartbeat (Consolidated & Safe)
         if (id) {
+            // Clear any existing active heartbeats immediately
+            if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+            if (this.heartbeatTimeout) clearTimeout(this.heartbeatTimeout);
+
             const sendPing = (sec) => {
-                if (videoElement.paused) return;
-                fetch('/channels/api/heartbeat', {
+                // Safety: Don't ping if this player instance is no longer "current" or paused
+                if (this.currentId !== id || videoElement.paused || videoElement.readyState === 0) return;
+                
+                fetch('/channels/api/player_ping', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ channel_id: parseInt(id), seconds: sec })
-                }).catch(err => console.warn("Heartbeat failed"));
+                }).catch(err => console.warn("[IPTVPlayer] Ping failed"));
             };
-            setTimeout(() => sendPing(2), 2000);
-            this.heartbeatInterval = setInterval(() => sendPing(15), 15000);
+
+            // Initial ping after 5s to confirm stable playback, then every 20s
+            this.heartbeatTimeout = setTimeout(() => sendPing(5), 5000);
+            this.heartbeatInterval = setInterval(() => sendPing(20), 20000);
         }
 
         // 6. Execute Engine
@@ -175,16 +200,15 @@ window.IPTVPlayer = {
                 this.mpegtsPlayer.load();
 
                 // TS Error Handling & Auto-Retry
-                let retryCount = 0;
-                const MAX_RETRIES = 10; // "Extreme" retries
+                const MAX_RETRIES = 5;
 
                 this.mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
                     console.error(`[IPTVPlayer] TS Error: ${type} - ${detail}`, info);
                     const errorMsg = info && info.msg ? info.msg : detail;
                     
-                    if (retryCount < MAX_RETRIES) {
-                        retryCount++;
-                        if (statusLabel) statusLabel.innerText = `RECONNECTING (${retryCount}/${MAX_RETRIES})...`;
+                    if (this.retryCount < MAX_RETRIES) {
+                        this.retryCount++;
+                        if (statusLabel) statusLabel.innerText = `RECONNECTING (${this.retryCount}/5)...`;
                         setTimeout(() => {
                              if (this.currentId === id) this.play(videoElement, config, true); 
                         }, 2000);
@@ -273,7 +297,14 @@ window.IPTVPlayer = {
     },
     
     stop: function(videoElement) {
-        if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
+        if (this.heartbeatTimeout) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
         
         if (this.hls) {
             console.log("[IPTVPlayer] Destroying HLS instance");
