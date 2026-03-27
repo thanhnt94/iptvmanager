@@ -1,252 +1,245 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <!-- Header Section -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
-            <h2 class="fw-bold text-dark mb-0">System Settings</h2>
-            <p class="text-muted small">Configure global platform behavior and background health maintenance.</p>
+            <h1 class="text-3xl font-black text-white tracking-tight uppercase mb-2">
+                System <span class="text-blue-500">Settings</span>
+            </h1>
+            <p class="text-white/40 font-bold text-[10px] uppercase tracking-[3px] flex items-center gap-2">
+                <i class="bi bi-gear-fill text-blue-500"></i>
+                Platform behavior & Maintenance
+            </p>
         </div>
-        <a href="{{ url_for('channels.active_sessions_page') }}" class="btn btn-outline-info shadow-sm">
-            <i class="bi bi-broadcast me-1"></i> View Live Sessions
-        </a>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('channels.active_sessions_page') }}" class="btn-glass px-6 py-3 flex items-center gap-3 group">
+                <i class="bi bi-broadcast text-blue-400 group-hover:scale-110 transition-transform"></i>
+                <span class="text-[11px] font-black uppercase tracking-widest">Live Monitor</span>
+            </a>
+            <button type="submit" form="settingsForm" class="btn-premium px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600">
+                <span class="text-[11px] font-black uppercase tracking-widest">Save Config</span>
+            </button>
+        </div>
     </div>
 
-    <form action="{{ url_for('settings.save_settings') }}" method="POST">
-        <div class="row g-4">
-            <!-- Performance & Tracking -->
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm h-100" style="border-radius: 1rem;">
-                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
-                        <h5 class="fw-bold mb-0 text-primary">
-                            <i class="bi bi-speedometer2 me-2"></i> Performance & Tracking
-                        </h5>
+    <form id="settingsForm" action="{{ url_for('settings.save_settings') }}" method="POST" class="space-y-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Performance Tuning -->
+            <div class="glass-panel p-8 space-y-8">
+                <div class="flex items-center gap-4 mb-2">
+                    <div class="w-12 h-12 rounded-2xl bg-blue-600/20 flex items-center justify-center text-blue-400 border border-blue-500/20">
+                        <i class="bi bi-speedometer2 text-xl"></i>
                     </div>
-                    <div class="card-body px-4 pb-4">
-                        <div class="mb-4">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div>
-                                    <label class="fw-bold mb-0 text-warning"><i class="bi bi-cpu me-1"></i> MPEG-TS Engine (Singleton)</label>
-                                    <p class="text-muted small mb-0">Enable TVHeadend-style piping for .ts streams to avoid multiple source connections.</p>
-                                </div>
-                                <div class="form-check form-switch px-0">
-                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_TS_PROXY" name="ENABLE_TS_PROXY" {% if settings|selectattr('key', 'equalto', 'ENABLE_TS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
-                                </div>
-                            </div>
-                        </div>
+                    <div>
+                        <h3 class="text-white font-black text-sm uppercase tracking-tight">Performance Control</h3>
+                        <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Engine & Caching Optimization</p>
+                    </div>
+                </div>
 
-                        <div class="mb-4">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div>
-                                    <label class="fw-bold mb-0 text-info"><i class="bi bi-memory me-1"></i> HLS Caching Engine</label>
-                                    <p class="text-muted small mb-0">Enable RAM Caching for .m3u8 segments to prevent lag on unstable connections.</p>
-                                </div>
-                                <div class="form-check form-switch px-0">
-                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_HLS_PROXY" name="ENABLE_HLS_PROXY" {% if settings|selectattr('key', 'equalto', 'ENABLE_HLS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
-                                </div>
-                            </div>
+                <div class="space-y-6">
+                    <div class="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-black text-white/80 uppercase tracking-tighter">MPEG-TS Engine (Singleton)</label>
+                            <p class="text-[10px] text-white/30 leading-relaxed font-medium">TVHeadend-style piping for .ts streams to avoid multiple source connections.</p>
                         </div>
+                        <label class="relative inline-flex items-center cursor-pointer group">
+                            <input type="checkbox" name="ENABLE_TS_PROXY" class="sr-only peer" {% if settings|selectattr('key', 'equalto', 'ENABLE_TS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
 
-                        <div class="mb-4">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div>
-                                    <label class="fw-bold mb-0">Proxy Usage Tracking</label>
-                                    <p class="text-muted small mb-0">Force proxying for TS/HLS to track watch time and bandwidth.</p>
-                                </div>
-                                <div class="form-check form-switch px-0">
-                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_PROXY_STATS" name="ENABLE_PROXY_STATS" {% if settings|selectattr('key', 'equalto', 'ENABLE_PROXY_STATS')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
-                                </div>
-                            </div>
+                    <div class="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-black text-white/80 uppercase tracking-tighter">HLS Caching Engine</label>
+                            <p class="text-[10px] text-white/30 leading-relaxed font-medium">RAM Caching for .m3u8 segments to prevent lag on unstable connections.</p>
                         </div>
+                        <label class="relative inline-flex items-center cursor-pointer group">
+                            <input type="checkbox" name="ENABLE_HLS_PROXY" class="sr-only peer" {% if settings|selectattr('key', 'equalto', 'ENABLE_HLS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
 
-                        <div class="mb-0 d-none">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div>
-                                    <label class="fw-bold mb-0">Global Stream Manager</label>
-                                    <p class="text-muted small mb-0">Enable global connection sharing (Master Switch).</p>
-                                </div>
-                                <div class="form-check form-switch px-0">
-                                    <input class="form-check-input ms-0 fs-4" type="checkbox" id="ENABLE_STREAM_MANAGER" name="ENABLE_STREAM_MANAGER" {% if settings|selectattr('key', 'equalto', 'ENABLE_STREAM_MANAGER')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
-                                </div>
-                            </div>
+                    <div class="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
+                        <div class="space-y-1">
+                            <label class="block text-xs font-black text-white/80 uppercase tracking-tighter">Proxy Usage Tracking</label>
+                            <p class="text-[10px] text-white/30 leading-relaxed font-medium">Force proxying for TS/HLS to track watch time and bandwidth.</p>
                         </div>
+                        <label class="relative inline-flex items-center cursor-pointer group">
+                            <input type="checkbox" name="ENABLE_PROXY_STATS" class="sr-only peer" {% if settings|selectattr('key', 'equalto', 'ENABLE_PROXY_STATS')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
                     </div>
                 </div>
             </div>
 
             <!-- Network & Security -->
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm h-100" style="border-radius: 1rem;">
-                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
-                        <h5 class="fw-bold mb-0 text-success">
-                            <i class="bi bi-shield-lock me-2"></i> Network & Security
-                        </h5>
+            <div class="glass-panel p-8 space-y-8">
+                <div class="flex items-center gap-4 mb-2">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-600/20 flex items-center justify-center text-emerald-400 border border-emerald-500/20">
+                        <i class="bi bi-shield-lock text-xl"></i>
                     </div>
-                    <div class="card-body px-4 pb-4">
-                        <div class="mb-3">
-                            <label class="fw-bold mb-1">Custom Proxy User-Agent</label>
-                            <input type="text" class="form-control shadow-none" name="CUSTOM_USER_AGENT" value="{{ (settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|first).value if settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|list else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }}">
-                        </div>
+                    <div>
+                        <h3 class="text-white font-black text-sm uppercase tracking-tight">Access & Security</h3>
+                        <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Network Identifiers & Protection</p>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="space-y-3">
+                        <label class="block text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Custom Proxy User-Agent</label>
+                        <textarea name="CUSTOM_USER_AGENT" class="glass-control bg-slate-900/40 min-h-[100px] text-xs font-mono" placeholder="Standard User Agent string...">{{ (settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|first).value if settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|list else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }}</textarea>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Proxy Engine Advanced Tuning -->
-            <div class="col-md-12 mt-4">
-                <div class="card border-0 shadow-sm" style="border-radius: 1rem;">
-                    <div class="card-header bg-white border-bottom-0 pt-4 px-4 d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="fw-bold mb-0 text-dark">
-                                <i class="bi bi-gear-wide-connected me-2 text-primary"></i> Proxy Engine Advanced Tuning
-                            </h5>
-                            <p class="text-muted small mb-0 mt-1">Optimize RAM and CPU usage based on your hardware capabilities.</p>
+        <!-- Hardware Tuning presets -->
+        <div class="glass-panel p-8">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                <div>
+                    <h3 class="text-white font-black text-sm uppercase tracking-tight flex items-center gap-2">
+                        <i class="bi bi-lightning-charge text-orange-400"></i>
+                        Hardware Acceleration
+                    </h3>
+                    <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Optimization for your specific hardware</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="applyPreset('low')" class="btn-glass px-4 py-2 border-slate-700/50 hover:border-blue-500/30">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-white/60">Low-End (ARM)</span>
+                    </button>
+                    <button type="button" onclick="applyPreset('mid')" class="btn-glass px-4 py-2 border-slate-700/50 hover:border-blue-500/30">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-white/60">Mid-Range (Pi 4)</span>
+                    </button>
+                    <button type="button" onclick="applyPreset('high')" class="btn-glass px-4 py-2 border-slate-700/50 hover:border-indigo-500/30">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-white/60">High-End (X64)</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="space-y-2">
+                    <label class="text-[9px] font-black text-white/30 uppercase tracking-widest block ml-1">TS Buffer Size</label>
+                    <div class="relative group">
+                        <input type="number" id="TS_BUFFER_SIZE" name="TS_BUFFER_SIZE" class="glass-control bg-slate-900/20 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|first).value if settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|list else '128' }}">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest pointer-events-none">Chunks</span>
+                    </div>
+                    <p class="text-[9px] text-white/20 italic pl-1">Uses ~<span id="ts_ram_calc" class="text-blue-400 font-bold">2.0</span> MB per stream</p>
+                </div>
+                <!-- ... other tuning fields ... -->
+                <div class="space-y-2">
+                    <label class="text-[9px] font-black text-white/30 uppercase tracking-widest block ml-1">HLS Cache TTL</label>
+                    <div class="relative group">
+                        <input type="number" id="HLS_CACHE_TTL" name="HLS_CACHE_TTL" class="glass-control bg-slate-900/20 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|first).value if settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|list else '60' }}">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest pointer-events-none">Sec</span>
+                    </div>
+                    <p class="text-[9px] text-white/20 italic pl-1">Retention time for video segments</p>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[9px] font-black text-white/30 uppercase tracking-widest block ml-1">HLS Max Segments</label>
+                    <div class="relative group">
+                        <input type="number" id="HLS_MAX_SEGMENTS" name="HLS_MAX_SEGMENTS" class="glass-control bg-slate-900/20 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|first).value if settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|list else '50' }}">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest pointer-events-none">Files</span>
+                    </div>
+                    <p class="text-[9px] text-white/20 italic pl-1">Global RAM segment limit</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Background Health Scan Control -->
+        <div class="glass-panel p-8">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-2xl bg-orange-600/20 flex items-center justify-center text-orange-400 border border-orange-500/20">
+                    <i class="bi bi-shield-check text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-white font-black text-sm uppercase tracking-tight">Health Scan Mission Control</h3>
+                    <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Background maintenance & Validation</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                <!-- Left: Control Panel -->
+                <div class="lg:col-span-4 space-y-6">
+                    <div class="space-y-4">
+                        <h6 class="text-[10px] font-black text-white/20 uppercase tracking-[2px]">Configuration</h6>
+                        <div class="space-y-3 p-6 bg-white/[0.02] border border-white/5 rounded-3xl">
+                            <label class="block text-[10px] font-black text-white/40 uppercase tracking-widest ml-1">Per-Channel Delay</label>
+                            <div class="relative">
+                                <input type="number" id="SCAN_DELAY_SECONDS" name="SCAN_DELAY_SECONDS" class="glass-control bg-slate-900/40 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|first).value if settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|list else '2' }}" min="0">
+                                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest">Sec</span>
+                            </div>
+                            <p class="text-[9px] text-white/20 leading-relaxed italic">Strategic delay to avoid provider rate limiting.</p>
                         </div>
-                        <div class="dropdown">
-                            <button class="btn btn-outline-primary btn-sm dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-lightning-charge me-1"></i> APPLY HARDWARE PRESET
+                    </div>
+                    <button type="submit" class="w-full btn-premium py-4 bg-white/5 hover:bg-white/10 text-white/80 border-white/5">
+                        <span class="text-[11px] font-black uppercase tracking-widest">Update Preferences</span>
+                    </button>
+                </div>
+
+                <!-- Right: Dashboard & Progress -->
+                <div class="lg:col-span-8 space-y-6">
+                    <div id="scanActionContainer" class="h-full">
+                        <div class="h-full flex flex-col items-center justify-center p-10 bg-white/[0.02] border border-dashed border-white/10 rounded-3xl text-center group hover:bg-white/[0.03] hover:border-orange-500/20 transition-all">
+                            <i class="bi bi-activity text-white/5 text-6xl mb-6 group-hover:scale-110 group-hover:text-orange-500/10 transition-all"></i>
+                            <h4 class="text-white/60 font-black text-xs uppercase tracking-widest mb-2">No Active Mission</h4>
+                            <p class="text-white/20 text-[10px] mb-8 max-w-xs mx-auto">Launch a system-wide health validation scan to identify dead streams automatically.</p>
+                            <button type="button" class="btn-premium px-10 py-4 bg-orange-600 shadow-orange-600/20" data-bs-toggle="modal" data-bs-target="#advancedScanModal">
+                                <i class="bi bi-play-circle-fill mr-2"></i>
+                                <span class="text-[11px] font-black uppercase tracking-widest">Initialize Scan</span>
                             </button>
-                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                <li><a class="dropdown-item py-2" href="#" onclick="applyPreset('low')">
-                                    <div class="fw-bold">Armbian / Low-End</div>
-                                    <div class="small text-muted">1GB RAM, SD/HD Focus</div>
-                                </a></li>
-                                <li><a class="dropdown-item py-2" href="#" onclick="applyPreset('mid')">
-                                    <div class="fw-bold">Mid-Range / Raspberry Pi 4</div>
-                                    <div class="small text-muted">2-4GB RAM, Balanced</div>
-                                </a></li>
-                                <li><a class="dropdown-item py-2" href="#" onclick="applyPreset('high')">
-                                    <div class="fw-bold">High-End / Desktop Server</div>
-                                    <div class="small text-muted">8GB+ RAM, 4K / Multi-user</div>
-                                </a></li>
-                            </ul>
                         </div>
                     </div>
-                    <div class="card-body px-4 pb-4">
-                        <div class="row g-4">
-                            <div class="col-md-4">
-                                <label class="fw-bold small mb-1 text-uppercase text-muted">TS Buffer Size (Chunks)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="TS_BUFFER_SIZE" name="TS_BUFFER_SIZE" value="{{ (settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|first).value if settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|list else '128' }}">
-                                    <span class="input-group-text">x 16KB</span>
-                                </div>
-                                <p class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">Total RAM: <span id="ts_ram_calc">2.0</span> MB per active channel.</p>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="fw-bold small mb-1 text-uppercase text-muted">HLS Cache TTL (Seconds)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="HLS_CACHE_TTL" name="HLS_CACHE_TTL" value="{{ (settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|first).value if settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|list else '60' }}">
-                                    <span class="input-group-text">sec</span>
-                                </div>
-                                <p class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">Time to keep video segments in memory.</p>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="fw-bold small mb-1 text-uppercase text-muted">HLS Max Segments</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="HLS_MAX_SEGMENTS" name="HLS_MAX_SEGMENTS" value="{{ (settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|first).value if settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|list else '50' }}">
-                                    <span class="input-group-text">files</span>
-                                </div>
-                                <p class="text-muted" style="font-size: 0.75rem; margin-top: 5px;">Max segments to store globally in RAM.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Unified Background Health Check Manager -->
-            <div class="col-md-12 mt-4">
-                <div class="card border-0 shadow-sm" style="border-radius: 1rem;">
-                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
-                        <h5 class="fw-bold mb-0 text-warning">
-                            <i class="bi bi-shield-check me-2"></i> Background Health Scan Control
-                        </h5>
-                        <p class="text-muted small mb-0 mt-1">Manual background scans persist even if you close the browser.</p>
-                    </div>
-                    <div class="card-body px-4 pb-4">
-                        <div class="row g-4">
-                            <!-- Left: Global Configuration -->
-                            <div class="col-md-4">
-                                <h6 class="fw-bold text-muted small text-uppercase mb-3">Scan Configuration</h6>
-                                <div class="mb-3">
-                                    <label class="fw-bold small mb-1">Per-Channel Delay (Seconds)</label>
-                                    <div class="input-group">
-                                        <input type="number" class="form-control shadow-none" id="SCAN_DELAY_SECONDS" name="SCAN_DELAY_SECONDS" value="{{ (settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|first).value if settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|list else '2' }}" min="0">
-                                        <span class="input-group-text">sec</span>
+                    <!-- Real-time Progress HUD -->
+                    <div id="backgroundScanBar" class="hidden">
+                        <div class="glass-card p-8 border-orange-500/10 bg-orange-500/[0.02]">
+                            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                                <div class="space-y-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="flex h-2 w-2 relative">
+                                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                            <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                                        </span>
+                                        <span class="text-[10px] font-black text-orange-400 uppercase tracking-widest">ACTIVE OPERATION</span>
                                     </div>
-                                    <p class="small text-muted mt-1 mb-0">Avoid provider bans by setting a reasonable delay.</p>
+                                    <h4 id="currentScanName" class="text-white font-black text-lg truncate max-w-[300px]">...</h4>
+                                    <p id="scanProgressLabel" class="text-white/30 text-[10px] font-bold uppercase tracking-widest">0 / 0 CHANNELS PROCESSED</p>
                                 </div>
-                                <div class="d-grid pt-2">
-                                    <button type="submit" class="btn btn-primary fw-bold shadow-sm">SAVE SETTINGS</button>
+                                <div class="text-right">
+                                    <span id="scanPercent" class="text-5xl font-black text-white/90">0%</span>
+                                </div>
+                            </div>
+                            
+                            <div class="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 mb-10">
+                                <div id="scanProgressBar" class="h-full bg-gradient-to-r from-orange-600 to-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)] transition-all duration-500" style="width: 0%"></div>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-6 mb-10">
+                                <div class="glass-card p-4 border-emerald-500/5 bg-emerald-500/[0.02]">
+                                    <span class="text-[8px] font-black text-emerald-500/40 uppercase tracking-[2px] block mb-1 text-center">LIVE</span>
+                                    <div id="scanStatLive" class="text-2xl font-black text-emerald-400 text-center">0</div>
+                                </div>
+                                <div class="glass-card p-4 border-rose-500/5 bg-rose-500/[0.02]">
+                                    <span class="text-[8px] font-black text-rose-500/40 uppercase tracking-[2px] block mb-1 text-center">DIE</span>
+                                    <div id="scanStatDie" class="text-2xl font-black text-rose-400 text-center">0</div>
+                                </div>
+                                <div class="glass-card p-4 border-slate-500/5 bg-slate-500/[0.02]">
+                                    <span class="text-[8px] font-black text-slate-500/40 uppercase tracking-[2px] block mb-1 text-center">PENDING</span>
+                                    <div id="scanStatUnknown" class="text-2xl font-black text-slate-400 text-center">0</div>
                                 </div>
                             </div>
 
-                            <!-- Right: Dashboard & Progress -->
-                            <div class="col-md-8 border-start ps-md-4">
-                                <h6 class="fw-bold text-muted small text-uppercase mb-3">Background Operation Status</h6>
-                                
-                                <div id="scanActionContainer">
-                                    <div class="p-4 bg-light border rounded text-center shadow-sm">
-                                        <i class="bi bi-activity text-muted fs-1 mb-2"></i>
-                                        <h6 class="fw-bold text-dark">No Active Background Scan</h6>
-                                        <p class="text-muted small mb-3">Start a new scan to check for Live/Die status across your channels.</p>
-                                        <button type="button" class="btn btn-warning fw-bold px-5 py-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#advancedScanModal">
-                                            <i class="bi bi-play-circle-fill me-2"></i> START BACKGROUND SCAN
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Real-time Progress Card -->
-                                <div id="backgroundScanBar" class="d-none">
-                                    <div class="p-3 bg-white border rounded shadow-sm">
-                                        <div class="row align-items-center mb-3">
-                                            <div class="col-md-8">
-                                                <div class="d-flex align-items-center gap-2 mb-1">
-                                                    <div class="spinner-border spinner-border-sm text-primary" style="width: 14px; height: 14px;"></div>
-                                                    <span class="fw-bold text-primary small">SCANNING:</span>
-                                                    <span id="currentScanName" class="fw-bold text-dark small text-truncate d-inline-block" style="max-width: 250px;">...</span>
-                                                </div>
-                                                <div id="scanProgressLabel" class="small text-muted">0 / 0 channels processed</div>
-                                            </div>
-                                            <div class="col-md-4 text-end">
-                                                <span id="scanPercent" class="fw-bold text-primary display-6">0%</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="progress mb-4" style="height: 12px; border-radius: 6px; background-color: #f0f0f0;">
-                                            <div id="scanProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-warning" role="progressbar" style="width: 0%"></div>
-                                        </div>
-
-                                        <div class="row g-3 mb-4 text-center">
-                                            <div class="col-4">
-                                                <div class="p-2 border rounded bg-success-subtle">
-                                                    <div class="text-success small fw-bold text-uppercase" style="font-size: 0.6rem;">LIVE</div>
-                                                    <div id="scanStatLive" class="fw-bold fs-4 text-success">0</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-4">
-                                                <div class="p-2 border rounded bg-danger-subtle">
-                                                    <div class="text-danger small fw-bold text-uppercase" style="font-size: 0.6rem;">DIE</div>
-                                                    <div id="scanStatDie" class="fw-bold fs-4 text-danger">0</div>
-                                                </div>
-                                            </div>
-                                            <div class="col-4">
-                                                <div class="p-2 border rounded bg-secondary-subtle">
-                                                    <div class="text-secondary small fw-bold text-uppercase" style="font-size: 0.6rem;">UNKNOWN</div>
-                                                    <div id="scanStatUnknown" class="fw-bold fs-4 text-secondary">0</div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="d-flex gap-2 justify-content-between">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#scanLogModal">
-                                                <i class="bi bi-terminal me-1"></i> VIEW LIVE LOG
-                                            </button>
-                                            <button id="stopScanBtn" type="button" class="btn btn-danger btn-sm px-3 fw-bold">
-                                                <i class="bi bi-stop-circle-fill me-1"></i> STOP BACKGROUND SCAN
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <div class="flex gap-4">
+                                <button type="button" class="btn-glass flex-1 py-3 text-white/40 hover:text-white" data-bs-toggle="modal" data-bs-target="#scanLogModal">
+                                    <i class="bi bi-terminal mr-2"></i>
+                                    <span class="text-[10px] font-black uppercase tracking-widest">Technical Log</span>
+                                </button>
+                                <button id="stopScanBtn" type="button" class="btn-glass flex-1 py-3 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-all">
+                                    <i class="bi bi-stop-circle-fill mr-2"></i>
+                                    <span class="text-[10px] font-black uppercase tracking-widest">Abort Mission</span>
+                                </button>
                         </div>
                     </div>
                 </div>
@@ -254,30 +247,55 @@
         </div>
     </form>
 
-    </div>
+    <!-- Backup & Restore Database -->
 
     <!-- Backup & Restore Database -->
-    <div class="card shadow-sm border-0 mb-4 mt-5" style="border-radius: 1rem; overflow: hidden;">
-        <div class="card-header bg-dark text-white fw-bold py-3 px-4">
-            <i class="bi bi-database-gear me-2"></i>Backup & Restore Database
+    <div class="glass-panel p-8 mt-12 border-rose-500/10 bg-rose-500/[0.02]">
+        <div class="flex items-center gap-4 mb-8">
+            <div class="w-12 h-12 rounded-2xl bg-rose-600/20 flex items-center justify-center text-rose-400 border border-rose-500/20">
+                <i class="bi bi-database-gear text-xl"></i>
+            </div>
+            <div>
+                <h3 class="text-white font-black text-sm uppercase tracking-tight">Security & Disaster Recovery</h3>
+                <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">System Backup & Database Restoration</p>
+            </div>
         </div>
-        <div class="card-body p-4">
-            <div class="row g-4">
-                <div class="col-md-6 border-end">
-                    <h6 class="fw-bold text-success mb-2"><i class="bi bi-cloud-download me-2"></i>Export (Backup)</h6>
-                    <p class="small text-muted mb-3">Tải xuống toàn bộ dữ liệu hiện tại (Channels, Playlists, Users, Settings...) dưới dạng file JSON.</p>
-                    <a href="{{ url_for('settings.export_backup') }}" class="btn btn-success fw-bold shadow-sm"><i class="bi bi-download me-2"></i>Tải file Backup (.json)</a>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+            <div class="space-y-4 p-8 bg-white/[0.02] border border-white/5 rounded-3xl">
+                <h6 class="text-emerald-500 text-[10px] font-black uppercase tracking-[2px] flex items-center gap-2">
+                    <i class="bi bi-cloud-download"></i> EXPORT BACKUP
+                </h6>
+                <p class="text-white/30 text-[10px] leading-relaxed">Download a complete snapshot of your system state including Channels, Playlists, Users, and Settings as a JSON archive.</p>
+                <div class="pt-4">
+                    <a href="{{ url_for('settings.export_backup') }}" class="btn-premium px-8 py-3 bg-emerald-600 shadow-emerald-600/20">
+                        <i class="bi bi-download mr-2"></i>
+                        <span class="text-[10px] font-black uppercase tracking-widest text-white">Generate Snapshot</span>
+                    </a>
                 </div>
-                <div class="col-md-6 ps-md-4">
-                    <h6 class="fw-bold text-danger mb-2"><i class="bi bi-cloud-upload me-2"></i>Import (Restore)</h6>
-                    <p class="small text-danger fw-bold mb-3"><i class="bi bi-exclamation-triangle me-1"></i>Cảnh báo: Hành động này sẽ XÓA TOÀN BỘ dữ liệu hiện tại và thay thế bằng dữ liệu từ file backup!</p>
-                    <form id="restoreForm">
-                        <div class="input-group">
-                            <input type="file" class="form-control shadow-none" id="backupFile" accept=".json" required>
-                            <button class="btn btn-danger fw-bold shadow-sm" type="submit" id="restoreBtn"><i class="bi bi-arrow-counterclockwise me-2"></i>Khôi phục</button>
+            </div>
+
+            <div class="space-y-4 p-8 bg-rose-500/[0.03] border border-rose-500/10 rounded-3xl">
+                <h6 class="text-rose-500 text-[10px] font-black uppercase tracking-[2px] flex items-center gap-2">
+                    <i class="bi bi-cloud-upload"></i> RESTORE SYSTEM
+                </h6>
+                <p class="text-rose-500/60 text-[10px] font-bold leading-relaxed">
+                    <i class="bi bi-exclamation-triangle mr-1"></i> CRITICAL:
+                    This operation will permanently erase the current database and replace it with the uploaded backup.
+                </p>
+                <form id="restoreForm" class="space-y-4">
+                    <div class="relative group">
+                        <input type="file" id="backupFile" accept=".json" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                        <div class="glass-control bg-slate-900/40 py-3 px-4 flex items-center justify-between group-hover:bg-slate-900/60 transition-colors">
+                            <span class="text-[10px] text-white/40 font-black uppercase tracking-widest truncate">Select .json archive</span>
+                            <i class="bi bi-folder2-open text-white/20"></i>
                         </div>
-                    </form>
-                </div>
+                    </div>
+                    <button type="submit" id="restoreBtn" class="w-full btn-premium py-3 bg-rose-600 shadow-rose-600/20">
+                        <i class="bi bi-arrow-counterclockwise mr-2"></i>
+                        <span class="text-[10px] font-black uppercase tracking-widest text-white">Initiate Recovery</span>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -286,59 +304,87 @@
 <!-- Modal: Background Scan Configuration -->
 <div class="modal fade" id="advancedScanModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-            <div class="modal-header bg-warning text-dark border-0 py-3">
-                <h5 class="modal-title fw-bold"><i class="bi bi-shield-check me-2"></i>Configure Background Scan</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-content glass-panel p-0 border-white/10 shadow-2xl overflow-hidden !bg-transparent !border-none">
+            <div class="bg-gradient-to-r from-orange-600 to-amber-600 py-6 px-8 flex justify-between items-center">
+                <h5 class="text-white font-black text-sm uppercase tracking-[2px] flex items-center gap-3">
+                    <i class="bi bi-shield-check"></i>
+                    Scan Configuration
+                </h5>
+                <button type="button" class="text-white/60 hover:text-white transition-colors" data-bs-dismiss="modal">
+                    <i class="bi bi-x-lg text-lg"></i>
+                </button>
             </div>
-            <div class="modal-body p-4">
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-muted text-uppercase">1. Target Scope</label>
-                    <select id="scanPlaylist" class="form-select shadow-none">
-                        <option value="">Full Database Scan (All Channels)</option>
-                        {% for pl in playlists %}
-                        <option value="{{ pl.id }}">{{ pl.name }} {% if pl.is_system %}(System){% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-muted text-uppercase">2. Select Scan Condition</label>
-                    <div class="d-flex flex-column gap-2">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="scanMode" id="modeAll" value="all" checked>
-                            <label class="form-check-label" for="modeAll">Scan everything in scope</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="scanMode" id="modeNever" value="never">
-                            <label class="form-check-label" for="modeNever">Only channels NEVER scanned</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="scanMode" id="modeDie" value="die">
-                            <label class="form-check-label" for="modeDie">Only channels currently "Die"</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="scanMode" id="modeOutdated" value="outdated">
-                            <label class="form-check-label" for="modeOutdated">Scan channels older than X days</label>
-                        </div>
+            
+            <div class="p-8 space-y-8">
+                <div class="space-y-3">
+                    <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">1. MISSION SCOPE</label>
+                    <div class="relative">
+                        <select id="scanPlaylist" class="glass-control bg-slate-900/40 appearance-none">
+                            <option value="">Full Database Scan (Global)</option>
+                            {% for pl in playlists %}
+                            <option value="{{ pl.id }}">{{ pl.name }} {% if pl.is_system %}(System){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                        <i class="bi bi-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none"></i>
                     </div>
                 </div>
 
-                <div id="outdatedDaysGroup" class="mb-4 d-none">
-                    <label class="form-label fw-bold small text-muted text-uppercase">Days Threshold</label>
-                    <div class="input-group">
-                        <input type="number" id="scanDays" class="form-control" value="3" min="1">
-                        <span class="input-group-text">days</span>
+                <div class="space-y-4">
+                    <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">2. SCAN CONDITION</label>
+                    <div class="grid grid-cols-1 gap-3">
+                        <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
+                            <input type="radio" name="scanMode" id="modeAll" value="all" checked class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-black text-white uppercase tracking-tight">System Wide</span>
+                                <span class="block text-[9px] text-white/30 font-bold uppercase">Scan all channels in scope</span>
+                            </div>
+                        </label>
+                        <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
+                            <input type="radio" name="scanMode" id="modeNever" value="never" class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-black text-white uppercase tracking-tight">Discovery Mode</span>
+                                <span class="block text-[9px] text-white/30 font-bold uppercase">Channels never scanned</span>
+                            </div>
+                        </label>
+                        <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
+                            <input type="radio" name="scanMode" id="modeDie" value="die" class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-black text-white uppercase tracking-tight">Rescue Mode</span>
+                                <span class="block text-[9px] text-white/30 font-bold uppercase">Only channels currently "Die"</span>
+                            </div>
+                        </label>
+                        <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
+                            <input type="radio" name="scanMode" id="modeOutdated" value="outdated" class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-black text-white uppercase tracking-tight">Outdated Sync</span>
+                                <span class="block text-[9px] text-white/30 font-bold uppercase">Channels older than X days</span>
+                            </div>
+                        </label>
                     </div>
                 </div>
 
-                <div class="alert alert-info py-2 px-3 small border-0 mb-0">
-                    <i class="bi bi-info-circle-fill me-2"></i> Background scans are persistent and will run until completed or stopped.
+                <div id="outdatedDaysGroup" class="hidden space-y-3">
+                    <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">THREASHOLD (DAYS)</label>
+                    <div class="relative">
+                        <input type="number" id="scanDays" class="glass-control bg-slate-900/40 pr-16" value="3" min="1">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest">Days</span>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl flex gap-3">
+                    <i class="bi bi-info-circle-fill text-blue-400 mt-0.5"></i>
+                    <p class="text-[10px] text-blue-400/80 leading-relaxed font-bold uppercase tracking-tight">
+                        Operations are persistent and will run in the background until completion.
+                    </p>
                 </div>
             </div>
-            <div class="modal-footer border-0 p-3">
-                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
-                <button id="startScanBtn" class="btn btn-warning fw-bold px-4 shadow-sm">LAUNCH BACKGROUND SCAN</button>
+
+            <div class="p-8 bg-white/[0.02] border-t border-white/5 flex gap-4">
+                <button type="button" class="flex-1 btn-glass py-4 text-white/40" data-bs-dismiss="modal">Cancel</button>
+                <button id="startScanBtn" class="flex-2 btn-premium py-4 bg-orange-600 shadow-orange-600/20">
+                    <i class="bi bi-play-circle-fill mr-2"></i>
+                    <span class="text-[11px] font-black uppercase tracking-widest">Launch Mission</span>
+                </button>
             </div>
         </div>
     </div>
@@ -346,15 +392,21 @@
 
 <!-- Modal: Diagnostic Logs -->
 <div class="modal fade" id="scanLogModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content bg-dark text-white border-0 shadow-lg" style="border-radius: 1rem;">
-            <div class="modal-header border-0 py-3 px-4">
-                <h5 class="modal-title fw-bold"><i class="bi bi-terminal me-2"></i>Live Background Log</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content glass-panel p-0 border-white/10 shadow-2xl overflow-hidden bg-slate-950 !bg-transparent !border-none">
+            <div class="bg-slate-900 py-4 px-6 flex justify-between items-center border-b border-white/5">
+                <h5 class="text-white font-black text-xs uppercase tracking-[3px] flex items-center gap-3">
+                    <i class="bi bi-terminal text-blue-400"></i>
+                    System Telemetry Log
+                </h5>
+                <button type="button" class="text-white/40 hover:text-white transition-colors" data-bs-dismiss="modal">
+                    <i class="bi bi-x-lg"></i>
+                </button>
             </div>
-            <div class="modal-body p-0" style="min-height: 400px; background: #000;">
-                <div id="scanLogContainer" class="p-3 font-monospace small" style="max-height: 500px; overflow-y: auto;">
-                    <div class="text-muted text-center py-5">Connecting to background task...</div>
+            <div id="scanLogContainer" class="p-6 font-mono text-[11px] leading-relaxed overflow-y-auto max-h-[60vh] custom-scrollbar bg-black/40">
+                <div class="text-white/20 text-center py-20 flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin"></div>
+                    <span class="uppercase font-black tracking-widest text-[9px]">Awaiting background data...</span>
                 </div>
             </div>
         </div>
@@ -517,4 +569,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+</div> <!-- Closing max-w-7xl container -->
 {% endblock %}

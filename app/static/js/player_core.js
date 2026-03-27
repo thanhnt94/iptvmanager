@@ -38,6 +38,9 @@ window.IPTVPlayer = {
         const isTsDetected = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts') || lowUrl.includes('output=ts') || lowUrl.includes('.flv') || sType === 'ts' || sFormat === 'ts' || sFormat === 'flv';
         const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('/movie/') || sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv';
         
+        // Expose explicit LIVE state for UI components
+        videoElement._isExplicitLive = !isNativeDetected;
+        
         // 3. Resolve Smart URL
         const canPlayNativeHLS = videoElement.canPlayType('application/vnd.apple.mpegurl') || videoElement.canPlayType('application/x-mpegURL');
         const canPlayNativeTS = videoElement.canPlayType('video/mp2t') || videoElement.canPlayType('video/mp2');

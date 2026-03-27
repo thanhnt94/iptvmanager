@@ -149,7 +149,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if(seekBar) seekBar.max = video.duration;
         if(durationText) durationText.innerText = formatTime(video.duration);
         
-        if (isFinite(video.duration) && video.duration > 0) {
+        // Priority: Use explicit _isExplicitLive metadata if available
+        const isActuallyLive = (video._isExplicitLive === true) || !isFinite(video.duration) || video.duration <= 0;
+
+        if (!isActuallyLive) {
             if(vodControls) vodControls.classList.remove('hidden');
             if(liveBadge) {
                 liveBadge.innerText = 'VOD';

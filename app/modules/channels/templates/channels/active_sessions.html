@@ -1,83 +1,110 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-4 mb-4">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <!-- Header Section -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
-            <h2 class="fw-bold text-dark mb-1">Live Active Sessions</h2>
-            <p class="text-muted small mb-0">Real-time monitoring and management of server load.</p>
+            <h1 class="text-3xl font-black text-white tracking-tight uppercase mb-2">
+                Live <span class="text-blue-500">Active</span> Sessions
+            </h1>
+            <p class="text-white/40 font-bold text-[10px] uppercase tracking-[3px] flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Real-time monitoring & load management
+            </p>
         </div>
-        <div class="d-flex align-items-center gap-2">
-            <button id="refreshBtn" class="btn btn-outline-primary shadow-sm rounded-pill px-3">
-                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+        <div class="flex flex-wrap items-center gap-3">
+            <button id="refreshBtn" class="btn-glass px-6 py-2.5 flex items-center gap-2 group">
+                <i class="bi bi-arrow-clockwise group-active:rotate-180 transition-transform"></i>
+                <span class="text-[10px] font-black uppercase tracking-widest">Refresh Now</span>
             </button>
-            <div class="form-check form-switch bg-light-subtle px-3 py-2 rounded-pill border shadow-sm mb-0 d-flex align-items-center" style="min-width: 140px;">
-                <input class="form-check-input me-2 ms-0" type="checkbox" id="autoRefresh" checked>
-                <label class="form-check-label small fw-bold text-nowrap mt-1" for="autoRefresh">Auto-Update</label>
-            </div>
+            <label class="btn-glass px-6 py-2.5 flex items-center gap-3 cursor-pointer group hover:border-blue-500/30 transition-all">
+                <input type="checkbox" id="autoRefresh" class="sr-only peer" checked>
+                <div class="w-8 h-4 bg-white/10 rounded-full relative peer-checked:bg-blue-600 transition-colors">
+                    <div class="absolute top-1 left-1 w-2 h-2 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+                </div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-white/40 peer-checked:text-blue-400">Auto-Update</span>
+            </label>
         </div>
     </div>
 
     <!-- Server Health Section -->
-    <div class="row g-4 mb-4">
-        <div class="col-md-6">
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between mb-3">
-                        <div class="d-flex align-items-center">
-                            <div class="bg-primary-subtle p-2 rounded-3 me-3 text-primary">
-                                <i class="bi bi-cpu-fill fs-4"></i>
-                            </div>
-                            <h6 class="card-title mb-0 fw-bold">Server CPU Load</h6>
-                        </div>
-                        <span id="cpuLabel" class="badge bg-primary rounded-pill">0%</span>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+        <!-- CPU Card -->
+        <div class="glass-card p-6 overflow-hidden relative group">
+            <div class="absolute top-0 right-0 p-8 text-white/5 -mr-4 -mt-4 group-hover:scale-110 transition-transform">
+                <i class="bi bi-cpu text-8xl"></i>
+            </div>
+            <div class="flex items-center justify-between mb-6 relative z-10">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                        <i class="bi bi-cpu-fill text-xl"></i>
                     </div>
-                    <div class="progress rounded-pill" style="height: 10px; background-color: #f0f2f5;">
-                        <div id="cpuBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%"></div>
+                    <div>
+                        <h3 class="text-white font-black text-sm uppercase tracking-tight">CPU LOAD</h3>
+                        <p class="text-white/30 text-[9px] font-bold uppercase">System Processor</p>
                     </div>
                 </div>
+                <span id="cpuLabel" class="text-2xl font-black text-blue-400">0%</span>
+            </div>
+            <div class="h-2 w-full bg-white/5 rounded-full overflow-hidden relative z-10 border border-white/5">
+                <div id="cpuBar" class="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500" style="width: 0%"></div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between mb-3">
-                        <div class="d-flex align-items-center">
-                            <div class="bg-info-subtle p-2 rounded-3 me-3 text-info">
-                                <i class="bi bi-memory fs-4"></i>
-                            </div>
-                            <h6 class="card-title mb-0 fw-bold">Server RAM Usage</h6>
-                        </div>
-                        <span id="ramLabel" class="badge bg-info rounded-pill">0%</span>
+
+        <!-- RAM Card -->
+        <div class="glass-card p-6 overflow-hidden relative group">
+            <div class="absolute top-0 right-0 p-8 text-white/5 -mr-4 -mt-4 group-hover:scale-110 transition-transform">
+                <i class="bi bi-memory text-8xl"></i>
+            </div>
+            <div class="flex items-center justify-between mb-6 relative z-10">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-purple-600/20 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                        <i class="bi bi-memory text-xl"></i>
                     </div>
-                    <div class="progress rounded-pill" style="height: 10px; background-color: #f0f2f5;">
-                        <div id="ramBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 0%"></div>
+                    <div>
+                        <h3 class="text-white font-black text-sm uppercase tracking-tight">RAM USAGE</h3>
+                        <p class="text-white/30 text-[9px] font-bold uppercase">Memory Consumption</p>
                     </div>
                 </div>
+                <span id="ramLabel" class="text-2xl font-black text-purple-400">0%</span>
+            </div>
+            <div class="h-2 w-full bg-white/5 rounded-full overflow-hidden relative z-10 border border-white/5">
+                <div id="ramBar" class="h-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-500" style="width: 0%"></div>
             </div>
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light">
-                        <tr>
-                            <th class="ps-4 py-3 text-uppercase small fw-bold text-muted">Channel / ID</th>
-                            <th class="text-uppercase small fw-bold text-muted">User / IP</th>
-                            <th class="text-uppercase small fw-bold text-muted">Source App</th>
-                            <th class="text-uppercase small fw-bold text-muted">Method</th>
-                            <th class="text-uppercase small fw-bold text-muted text-center">Bandwidth</th>
-                            <th class="text-uppercase small fw-bold text-muted text-center">Duration</th>
-                            <th class="pe-4 text-end text-uppercase small fw-bold text-muted">Actions</th>
+    <!-- Sessions List -->
+    <div class="space-y-6">
+        <!-- Mobile View (lg:hidden) -->
+        <div id="sessionsCardGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:hidden">
+            <!-- Dynamic Content -->
+            <div class="col-span-full py-12 text-center text-white/20 uppercase tracking-widest font-black text-xs">
+                Syncing sessions...
+            </div>
+        </div>
+
+        <!-- Desktop View (hidden lg:block) -->
+        <div class="hidden lg:block glass-panel p-0 overflow-hidden border-white/5">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-white/5 bg-white/[0.02]">
+                            <th class="px-6 py-4 text-[10px] font-black uppercase tracking-[2px] text-white/30">Channel</th>
+                            <th class="px-6 py-4 text-[10px] font-black uppercase tracking-[2px] text-white/30">Subscriber</th>
+                            <th class="px-6 py-4 text-[10px] font-black uppercase tracking-[2px] text-white/30">Source</th>
+                            <th class="px-6 py-4 text-[10px] font-black uppercase tracking-[2px] text-white/30">Protocol</th>
+                            <th class="px-6 py-4 text-[10px] font-black uppercase tracking-[2px] text-white/30 text-center">Bandwidth</th>
+                            <th class="px-6 py-4 text-[10px] font-black uppercase tracking-[2px] text-white/30 text-center">Duration</th>
+                            <th class="px-6 py-4 text-[10px] font-black uppercase tracking-[2px] text-white/30 text-right">Control</th>
                         </tr>
                     </thead>
                     <tbody id="sessionsTableBody">
+                        <!-- Dynamic Content -->
                         <tr>
-                            <td colspan="7" class="text-center py-5">
-                                <div class="spinner-border text-primary mb-2"></div>
-                                <p class="text-muted mb-0">Syncing with server...</p>
+                            <td colspan="7" class="text-center py-12">
+                                <span class="text-white/20 uppercase tracking-widest font-black text-xs">Syncing sessions...</span>
                             </td>
                         </tr>
                     </tbody>
@@ -85,15 +112,20 @@
             </div>
         </div>
     </div>
-    
-    <div class="mt-4 p-3 bg-light border rounded-4 d-flex align-items-start gap-3">
-        <i class="bi bi-shield-check text-success fs-4"></i>
-        <div>
-            <h6 class="mb-1 fw-bold">Automatic Session Cleanup</h6>
-            <p class="mb-0 small text-muted">
-                Idle sessions are automatically purged after 45 seconds of inactivity. 
-                Bandwidth values are calculated in real-time for **TS Streams** and estimated for **HLS**.
-            </p>
+
+    <!-- Legend/Info -->
+    <div class="mt-10 glass-panel p-6 border-emerald-500/10 bg-emerald-500/[0.02]">
+        <div class="flex gap-4 items-start">
+            <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                <i class="bi bi-shield-check text-xl"></i>
+            </div>
+            <div>
+                <h4 class="text-white font-black text-sm uppercase mb-1">Session Management Protocol</h4>
+                <p class="text-white/40 text-xs leading-relaxed">
+                    Idle sessions are automatically purged after <span class="text-emerald-400 font-bold">45 seconds</span> of inactivity.
+                    Bandwidth monitoring is calculated in real-time for <span class="text-blue-400 font-bold">TS Streams</span> and statistically estimated for <span class="text-purple-400 font-bold">HLS</span>.
+                </p>
+            </div>
         </div>
     </div>
 </div>
@@ -110,16 +142,17 @@
 
     function getSourceIcon(source) {
         source = (source || '').toLowerCase();
-        if (source.includes('vlc')) return '<i class="bi bi-play-circle-fill text-orange me-2"></i>';
-        if (source.includes('web')) return '<i class="bi bi-browser-chrome text-primary me-2"></i>';
-        if (source.includes('tivimate')) return '<i class="bi bi-tv-fill text-info me-2"></i>';
-        if (source.includes('smarter')) return '<i class="bi bi-phone-fill text-success me-2"></i>';
-        return '<i class="bi bi-app-indicator text-muted me-2"></i>';
+        if (source.includes('vlc')) return '<i class="bi bi-play-circle-fill text-orange-400 me-2"></i>';
+        if (source.includes('web')) return '<i class="bi bi-browser-chrome text-blue-400 me-2"></i>';
+        if (source.includes('tivimate')) return '<i class="bi bi-tv-fill text-purple-400 me-2"></i>';
+        if (source.includes('smarter')) return '<i class="bi bi-phone-fill text-emerald-400 me-2"></i>';
+        return '<i class="bi bi-app-indicator text-white/20 me-2"></i>';
     }
 
     async function updateSessions() {
         const btn = document.getElementById('refreshBtn');
-        const originalHtml = btn.innerHTML;
+        const icon = btn.querySelector('i');
+        icon.classList.add('animate-spin');
         
         try {
             const resp = await fetch('/channels/api/active_sessions');
@@ -128,68 +161,116 @@
             // 1. Update Server Stats
             if (data.server_stats) {
                 const s = data.server_stats;
-                document.getElementById('cpuBar').style.width = s.cpu + '%';
-                document.getElementById('cpuLabel').textContent = Math.round(s.cpu) + '%';
-                document.getElementById('cpuBar').className = `progress-bar progress-bar-striped progress-bar-animated ${s.cpu > 80 ? 'bg-danger' : 'bg-primary'}`;
+                const cpuBar = document.getElementById('cpuBar');
+                const ramBar = document.getElementById('ramBar');
                 
-                document.getElementById('ramBar').style.width = s.ram + '%';
+                cpuBar.style.width = s.cpu + '%';
+                document.getElementById('cpuLabel').textContent = Math.round(s.cpu) + '%';
+                cpuBar.className = `h-full transition-all duration-500 ${s.cpu > 80 ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)]' : 'bg-gradient-to-r from-blue-600 to-blue-400'}`;
+                
+                ramBar.style.width = s.ram + '%';
                 document.getElementById('ramLabel').textContent = Math.round(s.ram) + '%';
-                document.getElementById('ramBar').className = `progress-bar progress-bar-striped progress-bar-animated ${s.ram > 90 ? 'bg-danger' : 'bg-info'}`;
+                ramBar.className = `h-full transition-all duration-500 ${s.ram > 90 ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)]' : 'bg-gradient-to-r from-purple-600 to-purple-400'}`;
             }
 
-            // 2. Update Table
+            // 2. Update Sessions
             const tbody = document.getElementById('sessionsTableBody');
+            const cardGrid = document.getElementById('sessionsCardGrid');
+            
             if (data.sessions && data.sessions.length > 0) {
-                let html = '';
+                let tableHtml = '';
+                let cardHtml = '';
+                
                 data.sessions.forEach(s => {
-                    const methodBadge = s.type.includes('HLS') ? 'bg-indigo' : (s.type.includes('TS') ? 'bg-teal' : 'bg-blue');
+                    const methodBadge = s.type.includes('HLS') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : (s.type.includes('TS') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-white/5 text-white/40');
                     const bwMbps = (s.bandwidth_kbps / 1024).toFixed(2);
+                    const isHighLoad = s.bandwidth_kbps > 8000;
                     
-                    html += `
-                        <tr class="session-row" id="row-${btoa(s.key)}">
-                            <td class="ps-4">
-                                <div class="fw-bold text-dark">${s.channel_name}</div>
-                                <div class="text-muted extra-small">ID: ${s.channel_id}</div>
+                    // Table Row
+                    tableHtml += `
+                        <tr class="hover:bg-white/[0.03] transition-colors group/row" id="row-${btoa(s.key)}">
+                            <td class="px-6 py-4">
+                                <div class="font-black text-white text-sm uppercase tracking-tight">${s.channel_name}</div>
+                                <div class="text-white/20 text-[9px] font-bold">ID: ${s.channel_id}</div>
                             </td>
-                            <td>
-                                <div class="fw-bold small text-dark">${s.user}</div>
-                                <div class="text-muted extra-small">${s.ip}</div>
+                            <td class="px-6 py-4">
+                                <div class="font-black text-white/70 text-xs">${s.user}</div>
+                                <div class="text-white/20 text-[9px] font-bold">${s.ip}</div>
                             </td>
-                            <td>
-                                <div class="d-flex align-items-center small">
-                                    ${getSourceIcon(s.source)} ${s.source}
+                            <td class="px-6 py-4">
+                                <div class="flex items-center text-xs text-white/50">
+                                    ${getSourceIcon(s.source)} <span class="truncate max-w-[120px]">${s.source}</span>
                                 </div>
                             </td>
-                            <td>
-                                <span class="badge ${methodBadge} px-2 py-1" style="font-size: 0.6rem;">${s.type}</span>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-0.5 rounded border text-[9px] font-black uppercase tracking-wider ${methodBadge}">${s.type}</span>
                             </td>
-                            <td class="text-center">
-                                <div class="fw-bold ${s.bandwidth_kbps > 5000 ? 'text-danger' : 'text-success'}">${bwMbps} <span class="small fw-normal text-muted">Mbps</span></div>
+                            <td class="px-6 py-4 text-center">
+                                <div class="font-black ${isHighLoad ? 'text-rose-400' : 'text-emerald-400'} text-xs">${bwMbps} <span class="text-[9px] opacity-40 font-bold uppercase ml-1">Mbps</span></div>
                             </td>
-                            <td class="text-center">
-                                <div class="fw-bold text-primary session-timer small" data-start="${s.duration}">${formatDuration(s.duration)}</div>
+                            <td class="px-6 py-4 text-center">
+                                <div class="font-black text-blue-400 text-xs session-timer uppercase tracking-tight" data-start="${s.duration}">${formatDuration(s.duration)}</div>
                             </td>
-                            <td class="pe-4 text-end">
-                                <button onclick="killSession('${s.key}')" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-1" title="Kill Session">
-                                    <i class="bi bi-x-circle-fill fs-5"></i>
+                            <td class="px-6 py-4 text-right">
+                                <button onclick="killSession('${s.key}')" class="w-8 h-8 rounded-full border border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center mx-auto" title="Kill Session">
+                                    <i class="bi bi-x-lg text-sm"></i>
                                 </button>
                             </td>
                         </tr>
                     `;
+
+                    // Card Item
+                    cardHtml += `
+                        <div class="glass-card p-4 relative overflow-hidden group/card">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h4 class="text-white font-black text-sm uppercase tracking-tight mb-1">${s.channel_name}</h4>
+                                    <span class="px-2 py-0.5 rounded border ${methodBadge} text-[8px] font-black uppercase tracking-wider">${s.type}</span>
+                                </div>
+                                <button onclick="killSession('${s.key}')" class="w-8 h-8 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center justify-center">
+                                    <i class="bi bi-x-lg text-sm"></i>
+                                </button>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div class="bg-white/5 p-3 rounded-xl border border-white/5">
+                                    <span class="text-[8px] font-black text-white/20 uppercase tracking-widest block mb-1">Load</span>
+                                    <span class="text-xs font-black ${isHighLoad ? 'text-rose-400' : 'text-emerald-400'}">${bwMbps} Mbps</span>
+                                </div>
+                                <div class="bg-white/5 p-3 rounded-xl border border-white/5">
+                                    <span class="text-[8px] font-black text-white/20 uppercase tracking-widest block mb-1">Elapsed</span>
+                                    <span class="text-xs font-black text-blue-400 session-timer" data-start="${s.duration}">${formatDuration(s.duration)}</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between text-[10px] text-white/40 pt-2 border-t border-white/5">
+                                <div class="flex items-center gap-2">
+                                    ${getSourceIcon(s.source)}
+                                    <span class="font-black truncate max-w-[80px]">${s.source}</span>
+                                </div>
+                                <span class="font-bold">${s.ip}</span>
+                            </div>
+                        </div>
+                    `;
                 });
-                tbody.innerHTML = html;
+                tbody.innerHTML = tableHtml;
+                cardGrid.innerHTML = cardHtml;
             } else {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="7" class="text-center py-5 text-muted">
-                            <i class="bi bi-wind fs-1 d-block mb-3 opacity-25"></i>
-                            <p class="mb-0 fw-medium">No active connections detected.</p>
-                        </td>
-                    </tr>
+                const emptyHtml = `
+                    <div class="col-span-full py-20 text-center flex flex-col items-center justify-center gap-4">
+                        <div class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center text-white/10 mb-2">
+                            <i class="bi bi-wind text-5xl"></i>
+                        </div>
+                        <p class="text-white/20 uppercase tracking-[4px] font-black text-xs">No active links detected</p>
+                    </div>
                 `;
+                tbody.innerHTML = `<tr><td colspan="7">${emptyHtml}</td></tr>`;
+                cardGrid.innerHTML = emptyHtml;
             }
         } catch (err) {
             console.error(err);
+        } finally {
+            setTimeout(() => icon.classList.remove('animate-spin'), 600);
         }
     }
 
@@ -237,22 +318,4 @@
     updateSessions();
     setupPolling();
 </script>
-
-<style>
-    .session-row:hover {
-        background-color: rgba(var(--bs-primary-rgb), 0.03) !important;
-    }
-    .badge {
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.03rem;
-    }
-    .extra-small {
-        font-size: 0.7rem;
-    }
-    .text-orange { color: #fd7e14; }
-    .bg-indigo { background-color: #6610f2; color: white; }
-    .bg-teal { background-color: #20c997; color: white; }
-    .bg-blue { background-color: #0d6efd; color: white; }
-</style>
 {% endblock %}
