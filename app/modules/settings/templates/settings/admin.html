@@ -8,7 +8,7 @@
             <h1 class="text-3xl font-black text-white tracking-tight uppercase mb-2">
                 System <span class="text-blue-500">Settings</span>
             </h1>
-            <p class="text-white/40 font-bold text-[10px] uppercase tracking-[3px] flex items-center gap-2">
+            <p class="text-white/40 font-bold text-xs uppercase tracking-[3px] flex items-center gap-2">
                 <i class="bi bi-gear-fill text-blue-500"></i>
                 Platform behavior & Maintenance
             </p>
@@ -34,7 +34,7 @@
                     </div>
                     <div>
                         <h3 class="text-white font-black text-sm uppercase tracking-tight">Performance Control</h3>
-                        <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Engine & Caching Optimization</p>
+                        <p class="text-white/30 text-readable-small font-bold uppercase tracking-widest">Engine & Caching Optimization</p>
                     </div>
                 </div>
 
@@ -42,7 +42,7 @@
                     <div class="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
                         <div class="space-y-1">
                             <label class="block text-xs font-black text-white/80 uppercase tracking-tighter">MPEG-TS Engine (Singleton)</label>
-                            <p class="text-[10px] text-white/30 leading-relaxed font-medium">TVHeadend-style piping for .ts streams to avoid multiple source connections.</p>
+                            <p class="text-xs text-white/30 leading-relaxed font-medium">TVHeadend-style piping for .ts streams to avoid multiple source connections.</p>
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer group">
                             <input type="checkbox" name="ENABLE_TS_PROXY" class="sr-only peer" {% if settings|selectattr('key', 'equalto', 'ENABLE_TS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
@@ -53,7 +53,7 @@
                     <div class="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
                         <div class="space-y-1">
                             <label class="block text-xs font-black text-white/80 uppercase tracking-tighter">HLS Caching Engine</label>
-                            <p class="text-[10px] text-white/30 leading-relaxed font-medium">RAM Caching for .m3u8 segments to prevent lag on unstable connections.</p>
+                            <p class="text-xs text-white/30 leading-relaxed font-medium">RAM Caching for .m3u8 segments to prevent lag on unstable connections.</p>
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer group">
                             <input type="checkbox" name="ENABLE_HLS_PROXY" class="sr-only peer" {% if settings|selectattr('key', 'equalto', 'ENABLE_HLS_PROXY')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
@@ -64,7 +64,7 @@
                     <div class="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
                         <div class="space-y-1">
                             <label class="block text-xs font-black text-white/80 uppercase tracking-tighter">Proxy Usage Tracking</label>
-                            <p class="text-[10px] text-white/30 leading-relaxed font-medium">Force proxying for TS/HLS to track watch time and bandwidth.</p>
+                            <p class="text-xs text-white/30 leading-relaxed font-medium">Force proxying for TS/HLS to track watch time and bandwidth.</p>
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer group">
                             <input type="checkbox" name="ENABLE_PROXY_STATS" class="sr-only peer" {% if settings|selectattr('key', 'equalto', 'ENABLE_PROXY_STATS')|selectattr('value', 'equalto', 'true')|list %}checked{% endif %}>
@@ -82,13 +82,13 @@
                     </div>
                     <div>
                         <h3 class="text-white font-black text-sm uppercase tracking-tight">Access & Security</h3>
-                        <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Network Identifiers & Protection</p>
+                        <p class="text-white/30 text-readable-small font-bold uppercase tracking-widest">Network Identifiers & Protection</p>
                     </div>
                 </div>
 
                 <div class="space-y-6">
                     <div class="space-y-3">
-                        <label class="block text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Custom Proxy User-Agent</label>
+                        <label class="block text-xs font-black text-white/30 uppercase tracking-widest ml-1">Custom Proxy User-Agent</label>
                         <textarea name="CUSTOM_USER_AGENT" class="glass-control bg-slate-900/40 min-h-[100px] text-xs font-mono" placeholder="Standard User Agent string...">{{ (settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|first).value if settings|selectattr('key', 'equalto', 'CUSTOM_USER_AGENT')|list else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }}</textarea>
                     </div>
                 </div>
@@ -103,46 +103,46 @@
                         <i class="bi bi-lightning-charge text-orange-400"></i>
                         Hardware Acceleration
                     </h3>
-                    <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Optimization for your specific hardware</p>
+                    <p class="text-white/30 text-readable-small font-bold uppercase tracking-widest">Optimization for your specific hardware</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button type="button" onclick="applyPreset('low')" class="btn-glass px-4 py-2 border-slate-700/50 hover:border-blue-500/30">
-                        <span class="text-[9px] font-black uppercase tracking-widest text-white/60">Low-End (ARM)</span>
+                        <span class="text-readable-small font-black uppercase tracking-widest text-white/60">Low-End (ARM)</span>
                     </button>
                     <button type="button" onclick="applyPreset('mid')" class="btn-glass px-4 py-2 border-slate-700/50 hover:border-blue-500/30">
-                        <span class="text-[9px] font-black uppercase tracking-widest text-white/60">Mid-Range (Pi 4)</span>
+                        <span class="text-readable-small font-black uppercase tracking-widest text-white/60">Mid-Range (Pi 4)</span>
                     </button>
                     <button type="button" onclick="applyPreset('high')" class="btn-glass px-4 py-2 border-slate-700/50 hover:border-indigo-500/30">
-                        <span class="text-[9px] font-black uppercase tracking-widest text-white/60">High-End (X64)</span>
+                        <span class="text-readable-small font-black uppercase tracking-widest text-white/60">High-End (X64)</span>
                     </button>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="space-y-2">
-                    <label class="text-[9px] font-black text-white/30 uppercase tracking-widest block ml-1">TS Buffer Size</label>
+                    <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">TS Buffer Size</label>
                     <div class="relative group">
                         <input type="number" id="TS_BUFFER_SIZE" name="TS_BUFFER_SIZE" class="glass-control bg-slate-900/20 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|first).value if settings|selectattr('key', 'equalto', 'TS_BUFFER_SIZE')|list else '128' }}">
-                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest pointer-events-none">Chunks</span>
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-readable-small font-black text-white/20 uppercase tracking-widest pointer-events-none">Chunks</span>
                     </div>
-                    <p class="text-[9px] text-white/20 italic pl-1">Uses ~<span id="ts_ram_calc" class="text-blue-400 font-bold">2.0</span> MB per stream</p>
+                    <p class="text-readable-small text-white/20 italic pl-1">Uses ~<span id="ts_ram_calc" class="text-blue-400 font-bold">2.0</span> MB per stream</p>
                 </div>
                 <!-- ... other tuning fields ... -->
                 <div class="space-y-2">
-                    <label class="text-[9px] font-black text-white/30 uppercase tracking-widest block ml-1">HLS Cache TTL</label>
+                    <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">HLS Cache TTL</label>
                     <div class="relative group">
                         <input type="number" id="HLS_CACHE_TTL" name="HLS_CACHE_TTL" class="glass-control bg-slate-900/20 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|first).value if settings|selectattr('key', 'equalto', 'HLS_CACHE_TTL')|list else '60' }}">
-                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest pointer-events-none">Sec</span>
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-readable-small font-black text-white/20 uppercase tracking-widest pointer-events-none">Sec</span>
                     </div>
-                    <p class="text-[9px] text-white/20 italic pl-1">Retention time for video segments</p>
+                    <p class="text-readable-small text-white/20 italic pl-1">Retention time for video segments</p>
                 </div>
                 <div class="space-y-2">
-                    <label class="text-[9px] font-black text-white/30 uppercase tracking-widest block ml-1">HLS Max Segments</label>
+                    <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">HLS Max Segments</label>
                     <div class="relative group">
                         <input type="number" id="HLS_MAX_SEGMENTS" name="HLS_MAX_SEGMENTS" class="glass-control bg-slate-900/20 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|first).value if settings|selectattr('key', 'equalto', 'HLS_MAX_SEGMENTS')|list else '50' }}">
-                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest pointer-events-none">Files</span>
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-readable-small font-black text-white/20 uppercase tracking-widest pointer-events-none">Files</span>
                     </div>
-                    <p class="text-[9px] text-white/20 italic pl-1">Global RAM segment limit</p>
+                    <p class="text-readable-small text-white/20 italic pl-1">Global RAM segment limit</p>
                 </div>
             </div>
         </div>
@@ -155,7 +155,7 @@
                 </div>
                 <div>
                     <h3 class="text-white font-black text-sm uppercase tracking-tight">Health Scan Mission Control</h3>
-                    <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">Background maintenance & Validation</p>
+                    <p class="text-white/50 text-readable-small font-bold uppercase tracking-widest">Background maintenance & Validation</p>
                 </div>
             </div>
 
@@ -163,14 +163,14 @@
                 <!-- Left: Control Panel -->
                 <div class="lg:col-span-4 space-y-6">
                     <div class="space-y-4">
-                        <h6 class="text-[10px] font-black text-white/20 uppercase tracking-[2px]">Configuration</h6>
+                        <h6 class="text-xs font-black text-white/20 uppercase tracking-[2px]">Configuration</h6>
                         <div class="space-y-3 p-6 bg-white/[0.02] border border-white/5 rounded-3xl">
-                            <label class="block text-[10px] font-black text-white/40 uppercase tracking-widest ml-1">Per-Channel Delay</label>
+                            <label class="block text-xs font-black text-white/40 uppercase tracking-widest ml-1">Per-Channel Delay</label>
                             <div class="relative">
                                 <input type="number" id="SCAN_DELAY_SECONDS" name="SCAN_DELAY_SECONDS" class="glass-control bg-slate-900/40 pr-16" value="{{ (settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|first).value if settings|selectattr('key', 'equalto', 'SCAN_DELAY_SECONDS')|list else '2' }}" min="0">
-                                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest">Sec</span>
+                                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-readable-small font-black text-white/20 uppercase tracking-widest">Sec</span>
                             </div>
-                            <p class="text-[9px] text-white/20 leading-relaxed italic">Strategic delay to avoid provider rate limiting.</p>
+                            <p class="text-readable-small text-white/20 leading-relaxed italic">Strategic delay to avoid provider rate limiting.</p>
                         </div>
                     </div>
                     <button type="submit" class="w-full btn-premium py-4 bg-white/5 hover:bg-white/10 text-white/80 border-white/5">
@@ -184,8 +184,8 @@
                         <div class="h-full flex flex-col items-center justify-center p-10 bg-white/[0.02] border border-dashed border-white/10 rounded-3xl text-center group hover:bg-white/[0.03] hover:border-orange-500/20 transition-all">
                             <i class="bi bi-activity text-white/5 text-6xl mb-6 group-hover:scale-110 group-hover:text-orange-500/10 transition-all"></i>
                             <h4 class="text-white/60 font-black text-xs uppercase tracking-widest mb-2">No Active Mission</h4>
-                            <p class="text-white/20 text-[10px] mb-8 max-w-xs mx-auto">Launch a system-wide health validation scan to identify dead streams automatically.</p>
-                            <button type="button" class="btn-premium px-10 py-4 bg-orange-600 shadow-orange-600/20" data-bs-toggle="modal" data-bs-target="#advancedScanModal">
+                            <p class="text-white/20 text-xs mb-8 max-w-xs mx-auto">Launch a system-wide health validation scan to identify dead streams automatically.</p>
+                            <button type="button" class="btn-premium px-10 py-4 bg-orange-600 shadow-orange-600/20" onclick="toggleModal('advancedScanModal')">
                                 <i class="bi bi-play-circle-fill mr-2"></i>
                                 <span class="text-[11px] font-black uppercase tracking-widest">Initialize Scan</span>
                             </button>
@@ -202,10 +202,10 @@
                                             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
                                             <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
                                         </span>
-                                        <span class="text-[10px] font-black text-orange-400 uppercase tracking-widest">ACTIVE OPERATION</span>
+                                        <span class="text-xs font-black text-orange-400 uppercase tracking-widest">ACTIVE OPERATION</span>
                                     </div>
                                     <h4 id="currentScanName" class="text-white font-black text-lg truncate max-w-[300px]">...</h4>
-                                    <p id="scanProgressLabel" class="text-white/30 text-[10px] font-bold uppercase tracking-widest">0 / 0 CHANNELS PROCESSED</p>
+                                    <p id="scanProgressLabel" class="text-white/50 text-xs font-bold uppercase tracking-widest">0 / 0 CHANNELS PROCESSED</p>
                                 </div>
                                 <div class="text-right">
                                     <span id="scanPercent" class="text-5xl font-black text-white/90">0%</span>
@@ -232,13 +232,13 @@
                             </div>
 
                             <div class="flex gap-4">
-                                <button type="button" class="btn-glass flex-1 py-3 text-white/40 hover:text-white" data-bs-toggle="modal" data-bs-target="#scanLogModal">
+                                <button type="button" class="btn-glass flex-1 py-3 text-white/40 hover:text-white" onclick="toggleModal('scanLogModal')">
                                     <i class="bi bi-terminal mr-2"></i>
-                                    <span class="text-[10px] font-black uppercase tracking-widest">Technical Log</span>
+                                    <span class="text-xs font-black uppercase tracking-widest">Technical Log</span>
                                 </button>
                                 <button id="stopScanBtn" type="button" class="btn-glass flex-1 py-3 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-all">
                                     <i class="bi bi-stop-circle-fill mr-2"></i>
-                                    <span class="text-[10px] font-black uppercase tracking-widest">Abort Mission</span>
+                                    <span class="text-xs font-black uppercase tracking-widest">Abort Mission</span>
                                 </button>
                         </div>
                     </div>
@@ -257,29 +257,29 @@
             </div>
             <div>
                 <h3 class="text-white font-black text-sm uppercase tracking-tight">Security & Disaster Recovery</h3>
-                <p class="text-white/30 text-[9px] font-bold uppercase tracking-widest">System Backup & Database Restoration</p>
+                <p class="text-white/30 text-readable-small font-bold uppercase tracking-widest">System Backup & Database Restoration</p>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
             <div class="space-y-4 p-8 bg-white/[0.02] border border-white/5 rounded-3xl">
-                <h6 class="text-emerald-500 text-[10px] font-black uppercase tracking-[2px] flex items-center gap-2">
+                <h6 class="text-emerald-500 text-xs font-black uppercase tracking-[2px] flex items-center gap-2">
                     <i class="bi bi-cloud-download"></i> EXPORT BACKUP
                 </h6>
-                <p class="text-white/30 text-[10px] leading-relaxed">Download a complete snapshot of your system state including Channels, Playlists, Users, and Settings as a JSON archive.</p>
+                <p class="text-white/30 text-xs leading-relaxed">Download a complete snapshot of your system state including Channels, Playlists, Users, and Settings as a JSON archive.</p>
                 <div class="pt-4">
                     <a href="{{ url_for('settings.export_backup') }}" class="btn-premium px-8 py-3 bg-emerald-600 shadow-emerald-600/20">
                         <i class="bi bi-download mr-2"></i>
-                        <span class="text-[10px] font-black uppercase tracking-widest text-white">Generate Snapshot</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-white">Generate Snapshot</span>
                     </a>
                 </div>
             </div>
 
             <div class="space-y-4 p-8 bg-rose-500/[0.03] border border-rose-500/10 rounded-3xl">
-                <h6 class="text-rose-500 text-[10px] font-black uppercase tracking-[2px] flex items-center gap-2">
+                <h6 class="text-rose-500 text-xs font-black uppercase tracking-[2px] flex items-center gap-2">
                     <i class="bi bi-cloud-upload"></i> RESTORE SYSTEM
                 </h6>
-                <p class="text-rose-500/60 text-[10px] font-bold leading-relaxed">
+                <p class="text-rose-500/60 text-xs font-bold leading-relaxed">
                     <i class="bi bi-exclamation-triangle mr-1"></i> CRITICAL:
                     This operation will permanently erase the current database and replace it with the uploaded backup.
                 </p>
@@ -287,13 +287,13 @@
                     <div class="relative group">
                         <input type="file" id="backupFile" accept=".json" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                         <div class="glass-control bg-slate-900/40 py-3 px-4 flex items-center justify-between group-hover:bg-slate-900/60 transition-colors">
-                            <span class="text-[10px] text-white/40 font-black uppercase tracking-widest truncate">Select .json archive</span>
+                            <span class="text-xs text-white/40 font-black uppercase tracking-widest truncate">Select .json archive</span>
                             <i class="bi bi-folder2-open text-white/20"></i>
                         </div>
                     </div>
                     <button type="submit" id="restoreBtn" class="w-full btn-premium py-3 bg-rose-600 shadow-rose-600/20">
                         <i class="bi bi-arrow-counterclockwise mr-2"></i>
-                        <span class="text-[10px] font-black uppercase tracking-widest text-white">Initiate Recovery</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-white">Initiate Recovery</span>
                     </button>
                 </form>
             </div>
@@ -302,22 +302,22 @@
 </div>
 
 <!-- Modal: Background Scan Configuration -->
-<div class="modal fade" id="advancedScanModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content glass-panel p-0 border-white/10 shadow-2xl overflow-hidden !bg-transparent !border-none">
+<div id="advancedScanModal" data-modal-backdrop class="fixed inset-0 z-[100] hidden items-center justify-center p-4 md:p-10 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+    <div class="w-full max-w-xl animate-in zoom-in-95 duration-200">
+        <div class="glass-panel p-0 border-white/10 shadow-2xl overflow-hidden !bg-slate-950">
             <div class="bg-gradient-to-r from-orange-600 to-amber-600 py-6 px-8 flex justify-between items-center">
                 <h5 class="text-white font-black text-sm uppercase tracking-[2px] flex items-center gap-3">
                     <i class="bi bi-shield-check"></i>
                     Scan Configuration
                 </h5>
-                <button type="button" class="text-white/60 hover:text-white transition-colors" data-bs-dismiss="modal">
+                <button type="button" class="text-white/60 hover:text-white transition-colors" onclick="toggleModal('advancedScanModal')">
                     <i class="bi bi-x-lg text-lg"></i>
                 </button>
             </div>
             
             <div class="p-8 space-y-8">
                 <div class="space-y-3">
-                    <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">1. MISSION SCOPE</label>
+                    <label class="text-readable-small font-black text-white/30 uppercase tracking-[2px] ml-1">1. MISSION SCOPE</label>
                     <div class="relative">
                         <select id="scanPlaylist" class="glass-control bg-slate-900/40 appearance-none">
                             <option value="">Full Database Scan (Global)</option>
@@ -330,57 +330,57 @@
                 </div>
 
                 <div class="space-y-4">
-                    <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">2. SCAN CONDITION</label>
+                    <label class="text-readable-small font-black text-white/30 uppercase tracking-[2px] ml-1">2. SCAN CONDITION</label>
                     <div class="grid grid-cols-1 gap-3">
                         <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
                             <input type="radio" name="scanMode" id="modeAll" value="all" checked class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
                             <div class="flex-1">
                                 <span class="block text-[11px] font-black text-white uppercase tracking-tight">System Wide</span>
-                                <span class="block text-[9px] text-white/30 font-bold uppercase">Scan all channels in scope</span>
+                                <span class="block text-readable-small text-white/30 font-bold uppercase">Scan all channels in scope</span>
                             </div>
                         </label>
                         <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
                             <input type="radio" name="scanMode" id="modeNever" value="never" class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
                             <div class="flex-1">
                                 <span class="block text-[11px] font-black text-white uppercase tracking-tight">Discovery Mode</span>
-                                <span class="block text-[9px] text-white/30 font-bold uppercase">Channels never scanned</span>
+                                <span class="block text-readable-small text-white/30 font-bold uppercase">Channels never scanned</span>
                             </div>
                         </label>
                         <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
                             <input type="radio" name="scanMode" id="modeDie" value="die" class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
                             <div class="flex-1">
                                 <span class="block text-[11px] font-black text-white uppercase tracking-tight">Rescue Mode</span>
-                                <span class="block text-[9px] text-white/30 font-bold uppercase">Only channels currently "Die"</span>
+                                <span class="block text-readable-small text-white/30 font-bold uppercase">Only channels currently "Die"</span>
                             </div>
                         </label>
                         <label class="glass-card p-4 flex items-center gap-4 cursor-pointer border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all has-[:checked]:border-orange-500/30 has-[:checked]:bg-orange-500/[0.02]">
                             <input type="radio" name="scanMode" id="modeOutdated" value="outdated" class="w-4 h-4 text-orange-600 bg-white/10 border-white/5 focus:ring-orange-500 focus:ring-offset-slate-900">
                             <div class="flex-1">
                                 <span class="block text-[11px] font-black text-white uppercase tracking-tight">Outdated Sync</span>
-                                <span class="block text-[9px] text-white/30 font-bold uppercase">Channels older than X days</span>
+                                <span class="block text-readable-small text-white/30 font-bold uppercase">Channels older than X days</span>
                             </div>
                         </label>
                     </div>
                 </div>
 
                 <div id="outdatedDaysGroup" class="hidden space-y-3">
-                    <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">THREASHOLD (DAYS)</label>
+                    <label class="text-readable-small font-black text-white/30 uppercase tracking-[2px] ml-1">THREASHOLD (DAYS)</label>
                     <div class="relative">
                         <input type="number" id="scanDays" class="glass-control bg-slate-900/40 pr-16" value="3" min="1">
-                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase tracking-widest">Days</span>
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-readable-small font-black text-white/20 uppercase tracking-widest">Days</span>
                     </div>
                 </div>
 
                 <div class="p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl flex gap-3">
                     <i class="bi bi-info-circle-fill text-blue-400 mt-0.5"></i>
-                    <p class="text-[10px] text-blue-400/80 leading-relaxed font-bold uppercase tracking-tight">
+                    <p class="text-xs text-blue-400/80 leading-relaxed font-bold uppercase tracking-tight">
                         Operations are persistent and will run in the background until completion.
                     </p>
                 </div>
             </div>
 
             <div class="p-8 bg-white/[0.02] border-t border-white/5 flex gap-4">
-                <button type="button" class="flex-1 btn-glass py-4 text-white/40" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="flex-1 btn-glass py-4 text-white/40" onclick="toggleModal('advancedScanModal')">Cancel</button>
                 <button id="startScanBtn" class="flex-2 btn-premium py-4 bg-orange-600 shadow-orange-600/20">
                     <i class="bi bi-play-circle-fill mr-2"></i>
                     <span class="text-[11px] font-black uppercase tracking-widest">Launch Mission</span>
@@ -391,22 +391,22 @@
 </div>
 
 <!-- Modal: Diagnostic Logs -->
-<div class="modal fade" id="scanLogModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content glass-panel p-0 border-white/10 shadow-2xl overflow-hidden bg-slate-950 !bg-transparent !border-none">
+<div id="scanLogModal" data-modal-backdrop class="fixed inset-0 z-[100] hidden items-center justify-center p-4 md:p-10 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+    <div class="w-full max-w-4xl animate-in zoom-in-95 duration-200">
+        <div class="glass-panel p-0 border-white/10 shadow-2xl overflow-hidden bg-slate-950">
             <div class="bg-slate-900 py-4 px-6 flex justify-between items-center border-b border-white/5">
                 <h5 class="text-white font-black text-xs uppercase tracking-[3px] flex items-center gap-3">
                     <i class="bi bi-terminal text-blue-400"></i>
                     System Telemetry Log
                 </h5>
-                <button type="button" class="text-white/40 hover:text-white transition-colors" data-bs-dismiss="modal">
+                <button type="button" class="text-white/40 hover:text-white transition-colors" onclick="toggleModal('scanLogModal')">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
             <div id="scanLogContainer" class="p-6 font-mono text-[11px] leading-relaxed overflow-y-auto max-h-[60vh] custom-scrollbar bg-black/40">
                 <div class="text-white/20 text-center py-20 flex flex-col items-center gap-4">
                     <div class="w-10 h-10 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin"></div>
-                    <span class="uppercase font-black tracking-widest text-[9px]">Awaiting background data...</span>
+                    <span class="uppercase font-black tracking-widest text-readable-small">Awaiting background data...</span>
                 </div>
             </div>
         </div>
@@ -454,7 +454,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const daysGroup = document.getElementById('outdatedDaysGroup');
     const startScanBtn = document.getElementById('startScanBtn');
     const stopScanBtn = document.getElementById('stopScanBtn');
-    const advScanModal = new bootstrap.Modal(document.getElementById('advancedScanModal'));
+    // Modal Bootstrap instances removed to avoid conflicts with custom Tailwind system
 
     scanModes.forEach(m => {
         m.addEventListener('change', () => {

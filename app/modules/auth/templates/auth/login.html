@@ -1,62 +1,81 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container d-flex align-items-center justify-content-center" style="min-height: 80vh;">
-    <div class="col-md-5">
-        <div class="card shadow-lg border-0 overflow-hidden" style="border-radius: 1.5rem;">
-            <div class="row g-0">
-                <div class="col-12 p-5">
-                    <div class="text-center mb-4">
-                        <div class="display-4 text-primary mb-2"><i class="bi bi-shield-lock-fill"></i></div>
-                        <h2 class="fw-bold">Sign In</h2>
-                        <p class="text-muted">Enter your credentials to access Manager</p>
-                    </div>
-                    
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                      {% if messages %}
-                        {% for category, message in messages %}
-                          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                          </div>
-                        {% endfor %}
-                      {% endif %}
-                    {% endwith %}
+<div class="flex items-center justify-center min-h-[80vh] px-4">
+    <div class="w-full max-w-md animate-in fade-in zoom-in duration-500">
+        <!-- Main Glass Login Panel -->
+        <div class="glass-panel p-8 md:p-10 relative overflow-hidden">
+            <!-- Decorative Glow -->
+            <div class="absolute -top-24 -right-24 w-48 h-48 bg-blue-500/20 blur-[100px] pointer-events-none"></div>
+            <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 blur-[100px] pointer-events-none"></div>
 
-                    <form action="{{ url_for('auth.login') }}" method="POST">
-                        <div class="mb-3">
-                            <label class="form-label text-muted small fw-bold">USERNAME</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light border-0"><i class="bi bi-person text-primary"></i></span>
-                                <input type="text" name="username" class="form-control bg-light border-0" placeholder="admin" required autofocus>
-                            </div>
-                        </div>
-                        <div class="mb-4">
-                            <label class="form-label text-muted small fw-bold">PASSWORD</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light border-0"><i class="bi bi-key text-primary"></i></span>
-                                <input type="password" name="password" class="form-control bg-light border-0" placeholder="••••••••" required>
-                            </div>
-                        </div>
-                        <div class="mb-4 d-flex justify-content-between align-items-center">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="remember" id="rememberMe">
-                                <label class="form-check-label text-muted small" for="rememberMe">
-                                    Remember me
-                                </label>
-                            </div>
-                        </div>
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-primary py-3 fw-bold shadow-sm" style="border-radius: 0.8rem; letter-spacing: 1px;">
-                                LOGIN TO DASHBOARD
-                            </button>
-                        </div>
-                    </form>
-                    
-                    <div class="text-center mt-5">
-                        <p class="small text-muted mb-0">© 2026 IPTV Manager System</p>
-                        <p class="small text-primary fw-bold mt-1">V2.5.0 STABLE</p>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                <div class="mb-6 space-y-3 relative z-20">
+                  {% for category, message in messages %}
+                    <div class="p-4 rounded-xl {% if category == 'danger' or category == 'error' %}bg-rose-500/10 border-rose-500/20 text-rose-400{% else %}bg-blue-500/10 border-blue-500/20 text-blue-400{% endif %} border flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
+                      <i class="bi {% if category == 'danger' or category == 'error' %}bi-exclamation-triangle-fill{% else %}bi-info-circle-fill{% endif %}"></i>
+                      <span class="text-xs font-bold">{{ message }}</span>
                     </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            {% endwith %}
+
+            <div class="text-center mb-10 relative z-10">
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-xl shadow-blue-500/20 mb-6 group transition-transform hover:scale-105">
+                    <i class="bi bi-shield-lock-fill text-3xl text-white"></i>
+                </div>
+                <h2 class="text-3xl font-black text-white tracking-tight mb-2">Welcome Back</h2>
+                <p class="text-slate-400 text-sm font-medium tracking-wide">Enter credentials to access manager</p>
+            </div>
+            
+            <form action="{{ url_for('auth.login') }}" method="POST" class="space-y-6 relative z-10">
+                <div class="space-y-2">
+                    <label class="block text-xs font-black text-white/50 uppercase tracking-[2px] ml-1">Username</label>
+                    <div class="relative group">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors">
+                            <i class="bi bi-person-fill"></i>
+                        </span>
+                        <input type="text" name="username" 
+                            class="glass-control w-full pl-12 pr-4 py-3.5 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none" 
+                            placeholder="manager_admin" required autofocus>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-xs font-black text-white/50 uppercase tracking-[2px] ml-1">Password</label>
+                    <div class="relative group">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors">
+                            <i class="bi bi-key-fill"></i>
+                        </span>
+                        <input type="password" name="password" 
+                            class="glass-control w-full pl-12 pr-4 py-3.5 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none" 
+                            placeholder="••••••••" required>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pb-2">
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <div class="relative flex items-center">
+                            <input type="checkbox" name="remember" id="rememberMe" class="peer sr-only">
+                            <div class="w-5 h-5 border-2 border-white/10 rounded-md bg-white/5 peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-all"></div>
+                            <i class="bi bi-check absolute text-[10px] text-white opacity-0 peer-checked:opacity-100 left-1 transition-opacity"></i>
+                        </div>
+                        <span class="text-xs font-bold text-slate-400 group-hover:text-slate-300 transition-colors">Remember Session</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn-premium w-full py-4 text-xs tracking-[2px] shadow-2xl shadow-blue-500/20 active:scale-95 transition-transform">
+                    Initialize Session <i class="bi bi-arrow-right-short text-lg ml-1"></i>
+                </button>
+            </form>
+            
+            <div class="text-center mt-12 pt-8 border-t border-white/5 relative z-10">
+                <p class="text-readable-small font-black text-white/40 uppercase tracking-[3px] mb-1">IPTV Management Environment</p>
+                <div class="flex items-center justify-center gap-2">
+                    <span class="w-1 h-1 rounded-full bg-emerald-500"></span>
+                    <span class="text-xs font-black text-blue-400 tracking-widest uppercase">Version 2.5.0 Stable</span>
                 </div>
             </div>
         </div>
@@ -64,23 +83,9 @@
 </div>
 
 <style>
+    /* Ensure the body gradient matches the aesthetic */
     body {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        min-height: 100vh;
-    }
-    .card {
-        transition: transform 0.3s ease;
-    }
-    .card:hover {
-        transform: translateY(-5px);
-    }
-    .btn-primary {
-        background: linear-gradient(to right, #0d6efd, #0b5ed7);
-        border: none;
-    }
-    .btn-primary:hover {
-        background: linear-gradient(to right, #0b5ed7, #0a58ca);
-        transform: scale(1.02);
+        background: radial-gradient(circle at top right, #1e293b, #020617) !important;
     }
 </style>
 {% endblock %}

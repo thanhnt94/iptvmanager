@@ -33,8 +33,8 @@ window.IPTVPlayer = {
         const sType = (stream_type || 'live').toLowerCase();
         const sFormat = (stream_format || '').toLowerCase();
         
-        // Comprehensive Detection
-        const isHlsDetected = lowUrl.includes('.m3u8') || lowUrl.includes('playlist') || lowUrl.includes('hls') || sType === 'hls' || sFormat === 'hls';
+        // Comprehensive Detection (Prioritize extensions/specific flags)
+        const isHlsDetected = lowUrl.includes('.m3u8') || lowUrl.includes('m3u8') || (lowUrl.includes('hls') && !lowUrl.includes('type=ts') && !lowUrl.includes('output=ts')) || sType === 'hls' || sFormat === 'hls';
         const isTsDetected = lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('type=ts') || lowUrl.includes('output=ts') || lowUrl.includes('.flv') || sType === 'ts' || sFormat === 'ts' || sFormat === 'flv';
         const isNativeDetected = ['.mp4', '.mkv', '.mov', '.avi', '.wmv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('/movie/') || sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv';
         
@@ -53,10 +53,17 @@ window.IPTVPlayer = {
 
         if (forcedType === 'default' || !forcedType) {
             if (isHlsDetected) {
-                playbackUrl = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${token}`;
-                pEngine = getHLSEngine();
+                // For HLS in Smart mode, prioritize Proxy if not native (better CORS/Referer handling)
+                if (canPlayNativeHLS) {
+                    playbackUrl = url;
+                    pEngine = 'native';
+                } else {
+                    playbackUrl = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${token}`;
+                    pEngine = 'hls';
+                }
             } else {
-                playbackUrl = `${host}/channels/play/${id}?token=${token}`;
+                // For TS/Other in Smart mode, prioritize Direct URL (faster/lower latency)
+                playbackUrl = url;
                 pEngine = getTSEngine();
             }
         } else if (forcedType === 'none') {
@@ -154,7 +161,7 @@ window.IPTVPlayer = {
                 
                 const mpegtsOption = {
                     enableStashBuffer: true,
-                    stashInitialSize: 8192, // 8MB "VLC-level" buffer for 4K streams
+                    stashInitialSize: 1024 * 1024, // 1MB buffer for fast starts (Original was 8MB which caused lag)
                     enableWorker: true,
                     lazyLoad: false,
                     deferLoadAfterSourceOpen: false,
@@ -248,7 +255,12 @@ window.IPTVPlayer = {
         videoElement.onplaying = () => {
              if (bufferingTimer) { clearTimeout(bufferingTimer); bufferingTimer = null; }
              if (stallSuggestionTimer) { clearTimeout(stallSuggestionTimer); stallSuggestionTimer = null; }
+             console.log("[IPTVPlayer] Playing - Hiding all overlays");
              if (overlay) overlay.classList.add('hidden');
+             // Also ensure VLC fallback is hidden if we are playing
+             const vlcContainer = document.getElementById('vlcFallback');
+             if (vlcContainer) vlcContainer.classList.add('hidden');
+             
              if (statusLabel && !statusLabel.innerText.includes('LIVE')) {
                   statusLabel.innerText = "LIVE";
              }

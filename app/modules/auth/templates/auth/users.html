@@ -8,15 +8,15 @@
             <h1 class="text-3xl font-black text-white tracking-tight uppercase mb-2">
                 User <span class="text-blue-500">Nexus</span>
             </h1>
-            <p class="text-white/40 font-bold text-[10px] uppercase tracking-[3px] flex items-center gap-2">
+            <p class="text-white/40 font-bold text-xs uppercase tracking-[3px] flex items-center gap-2">
                 <i class="bi bi-people-fill text-blue-500"></i>
                 Access Rights & Identity Management
             </p>
         </div>
         <div>
-            <button class="btn-premium px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 group" data-bs-toggle="modal" data-bs-target="#addUserModal">
+            <button class="btn-premium px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 group" onclick="toggleModal('addUserModal')">
                 <i class="bi bi-person-plus-fill mr-2 group-hover:scale-110 transition-transform"></i>
-                <span class="text-[11px] font-black uppercase tracking-widest">Provision User</span>
+                <span class="text-xs font-black uppercase tracking-widest">Provision User</span>
             </button>
         </div>
     </div>
@@ -27,11 +27,11 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="border-b border-white/5 bg-white/[0.02]">
-                        <th class="px-8 py-5 text-[10px] font-black uppercase tracking-[2px] text-white/30">Identity</th>
-                        <th class="px-6 py-5 text-[10px] font-black uppercase tracking-[2px] text-white/30">System Role</th>
-                        <th class="px-6 py-5 text-[10px] font-black uppercase tracking-[2px] text-white/30">Access Token</th>
-                        <th class="px-6 py-5 text-[10px] font-black uppercase tracking-[2px] text-white/30">Permissions</th>
-                        <th class="px-8 py-5 text-[10px] font-black uppercase tracking-[2px] text-white/30 text-right">Actions</th>
+                        <th class="px-8 py-5 text-xs font-black uppercase tracking-[2px] text-white/50">Identity</th>
+                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[2px] text-white/50">System Role</th>
+                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[2px] text-white/50">Access Token</th>
+                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[2px] text-white/50">Permissions</th>
+                        <th class="px-8 py-5 text-xs font-black uppercase tracking-[2px] text-white/50 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/5">
@@ -44,40 +44,40 @@
                                 </div>
                                 <div class="space-y-0.5">
                                     <div class="text-sm font-black text-white uppercase tracking-tight">{{ user.username }}</div>
-                                    <div class="text-[9px] text-white/20 font-bold uppercase">UID: #{{ user.id }}</div>
+                                    <div class="text-readable-small text-white/50 font-bold uppercase">UID: #{{ user.id }}</div>
                                 </div>
                             </div>
                         </td>
                         <td class="px-6 py-5">
                             {% if user.role == 'admin' %}
-                            <span class="px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[9px] font-black uppercase tracking-widest">Administrator</span>
+                            <span class="px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-readable-small font-black uppercase tracking-widest">Administrator</span>
                             {% else %}
-                            <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-black uppercase tracking-widest">Standard User</span>
+                            <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-readable-small font-black uppercase tracking-widest">Standard User</span>
                             {% endif %}
                         </td>
                         <td class="px-6 py-5">
                             <div class="flex items-center gap-2">
-                                <code class="text-[10px] font-mono text-white/30 bg-black/20 px-2 py-1 rounded border border-white/5" title="{{ user.api_token }}">{{ user.api_token[:12] }}...</code>
+                                <code class="text-xs font-mono text-white/50 bg-black/20 px-2 py-1 rounded border border-white/5" title="{{ user.api_token }}">{{ user.api_token[:12] }}...</code>
                                 <button onclick="navigator.clipboard.writeText('{{ user.api_token }}')" class="text-white/20 hover:text-white transition-colors">
-                                    <i class="bi bi-copy text-[10px]"></i>
+                                    <i class="bi bi-copy text-xs"></i>
                                 </button>
                             </div>
                         </td>
                         <td class="px-6 py-5">
                             <div class="dropdown">
-                                <button class="btn-glass px-4 py-1.5 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 group" type="button" data-bs-toggle="dropdown">
+                                <button class="btn-glass px-4 py-1.5 text-readable-small font-black uppercase tracking-widest flex items-center gap-2 group" type="button" onclick="this.nextElementSibling.classList.toggle('hidden')">
                                     Manage Scope
-                                    <i class="bi bi-chevron-down text-[8px] group-hover:translate-y-0.5 transition-transform"></i>
+                                    <i class="bi bi-chevron-down text-readable-small group-hover:translate-y-0.5 transition-transform"></i>
                                 </button>
-                                <ul class="dropdown-menu glass-panel p-3 border-white/10 shadow-2xl min-w-[280px]">
+                                <ul class="dropdown-menu glass-panel p-3 border-white/10 shadow-2xl min-w-[280px] hidden absolute right-0 mt-2 z-[60]">
                                     <li class="px-3 pb-3 mb-2 border-b border-white/5">
-                                        <span class="text-[8px] font-black text-white/20 uppercase tracking-[2px]">Playlist Authorization</span>
+                                        <span class="text-readable-small font-black text-white/40 uppercase tracking-[2px]">Playlist Authorization</span>
                                     </li>
                                     <div class="max-h-[200px] overflow-y-auto custom-scrollbar space-y-1">
                                         {% for pl in playlists %}
                                         <li>
                                             <label class="dropdown-item flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group/item">
-                                                <span class="text-[10px] font-black text-white/60 uppercase tracking-tight group-hover/item:text-white">{{ pl.name }}</span>
+                                                <span class="text-xs font-black text-white/80 uppercase tracking-tight group-hover/item:text-white">{{ pl.name }}</span>
                                                 <input class="w-4 h-4 text-blue-600 bg-white/5 border-white/10 rounded focus:ring-blue-500 access-toggle" type="checkbox" 
                                                        data-user-id="{{ user.id }}" data-playlist-id="{{ pl.id }}"
                                                        {% if pl.id in user_access_map[user.id] %}checked{% endif %}>
@@ -106,15 +106,16 @@
 </div>
 
 <!-- Add User Modal -->
-<div class="modal fade" id="addUserModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content glass-panel p-0 border-white/10 shadow-2xl overflow-hidden">
+<div id="addUserModal" class="fixed inset-0 z-[100] hidden" data-modal-backdrop>
+    <div class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="modal-content glass-panel w-full max-w-md border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
             <div class="bg-gradient-to-r from-blue-600 to-indigo-600 py-6 px-8 flex justify-between items-center">
                 <h5 class="text-white font-black text-sm uppercase tracking-[2px] flex items-center gap-3">
                     <i class="bi bi-person-plus-fill"></i>
                     Provision New User
                 </h5>
-                <button type="button" class="text-white/60 hover:text-white transition-colors" data-bs-dismiss="modal">
+                <button type="button" class="text-white/60 hover:text-white transition-colors" onclick="toggleModal('addUserModal')">
                     <i class="bi bi-x-lg text-lg"></i>
                 </button>
             </div>
@@ -122,21 +123,21 @@
             <form action="{{ url_for('auth.admin_users') }}" method="POST">
                 <div class="p-8 space-y-6">
                     <div class="space-y-2">
-                        <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">IDENTITY PIN (USERNAME)</label>
+                        <label class="text-readable-small font-black text-white/30 uppercase tracking-[2px] ml-1">IDENTITY PIN (USERNAME)</label>
                         <div class="relative group">
                             <input type="text" name="username" class="glass-control bg-slate-900/40 pl-12" placeholder="e.g. j.wick" required>
                             <i class="bi bi-person absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-blue-500 transition-colors"></i>
                         </div>
                     </div>
                     <div class="space-y-2">
-                        <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">SECURE ACCESS CODE (PASSWORD)</label>
+                        <label class="text-readable-small font-black text-white/30 uppercase tracking-[2px] ml-1">SECURE ACCESS CODE (PASSWORD)</label>
                         <div class="relative group">
                             <input type="password" name="password" class="glass-control bg-slate-900/40 pl-12" placeholder="••••••••" required>
                             <i class="bi bi-shield-lock absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-blue-500 transition-colors"></i>
                         </div>
                     </div>
                     <div class="space-y-2">
-                        <label class="text-[9px] font-black text-white/30 uppercase tracking-[2px] ml-1">SYSTEM ROLE</label>
+                        <label class="text-readable-small font-black text-white/30 uppercase tracking-[2px] ml-1">SYSTEM ROLE</label>
                         <div class="relative group">
                             <select name="role" class="glass-control bg-slate-900/40 pl-12 appearance-none">
                                 <option value="user" selected>Standard Member (Read Only)</option>
@@ -149,9 +150,9 @@
                 </div>
 
                 <div class="p-8 bg-white/[0.02] border-t border-white/5 flex gap-4">
-                    <button type="button" class="flex-1 btn-glass py-4 text-white/40" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="flex-1 btn-glass py-4 text-white/40" onclick="toggleModal('addUserModal')">Cancel</button>
                     <button type="submit" class="flex-2 btn-premium py-4 bg-blue-600 shadow-blue-600/20">
-                        <span class="text-[11px] font-black uppercase tracking-widest">Activate Provisioning</span>
+                        <span class="text-xs font-black uppercase tracking-widest">Activate Provisioning</span>
                     </button>
                 </div>
             </form>

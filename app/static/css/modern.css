@@ -1,12 +1,29 @@
 :root {
-    --glass-bg: rgba(15, 23, 42, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.1);
-    --glass-blur: blur(12px);
+    --glass-bg: rgba(15, 23, 42, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-blur: blur(14px);
     --accent-blue: #3b82f6;
     --accent-indigo: #6366f1;
     --accent-emerald: #10b981;
     --text-primary: #f8fafc;
-    --text-secondary: rgba(248, 250, 252, 0.6);
+    --text-secondary: rgba(248, 250, 252, 0.7);
+    --font-heading: 'Outfit', sans-serif;
+    --font-body: 'Inter', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.01em;
+}
+
+body {
+    font-family: var(--font-body);
+}
+
+.text-readable-small {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
 }
 
 .glass-panel {
