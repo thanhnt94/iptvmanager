@@ -16,3 +16,4 @@ flask-apscheduler
 flask-login
 psutil
 gunicorn
+yt-dlp
