@@ -25,7 +25,8 @@ class HealthCheckService:
                 return
             
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            'Referer': channel.stream_url
         }
         
         try:
@@ -127,9 +128,9 @@ class HealthCheckService:
             '-print_format', 'json', 
             '-show_streams', '-show_format',
             '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            '-probesize', '512000', 
-            '-analyzeduration', '1000000',
-            '-timeout', '8000000', # 8 seconds internal timeout
+            '-probesize', '256000', 
+            '-analyzeduration', '500000',
+            '-timeout', '4000000', # 4 seconds internal timeout
             probe_url
         ]
         

@@ -456,14 +456,7 @@ def play_channel(channel_id):
     channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 1 # Initial ping
     db.session.commit()
     
-    # 1. Background health check & Metadata refresh
-    def _bg_check(app, cid):
-        with app.app_context():
-            from app.modules.health.services import HealthCheckService
-            HealthCheckService.check_stream(cid)
-    
-    import threading
-    threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
+    # Background health check removed here (redundant)
     
     token = request.args.get('token')
     
@@ -531,25 +524,32 @@ def play_channel(channel_id):
 
     # 3.2 Force Modes
     if proxy_type == 'hls':
+        logger.info(f"SmartGateway: [FORCED_HLS] routing {channel.name}")
         return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token, url=play_url))
     elif proxy_type == 'ts':
+        logger.info(f"SmartGateway: [FORCED_TS] routing {channel.name}")
         return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
     elif proxy_type == 'vod':
+        logger.info(f"SmartGateway: [FORCED_VOD] routing {channel.name}")
         return redirect(url_for('channels.proxy_vod', url=play_url, token=token))
     elif proxy_type == 'tracking':
+        logger.info(f"SmartGateway: [FORCED_TRACKING] routing {channel.name}")
         return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
     elif proxy_type == 'direct' or proxy_type == 'none':
+        logger.info(f"SmartGateway: [FORCED_DIRECT] routing {channel.name}")
         return redirect(play_url)
         
     # 3.3 Smart Mode
     if is_hls:
-        # For HLS, we SHOULD proxy the manifest to bypass CORS (YouTube Live uses this)
+        logger.info(f"SmartGateway: [SMART_HLS] routing {channel.name}")
         return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token, url=play_url))
     elif is_ts:
         if enable_ts_proxy:
+            logger.info(f"SmartGateway: [SMART_TS] routing {channel.name}")
             return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
     elif is_vod:
-        # Use our Range-aware VOD Proxy for static files (MP4/MKV) to allow seeking in browser
+        logger.info(f"SmartGateway: [SMART_VOD] routing {channel.name}")
+        # Use our Range-aware VOD Proxy for static files (MP4/MKV)
         return redirect(url_for('channels.proxy_vod', url=play_url, token=token))
     
     # Fallback
@@ -850,7 +850,16 @@ def proxy_stream():
     if not username:
         return "Unauthorized", 401
     
-    url = request.args.get('url')
+    # Handle nested query params in URL correctly
+    full_query = request.query_string.decode('utf-8')
+    import re
+    from urllib.parse import unquote
+    url_match = re.search(r'url=(.*?)(?:&channel_id=|&token=|$)', full_query)
+    if url_match:
+        url = unquote(url_match.group(1))
+    else:
+        url = request.args.get('url')
+
     channel_id = request.args.get('channel_id', type=int)
     
     if not url:
@@ -861,20 +870,17 @@ def proxy_stream():
     
     # 2. Singleton Proxy Logic (TVHeadend-style)
     # This ensures only ONE connection to the source IPTV server
+    from app.modules.settings.services import SettingService
+    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
+    
     headers = {
-        'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18',
+        'User-Agent': ua,
         'Accept': '*/*',
+        'Referer': url.rsplit('/', 1)[0] + '/' if '/' in url else url,
         'Connection': 'keep-alive',
     }
     
-    # Background health check & Metadata refresh
-    if channel_id:
-        def _bg_check(app, cid):
-            with app.app_context():
-                from app.modules.health.services import HealthCheckService
-                HealthCheckService.check_stream(cid)
-        import threading
-        threading.Thread(target=_bg_check, args=(current_app._get_current_object(), int(channel_id))).start()
+    # Background health check removed here (redundant)
 
     # Get the broadcast queue from the manager
     from app.modules.channels.services import StreamManager
@@ -1122,13 +1128,7 @@ def proxy_hls_manifest():
     ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
     headers = { 'User-Agent': ua }
 
-    # Background health check
-    def _bg_check(app, cid):
-        with app.app_context():
-            from app.modules.health.services import HealthCheckService
-            HealthCheckService.check_stream(cid)
-    import threading
-    threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
+    # Background health check removed here (redundant)
 
     try:
         from app.modules.channels.services import ActiveSessionManager

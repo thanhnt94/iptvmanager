@@ -1039,33 +1039,27 @@ document.addEventListener('DOMContentLoaded', function() {
             toggleModal('playerModal');
         }
 
-        // 3. Performing backend check (Check-First)
+        // 3. Launch background verification (non-blocking)
         let freshMeta = {...meta};
-        try {
-            const checkResp = await fetch(`/channels/check/${id}?ajax=1`, { 
-                method: 'POST',
-                signal: signal 
-            });
-            const checkData = await checkResp.json();
-            
-            if (checkData.success) {
-                updateRowUI(id, checkData);
-                if (checkData.status === 'die') {
-                    modalStatusLabel.innerText = "LINK BROKEN (SERVER OFFLINE)";
-                    modalStatusLabel.className = "text-xs font-black text-rose-500 uppercase tracking-widest text-center px-4";
-                    modalSpinner.classList.add('hidden');
-                    modalVlcFallback.classList.remove('hidden');
-                    return;
+        if (id) {
+            fetch(`/channels/check/${id}?ajax=1`, { method: 'POST' })
+            .then(resp => resp.json())
+            .then(checkData => {
+                if (checkData.success) {
+                    updateRowUI(id, checkData);
+                    if (checkData.status === 'die' && currentChannelId === id) {
+                        modalStatusLabel.innerText = "LINK BROKEN (SERVER OFFLINE)";
+                        modalStatusLabel.className = "text-xs font-black text-rose-500 uppercase tracking-widest text-center px-4";
+                        modalSpinner.classList.add('hidden');
+                        modalVlcFallback.classList.remove('hidden');
+                        window.IPTVPlayer.stop(modalVideo);
+                    }
                 }
-                freshMeta.stream_type = checkData.stream_type;
-                freshMeta.stream_format = checkData.stream_format;
-            }
-        } catch (err) {
-            if (err.name === 'AbortError') return;
-            console.warn("Check failed", err);
+            })
+            .catch(err => console.warn("Background check failed", err));
         }
 
-        // 3.5 Calculate Final URL based on Source Mode
+        // 3.5 Calculate Final URL based on Source Mode (Immediate)
         let finalUrl = streamUrl;
         const host = window.location.origin;
         if (forcedType === 'default') {
