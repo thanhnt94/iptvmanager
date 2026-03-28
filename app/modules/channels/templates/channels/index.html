@@ -1069,7 +1069,15 @@ document.addEventListener('DOMContentLoaded', function() {
         let finalUrl = streamUrl;
         const host = window.location.origin;
         if (forcedType === 'default') {
-            finalUrl = `${host}/channels/smartlink/${id}?token=${userApiToken}`;
+            // ONLY bypass smartlink for direct static files (not YouTube/Web links needing extraction)
+            const isDirectMP4 = (freshMeta.stream_format === 'mp4' || streamUrl.toLowerCase().includes('.mp4')) && 
+                                !streamUrl.toLowerCase().includes('youtube.com') && !streamUrl.toLowerCase().includes('youtu.be');
+            
+            if (isDirectMP4) {
+                finalUrl = `${host}/channels/api/proxy_vod?url=${encodeURIComponent(streamUrl)}&token=${userApiToken}`;
+            } else {
+                finalUrl = `${host}/channels/smartlink/${id}?token=${userApiToken}`;
+            }
         } else if (forcedType === 'hls') {
             finalUrl = `${host}/channels/hls-proxy?channel_id=${id}&token=${userApiToken}`;
         } else if (forcedType === 'ts') {
@@ -1083,27 +1091,16 @@ document.addEventListener('DOMContentLoaded', function() {
         let sType = (freshMeta.stream_type || 'live').toLowerCase();
         const sFormat = (freshMeta.stream_format || '').toLowerCase();
         
-        // AUTO-DETECTION for VOD & ENGINE HINTS (for the player core)
-        const isYouTube = name.toLowerCase().includes('youtube');
+        // AUTO-DETECTION for VOD (e.g. YouTube name) if health check is inconclusive
+        const isKnownVOD = name.toLowerCase().includes('youtube') && !name.toLowerCase().includes('live');
         const isKnownVOD_file = streamUrl.toLowerCase().match(/\.(mp4|mkv|avi|mov|mp3|aac)/);
+        if (isKnownVOD || isKnownVOD_file) sType = 'vod';
         
-        if (isYouTube) {
-            // YouTube HQ is always TS-based proxy, even if VOD
-            if (!finalUrl.includes('engine=')) {
-                finalUrl += finalUrl.includes('?') ? '&engine=ts' : '?engine=ts';
+        // VOD HINT for the player core
+        if (sType === 'vod' && (forcedType === 'default' || forcedType === 'tracking')) {
+            if (!finalUrl.includes('vtype=vod')) {
+                finalUrl += finalUrl.includes('?') ? '&vtype=vod' : '?vtype=vod';
             }
-            if (!name.toLowerCase().includes('live')) sType = 'vod';
-        } else if (isKnownVOD_file) {
-            // MP4/MKV files are ALWAYS native
-            if (!finalUrl.includes('engine=')) {
-                finalUrl += finalUrl.includes('?') ? '&engine=native' : '?engine=native';
-            }
-            sType = 'vod';
-        }
-        
-        // Final VOD signal for seeking
-        if (sType === 'vod' && !finalUrl.includes('vtype=vod')) {
-            finalUrl += finalUrl.includes('?') ? '&vtype=vod' : '?vtype=vod';
         }
 
         // 4. Start Playback

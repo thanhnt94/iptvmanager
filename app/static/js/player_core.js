@@ -45,19 +45,29 @@ window.IPTVPlayer = {
             if (this.mpegtsPlayer) { this.mpegtsPlayer.destroy(); this.mpegtsPlayer = null; }
         }
         
-        // 2. Identify Stream Type
+        // 2. Identify Stream Type & Engine Priority
         const lowUrl = (url || "").toLowerCase();
         const sType = (stream_type || 'live').toLowerCase();
         const sFormat = (stream_format || '').toLowerCase();
         
-        // Comprehensive Detection (Prioritize backend hints, then metadata, then patterns)
-        const isHlsDetected = lowUrl.includes('engine=hls') || sType === 'hls' || sFormat === 'hls' || lowUrl.includes('.m3u8') || lowUrl.includes('m3u8') || lowUrl.includes('hls-proxy');
-        const isTsDetected = lowUrl.includes('engine=ts') || ((sType === 'ts' || sFormat === 'ts' || sFormat === 'flv' || lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('.flv') || lowUrl.includes('proxy_merge') || lowUrl.includes('ts-proxy') || lowUrl.includes('smartlink')) && !lowUrl.includes('vtype=vod'));
-        const isNativeDetected = lowUrl.includes('engine=native') || sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv' || ['.mp4', '.mkv', '.mov', '.avi', '.wmv'].some(ext => lowUrl.includes(ext)) || lowUrl.includes('proxy_vod') || (lowUrl.includes('vtype=vod') && !lowUrl.includes('engine=ts'));
+        // Priority 1: HLS Manifests
+        const isHlsDetected = lowUrl.includes('hls-proxy') || lowUrl.includes('.m3u8') || sFormat === 'hls';
+        
+        // Priority 2: MPEG-TS Engines (Explicit Proxy or Smart Gateway for TV/HQ Merger)
+        // Note: HQ YouTube Merger redirection from SmartLink outputs MPEG-TS
+        const isTsEngineRequired = lowUrl.includes('proxy_merge') || lowUrl.includes('ts-proxy') || lowUrl.includes('smartlink') || (lowUrl.includes('.ts') && !lowUrl.includes('vtype=vod')) || sFormat === 'ts';
+        
+        // Priority 3: Native Browser Engine (Direct MP4, MKV, or specialized VOD Proxy)
+        // Note: Smart Gateway is NOT used for simple MP4 files anymore (bypassed in index)
+        const isNativeDetected = (sType === 'vod' || sFormat === 'mp4' || lowUrl.includes('.mp4') || lowUrl.includes('proxy_vod')) && !lowUrl.includes('smartlink') && !lowUrl.includes('proxy_merge') && !isHlsDetected;
+
+        // VOD HINT: Show seekbar if vtype=vod is in URL or sType is vod
+        const isVodSeekingAllowed = sType === 'vod' || lowUrl.includes('vtype=vod') || isNativeDetected;
         
         // Expose explicit LIVE state for UI components
-        videoElement._isExplicitLive = !isNativeDetected;
+        videoElement._isExplicitLive = !isVodSeekingAllowed;
         
+        console.log(`[IPTVPlayer] Playing: ${url} (HLS:${isHlsDetected}, TS:${isTsEngineRequired}, Native:${isNativeDetected}, VOD:${isVodSeekingAllowed})`);
         // 3. Resolve Smart URL
         const canPlayNativeHLS = videoElement.canPlayType('application/vnd.apple.mpegurl') || videoElement.canPlayType('application/x-mpegURL');
         const canPlayNativeTS = videoElement.canPlayType('video/mp2t') || videoElement.canPlayType('video/mp2');
@@ -72,33 +82,29 @@ window.IPTVPlayer = {
             if (isHlsDetected) {
                 // For HLS in Smart mode, prioritize Proxy if not native (better CORS/Referer handling)
                 if (canPlayNativeHLS) {
-                    playbackUrl = url;
                     pEngine = 'native';
                 } else {
                     playbackUrl = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${token}`;
                     pEngine = 'hls';
                 }
             } else if (isNativeDetected) {
-                // For VOD/Native in Smart mode, use Native Browser Player
-                playbackUrl = url;
+                // For MP4, MKV - ALWAYS use native for seeking and stability
                 pEngine = 'native';
             } else {
-                // For TS in Smart mode, prioritize Direct URL (faster/lower latency)
-                playbackUrl = url;
+                // For TS/Other in Smart mode, prioritize Direct URL (faster/lower latency)
                 pEngine = getTSEngine();
             }
         } else if (forcedType === 'none') {
-            playbackUrl = url;
             if (isHlsDetected) pEngine = getHLSEngine();
-            else if (isTsDetected) pEngine = getTSEngine();
+            else if (isTsEngineRequired) pEngine = getTSEngine();
             else if (isNativeDetected) pEngine = 'native';
-            else pEngine = (sType === 'vod') ? 'native' : getTSEngine();
+            else pEngine = getTSEngine();
         } else if (forcedType === 'tracking') {
             if (isHlsDetected) {
                 playbackUrl = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${token}`;
                 pEngine = getHLSEngine();
             } else if (isNativeDetected) {
-                playbackUrl = url;
+                playbackUrl = `${host}/channels/track/${id}?token=${token}`;
                 pEngine = 'native';
             } else {
                 playbackUrl = `${host}/channels/track/${id}?token=${token}`;
@@ -236,9 +242,10 @@ window.IPTVPlayer = {
                     if (onError) onError(err);
                 });
             } else {
+                videoElement.crossOrigin = 'anonymous'; // Help with CORS and Range-requests
                 videoElement.src = playbackUrl;
                 videoElement.play().then(() => {
-                    if (statusLabel) statusLabel.innerText = "PLAYING (NATIVE)";
+                    if (statusLabel) statusLabel.innerText = isVodSeekingAllowed ? "PLAYING (VOD)" : "PLAYING (NATIVE)";
                     if (overlay) overlay.classList.add('hidden');
                 }).catch(err => {
                     if (statusLabel) statusLabel.innerText = "CANNOT PLAY STREAM";
