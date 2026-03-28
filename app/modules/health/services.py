@@ -112,6 +112,16 @@ class HealthCheckService:
         elif '.mkv' in url_lower: channel.stream_format = 'mkv'
         elif '.mp3' in url_lower: channel.stream_format = 'mp3'
 
+        # Extraction for Web Links
+        is_direct = any(ext in url_lower for ext in ['.m3u8', '.ts', '.mp4', '.mkv', '.mp3', '.aac', 'playlist', 'udp://', 'rtp://', 'rtmp://'])
+        probe_url = channel.stream_url
+        if not is_direct:
+            from app.modules.channels.services import ExtractorService
+            ext_res = ExtractorService.extract_direct_url(channel.stream_url)
+            if ext_res.get('success') and ext_res.get('links'):
+                probe_url = ext_res['links'][0]['url']
+                logger.debug(f"HealthCheck: Probing extracted URL for {channel.name}")
+
         cmd = [
             'ffprobe', '-v', 'quiet', 
             '-print_format', 'json', 
@@ -120,7 +130,7 @@ class HealthCheckService:
             '-probesize', '512000', 
             '-analyzeduration', '1000000',
             '-timeout', '8000000', # 8 seconds internal timeout
-            channel.stream_url
+            probe_url
         ]
         
         try:

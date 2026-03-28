@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context
 from flask_login import login_required, current_user
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import json
 from datetime import datetime, timedelta
 import time
@@ -511,6 +513,7 @@ def play_channel(channel_id):
     format_low = (channel.stream_format or '').lower()
     is_hls = '.m3u8' in url_low or 'playlist' in url_low or 'm3u8' in format_low or 'hls' in format_low
     is_ts = '.ts' in url_low or 'mpegts' in url_low or 'type=ts' in url_low or 'ts' in format_low
+    is_vod = any(ext in url_low for ext in ['.mp4', '.mkv', '.avi', '.mov', '.mp3', '.aac'])
     
     from app.modules.settings.services import SettingService
     enable_stats = SettingService.get('ENABLE_PROXY_STATS', True)
@@ -518,16 +521,22 @@ def play_channel(channel_id):
     
     proxy_type = getattr(channel, 'proxy_type', 'default')
     
-    # 3.1 HQ Multi-stream Redirection
+    # 3.1 HQ Multi-stream Redirection (YouTube 1080p+)
     if audio_url:
         logger.info(f"SmartGateway: Redirecting to HQ Merger for {channel.name}")
-        return redirect(url_for('channels.proxy_merge', v=play_url, a=audio_url, channel_id=channel.id, token=token))
+        # Mark as VOD if not clearly a live event
+        is_live_yt = any(x in channel.name.lower() or x in (channel.group_name or '').lower() for x in ['live', 'news', 'broadcast'])
+        v_type = 'live' if is_live_yt else 'vod'
+        # YouTube HQ Merger always returns MPEG-TS
+        return redirect(url_for('channels.proxy_merge', v=play_url, a=audio_url, channel_id=channel.id, token=token, vtype=v_type, engine='ts'))
 
     # 3.2 Force Modes
     if proxy_type == 'hls':
         return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token, url=play_url))
     elif proxy_type == 'ts':
         return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
+    elif proxy_type == 'vod':
+        return redirect(url_for('channels.proxy_vod', url=play_url, token=token, engine='native'))
     elif proxy_type == 'tracking':
         return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
     elif proxy_type == 'direct' or proxy_type == 'none':
@@ -540,11 +549,73 @@ def play_channel(channel_id):
     elif is_ts:
         if enable_ts_proxy:
             return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
+    elif is_vod:
+        # Use our Range-aware VOD Proxy for static files (MP4/MKV)
+        return redirect(url_for('channels.proxy_vod', url=play_url, token=token, engine='native'))
     
     # Fallback
     if enable_stats:
         return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
     return redirect(play_url)
+
+@channels_bp.route('/api/proxy_vod')
+def proxy_vod():
+    """
+    Range-aware VOD Proxy to bypass CORS and allow seeking (supports Range headers).
+    """
+    url = request.args.get('url')
+    token = request.args.get('token')
+    
+    if not validate_proxy_access(token):
+        return "Unauthorized", 401
+
+    if not url: return "No URL", 400
+
+    def generate(stream_resp):
+        for chunk in stream_resp.iter_content(chunk_size=128*1024):
+            yield chunk
+
+    try:
+        from app.modules.settings.services import SettingService
+        # Pass Range header to source
+        headers = {'User-Agent': SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')}
+        if 'Range' in request.headers:
+            headers['Range'] = request.headers['Range']
+
+        # Ensure we don't verify SSL if specified, helps with some self-signed VOD sources
+        resp = requests.get(url, headers=headers, stream=True, timeout=30, verify=False)
+        
+        # Build response headers with pass-through
+        excluded_headers = ['content-encoding', 'transfer-encoding', 'connection', 'content-length', 'content-range']
+        proxy_headers = [(name, value) for (name, value) in resp.headers.items()
+                         if name.lower() not in excluded_headers]
+        
+        # Set a proper media type if the source is generic
+        content_type = resp.headers.get('Content-Type')
+        if not content_type or 'octet-stream' in content_type:
+            if '.mp4' in url.lower(): content_type = 'video/mp4'
+            elif '.mkv' in url.lower(): content_type = 'video/x-matroska'
+            elif '.mp3' in url.lower(): content_type = 'audio/mpeg'
+        
+        response = Response(stream_with_context(generate(resp)), status=resp.status_code, content_type=content_type)
+        for name, value in proxy_headers:
+            response.headers[name] = value
+        
+        # Explicitly support Range + Exact pass-through of range headers
+        response.headers['Accept-Ranges'] = 'bytes'
+        if 'Content-Range' in resp.headers:
+            response.headers['Content-Range'] = resp.headers['Content-Range']
+        if 'Content-Length' in resp.headers:
+            response.headers['Content-Length'] = resp.headers['Content-Length']
+        if 'Last-Modified' in resp.headers:
+            response.headers['Last-Modified'] = resp.headers['Last-Modified']
+        if 'ETag' in resp.headers:
+            response.headers['ETag'] = resp.headers['ETag']
+            
+        return response
+    except Exception as e:
+        logger.error(f"VOD Proxy Error: {e}")
+        return str(e), 500
 
 @channels_bp.route('/api/stats/<int:channel_id>')
 @login_required
@@ -896,30 +967,38 @@ def proxy_merge():
     def generate():
         import subprocess
         # Command to merge V + A into MPEG-TS
-        # We MUST re-encode audio to AAC to ensure compatibility in the MPEG-TS container.
+        # Optimized for fast start and high-compatibility
         cmd = [
             'ffmpeg', '-hide_banner', '-loglevel', 'error',
+            '-re', # Read input at native frame rate (helps some players)
             '-i', v_url, '-i', a_url,
-            '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+            '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', # Standard AAC 128k
             '-map', '0:v:0', '-map', '1:a:0',
-            '-f', 'mpegts', 'pipe:1'
+            '-f', 'mpegts', 
+            '-mpegts_copyts', '1', # Preserve timestamps
+            'pipe:1'
         ]
         
         # Start Session
         if channel_id:
-            ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'HQ Merger (4K/HD)')
+            ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'HQ Merger (YouTube)')
         
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
+            # Yield chunks quickly
             while True:
-                chunk = proc.stdout.read(256 * 1024) # 256KB chunks
+                chunk = proc.stdout.read(64 * 1024) # Smaller chunks for faster initial burst
                 if not chunk: break
                 yield chunk
         finally:
             try: proc.kill()
             except: pass
             
-    return Response(stream_with_context(generate()), content_type='video/mp2t', headers={'Access-Control-Allow-Origin': '*'})
+    return Response(stream_with_context(generate()), content_type='video/mp2t', headers={
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff'
+    })
 
 @channels_bp.route('/extractor')
 def extractor_page():
