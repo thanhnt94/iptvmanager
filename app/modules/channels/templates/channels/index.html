@@ -321,11 +321,11 @@
                                     <i class="bi {% if channel.is_original %}bi-star-fill{% else %}bi-star{% endif %} text-[10px]"></i>
                                 </button>
                                 
-                                <div class="relative group/mini-menu">
-                                    <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-white/40 border border-white/5 hover:bg-white/10">
+                                <div class="relative">
+                                    <button class="mini-menu-btn w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-white/40 border border-white/5 hover:bg-white/10 transition-colors">
                                         <i class="bi bi-three-dots-vertical text-xs"></i>
                                     </button>
-                                    <div class="absolute bottom-full right-0 mb-2 w-48 hidden group-hover/mini-menu:block z-[110] animate-in fade-in slide-in-from-bottom-2 origin-bottom-right">
+                                    <div class="mini-menu-dropdown absolute bottom-full right-0 mb-2 w-48 hidden z-[110] animate-in fade-in slide-in-from-bottom-2 origin-bottom-right">
                                         <div class="glass-panel p-2 shadow-2xl border-white/10">
                                             <a href="{{ url_for('channels.edit_channel', channel_id=channel.id) }}" class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-black uppercase text-white/70 hover:bg-blue-600 hover:text-white transition-all mb-1">
                                                 <i class="bi bi-pencil-square"></i> Edit Channel
@@ -411,11 +411,11 @@
                     </button>
 
                     <!-- More -->
-                    <div class="relative group/menu">
-                        <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-white/50 border border-white/5">
+                    <div class="relative">
+                        <button class="mini-menu-btn w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-white/50 border border-white/5 hover:bg-white/10 transition-colors">
                             <i class="bi bi-three-dots-vertical"></i>
                         </button>
-                        <div class="absolute right-0 top-full pt-2 w-48 hidden group-hover/menu:block z-[100] animate-in fade-in zoom-in-95 origin-top-right">
+                        <div class="mini-menu-dropdown absolute right-0 top-full pt-2 w-48 hidden z-[100] animate-in fade-in zoom-in-95 origin-top-right">
                             <div class="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-2 rounded-2xl shadow-2xl">
                                 <button class="stats-btn w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-white/70 hover:text-white transition-colors" data-id="{{ channel.id }}">
                                     <i class="bi bi-bar-chart-fill"></i> View Stats
@@ -565,11 +565,11 @@
                                         <i class="bi bi-shield-check text-xs"></i>
                                     </button>
                                     
-                                    <div class="relative group/menu">
-                                        <button class="btn-glass w-9 h-9 flex items-center justify-center p-0 text-white/40 hover:text-white border-white/5 hover:bg-white/10">
+                                    <div class="relative">
+                                        <button class="mini-menu-btn btn-glass w-9 h-9 flex items-center justify-center p-0 text-white/40 hover:text-white border-white/5 hover:bg-white/10 transition-colors">
                                             <i class="bi bi-three-dots"></i>
                                         </button>
-                                        <div class="absolute bottom-full right-0 pb-2 w-32 hidden group-hover/menu:block z-[100] animate-in fade-in slide-in-from-bottom-2">
+                                        <div class="mini-menu-dropdown absolute bottom-full right-0 pb-2 w-32 hidden z-[100] animate-in fade-in slide-in-from-bottom-2">
                                             <div class="glass-panel p-1 shadow-2xl">
                                                 <form action="{{ url_for('channels.delete_channel', channel_id=channel.id) }}" method="POST" class="w-full">
                                                     <button type="submit" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-rose-500/10 text-xs font-bold uppercase tracking-widest text-rose-500 transition-colors" onclick="return confirm('Are you sure?')">
@@ -1376,6 +1376,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     bttBtn.addEventListener('click', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // --- Mini-Menu Dropdown Toggle ---
+    document.addEventListener('click', (e) => {
+        const menuBtn = e.target.closest('.mini-menu-btn');
+        const allMenus = document.querySelectorAll('.mini-menu-dropdown');
+        
+        if (menuBtn) {
+            const currentMenu = menuBtn.nextElementSibling;
+            const isHidden = currentMenu.classList.contains('hidden');
+            allMenus.forEach(m => m.classList.add('hidden'));
+            if (isHidden) currentMenu.classList.remove('hidden');
+            e.stopPropagation();
+        } else if (!e.target.closest('.mini-menu-dropdown')) {
+            allMenus.forEach(m => m.classList.add('hidden'));
+        }
     });
 });
 

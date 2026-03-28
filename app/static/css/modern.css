@@ -52,9 +52,21 @@ body {
 .glass-control {
     background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 0.75rem !important;
+    border-radius: 0.85rem !important;
     color: var(--text-primary) !important;
+    padding: 0.75rem 1.25rem !important; /* Made taller */
+    font-weight: 500;
     transition: all 0.3s;
+}
+
+select.glass-control {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='rgba(255,255,255,0.4)' class='bi bi-chevron-down' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1.25rem center;
+    padding-right: 3rem !important;
+    cursor: pointer;
 }
 
 .glass-control:focus {
@@ -65,8 +77,9 @@ body {
 
 /* Fix for Select Options in Dark Mode */
 .glass-control option {
-    background-color: #1e293b !important; /* Slate 800 */
+    background-color: #0f172a !important; /* Deeper Slate */
     color: white !important;
+    padding: 12px;
 }
 
 .btn-premium {
@@ -115,19 +128,24 @@ body {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 11px;
+    height: 11px;
 }
 
 ::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    border: 3px solid transparent;
+    background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--accent-gradient, #3b82f6);
+    border: 3px solid transparent;
+    background-clip: content-box;
 }
