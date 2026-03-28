@@ -249,7 +249,7 @@
                     <!-- Media/Logo Header -->
                     <div class="aspect-video bg-slate-900/50 relative overflow-hidden flex items-center justify-center group/media border-b border-white/5">
                         {% if channel.logo_url %}
-                        <img src="{{ channel.logo_url }}" class="w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-110" alt="{{ channel.name }}" onerror="this.src='/static/img/placeholder.png'">
+                        <img src="{{ channel.logo_url }}" class="w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-110" alt="{{ channel.name }}" onerror="this.onerror=null;this.src='/static/img/placeholder.png'">
                         {% else %}
                         <div class="flex flex-col items-center gap-3 text-white/10">
                             <i class="bi bi-broadcast text-5xl"></i>
@@ -361,7 +361,7 @@
                 <!-- Logo -->
                 <div class="w-12 h-12 bg-white/5 rounded-lg border border-white/5 flex items-center justify-center p-1.5 shrink-0">
                     {% if channel.logo_url %}
-                    <img src="{{ channel.logo_url }}" class="max-h-full max-w-full object-contain rounded-sm" alt="" loading="lazy">
+                    <img src="{{ channel.logo_url }}" class="max-h-full max-w-full object-contain rounded-sm" alt="" loading="lazy" onerror="this.onerror=null;this.src='/static/img/placeholder.png'">
                     {% else %}
                     <i class="bi bi-broadcast text-xl text-white/10"></i>
                     {% endif %}
@@ -481,7 +481,7 @@
                             <td class="px-6 py-4">
                                 <div class="w-12 h-12 bg-white/5 rounded-lg border border-white/5 flex items-center justify-center p-1.5 group-hover/row:scale-110 transition-transform">
                                     {% if channel.logo_url %}
-                                    <img src="{{ channel.logo_url }}" class="max-h-full max-w-full object-contain rounded-sm" alt="" loading="lazy">
+                                    <img src="{{ channel.logo_url }}" class="max-h-full max-w-full object-contain rounded-sm" alt="" loading="lazy" onerror="this.onerror=null;this.src='/static/img/placeholder.png'">
                                     {% else %}
                                     <i class="bi bi-broadcast text-white/10"></i>
                                     {% endif %}
@@ -826,11 +826,11 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('linksChannelId').innerText = 'Channel ID: ' + id;
 
         const host = window.location.origin;
-        document.getElementById('linkSmart').value = `${host}/channels/play/${id}?token=${userApiToken}`;
+        document.getElementById('linkSmart').value = `${host}/channels/smartlink/${id}?token=${userApiToken}`;
         document.getElementById('linkOriginal').value = originalUrl;
-        document.getElementById('linkTrack').value = `${host}/channels/track/${id}?token=${userApiToken}`;
-        document.getElementById('linkHls').value = `${host}/channels/api/proxy_hls_manifest?channel_id=${id}&token=${userApiToken}`;
-        document.getElementById('linkTs').value = `${host}/channels/api/proxy?url=${encodeURIComponent(originalUrl)}&channel_id=${id}&token=${userApiToken}`;
+        document.getElementById('linkTrack').value = `${host}/channels/redirect/${id}?token=${userApiToken}`;
+        document.getElementById('linkHls').value = `${host}/channels/hls-proxy?channel_id=${id}&token=${userApiToken}`;
+        document.getElementById('linkTs').value = `${host}/channels/ts-proxy?url=${encodeURIComponent(originalUrl)}&channel_id=${id}&token=${userApiToken}`;
 
         toggleModal('urlLinksModal');
     }
@@ -1065,13 +1065,28 @@ document.addEventListener('DOMContentLoaded', function() {
             console.warn("Check failed", err);
         }
 
+        // 3.5 Calculate Final URL based on Source Mode
+        let finalUrl = streamUrl;
+        const host = window.location.origin;
+        if (forcedType === 'default') {
+            finalUrl = `${host}/channels/smartlink/${id}?token=${userApiToken}`;
+        } else if (forcedType === 'hls') {
+            finalUrl = `${host}/channels/hls-proxy?channel_id=${id}&token=${userApiToken}`;
+        } else if (forcedType === 'ts') {
+            finalUrl = `${host}/channels/ts-proxy?url=${encodeURIComponent(streamUrl)}&channel_id=${id}&token=${userApiToken}`;
+        } else if (forcedType === 'tracking') {
+            finalUrl = `${host}/channels/redirect/${id}?token=${userApiToken}`;
+        } else if (forcedType === 'none') {
+            finalUrl = streamUrl;
+        }
+
         const sType = freshMeta.stream_type || 'live';
         const sFormat = freshMeta.stream_format || '';
 
         // 4. Start Playback
         window.IPTVPlayer.play(modalVideo, {
             id: id,
-            url: url,
+            url: finalUrl,
             name: name,
             stream_type: sType,
             stream_format: sFormat,
@@ -1224,7 +1239,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else bar.classList.add('hidden');
         });
     }
-    setInterval(pollScanStatus, 3000); pollScanStatus();
+    setInterval(pollScanStatus, 15000); pollScanStatus();
 
     // --- Batch Action ---
     document.querySelectorAll('.checkAllBtn').forEach(btn => {

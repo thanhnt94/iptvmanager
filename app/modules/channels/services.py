@@ -464,9 +464,9 @@ class ExtractorService:
             'yt-dlp', 
             '--get-url', 
             '--no-playlist',
-            '--format', 'best', # Or try 'all' if we want many? --get-url --all-formats is slow. 
-                                # Let's stay with the 'best' one first.
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            '--format', 'bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best', 
+            '--no-warnings', 
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
             web_url
         ]
         
@@ -474,7 +474,8 @@ class ExtractorService:
             import subprocess
             y_res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if y_res.returncode == 0:
-                for line in y_res.stdout.strip().split('\n'):
+                lines = y_res.stdout.strip().split('\n')
+                for line in lines:
                     u = line.strip()
                     if u and u not in seen_urls:
                         logger.debug(f"yt-dlp found: {u}")

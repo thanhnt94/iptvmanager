@@ -63,6 +63,12 @@ body {
     box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
 }
 
+/* Fix for Select Options in Dark Mode */
+.glass-control option {
+    background-color: #1e293b !important; /* Slate 800 */
+    color: white !important;
+}
+
 .btn-premium {
     background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-indigo) 100%);
     border: none;

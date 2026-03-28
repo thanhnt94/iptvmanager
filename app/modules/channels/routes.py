@@ -437,6 +437,7 @@ def sync_epg(id):
     result = EPGService.sync_epg(id)
     return jsonify(result)
 @channels_bp.route('/play/<int:channel_id>')
+@channels_bp.route('/smartlink/<int:channel_id>')
 def play_channel(channel_id):
     """
     Playback redirector that obfuscates the original URL and 
@@ -453,8 +454,7 @@ def play_channel(channel_id):
     channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 1 # Initial ping
     db.session.commit()
     
-    # 2. Background health check & Metadata refresh
-    # This ensures resolution, codecs, etc. are updated without blocking the user's playback start.
+    # 1. Background health check & Metadata refresh
     def _bg_check(app, cid):
         with app.app_context():
             from app.modules.health.services import HealthCheckService
@@ -466,75 +466,85 @@ def play_channel(channel_id):
     token = request.args.get('token')
     
     # SMART AUTH: If no token provided, automatically use the Admin token 
-    # to ensure the proxy redirect works "out of the box"
     from app.modules.auth.models import User, TrustedIP
     if not token:
         admin_user = User.query.filter_by(role='admin').first()
-        if admin_user:
-            token = admin_user.api_token
+        if admin_user: token = admin_user.api_token
     
-    # TRUST IP LOGIC: If we have a token (provided or auto-found), remember this IP
+    # TRUST IP LOGIC
     if token:
         from app.modules.playlists.models import PlaylistProfile
-        # ... rest of the trust logic ...
-        # Check if token is valid
-        is_valid = User.query.filter_by(api_token=token).first() or \
-                   PlaylistProfile.query.filter_by(security_token=token).first()
+        # Check if token is valid (User or Playlist Profile)
+        is_user = User.query.filter_by(api_token=token).first()
+        is_playlist = PlaylistProfile.query.filter_by(security_token=token).first()
         
-        if is_valid:
+        if is_user or is_playlist:
             ip = request.remote_addr
             trusted = TrustedIP.query.filter_by(ip_address=ip).first()
             if not trusted:
                 trusted = TrustedIP(ip_address=ip)
                 db.session.add(trusted)
-            else:
-                from datetime import datetime
-                trusted.last_seen = db.func.now()
-            db.session.commit()
+                db.session.commit()
 
-    # 3. SMART REDIRECT & PROXY LOGIC (The "Smart Brain")
+    # 2. On-the-fly Extraction for Web Links
     url_low = channel.stream_url.lower()
-    format_low = (channel.stream_format or '').lower()
+    is_direct = any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv', '.mp3', '.aac', 'playlist', 'udp://', 'rtp://', 'rtmp://'])
+    play_url = channel.stream_url
+    audio_url = None
     
+    if not is_direct:
+        logger.info(f"SmartGateway: Extraction needed for {channel.name}")
+        from app.modules.channels.services import ExtractorService
+        ext_res = ExtractorService.extract_direct_url(channel.stream_url)
+        if ext_res.get('success') and ext_res.get('links'):
+            # YouTube/HQ check: if 2 links return, assume Video and Audio
+            links = ext_res['links']
+            if len(links) >= 2 and any('googlevideo' in l['url'] for l in links):
+                play_url = links[0]['url']
+                audio_url = links[1]['url']
+                logger.info(f"SmartGateway: Multi-stream extraction (HQ Video + Audio)")
+            else:
+                play_url = links[0]['url']
+            url_low = play_url.lower() # Re-detect based on real link
+
+    # 3. Detect Format for Real Play URL
+    format_low = (channel.stream_format or '').lower()
     is_hls = '.m3u8' in url_low or 'playlist' in url_low or 'm3u8' in format_low or 'hls' in format_low
     is_ts = '.ts' in url_low or 'mpegts' in url_low or 'type=ts' in url_low or 'ts' in format_low
     
     from app.modules.settings.services import SettingService
     enable_stats = SettingService.get('ENABLE_PROXY_STATS', True)
     enable_ts_proxy = SettingService.get('ENABLE_TS_PROXY', True)
-    enable_hls_proxy = SettingService.get('ENABLE_HLS_PROXY', True)
     
     proxy_type = getattr(channel, 'proxy_type', 'default')
     
-    # 3.1 Force Modes (If user explicitly set them)
+    # 3.1 HQ Multi-stream Redirection
+    if audio_url:
+        logger.info(f"SmartGateway: Redirecting to HQ Merger for {channel.name}")
+        return redirect(url_for('channels.proxy_merge', v=play_url, a=audio_url, channel_id=channel.id, token=token))
+
+    # 3.2 Force Modes
     if proxy_type == 'hls':
-        return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token))
-    elif proxy_type == 'ts' or proxy_type == 'tvheadend':
-        return redirect(url_for('channels.proxy_stream', url=channel.stream_url, token=token, channel_id=channel.id))
+        return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token, url=play_url))
+    elif proxy_type == 'ts':
+        return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
     elif proxy_type == 'tracking':
         return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
     elif proxy_type == 'direct' or proxy_type == 'none':
-        return redirect(channel.stream_url)
+        return redirect(play_url)
         
-    # 3.2 Smart "Default" Mode Logic
+    # 3.3 Smart Mode
     if is_hls:
-        # USER REQUEST: For HLS, prioritize Tracking/Redirect in "Smart" mode
-        # This is more reliable than full manifest proxying for most direct clients.
-        if enable_stats:
-            return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
-        return redirect(channel.stream_url)
+        # For HLS, we SHOULD proxy the manifest to bypass CORS (YouTube Live uses this)
+        return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token, url=play_url))
     elif is_ts:
         if enable_ts_proxy:
-            # Full TS Singleton Proxy
-            return redirect(url_for('channels.proxy_stream', url=channel.stream_url, token=token, channel_id=channel.id))
-        elif enable_stats:
-            # Fallback to Tracking
-            return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
+            return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
     
-    # Final Fallback: Direct Play
+    # Fallback
     if enable_stats:
         return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
-    return redirect(channel.stream_url)
+    return redirect(play_url)
 
 @channels_bp.route('/api/stats/<int:channel_id>')
 @login_required
@@ -653,11 +663,15 @@ def validate_proxy_access(token=None):
     from app.modules.auth.models import TrustedIP
     ip = request.remote_addr
     trusted = TrustedIP.query.filter_by(ip_address=ip).first()
-    if trusted: return f"Trusted IP: {ip}"
+    if trusted: 
+        logger.debug(f"Proxy Auth: Success via Trusted IP {ip}")
+        return f"Trusted IP: {ip}"
     
+    logger.warning(f"Proxy Auth: FAILED for IP {ip} (Token: {token})")
     return None
 
 @channels_bp.route('/track/<int:channel_id>')
+@channels_bp.route('/redirect/<int:channel_id>')
 def track_redirect(channel_id):
     from app.modules.settings.services import SettingService
     if not SettingService.get('ENABLE_PROXY_STATS', True):
@@ -680,6 +694,18 @@ def track_redirect(channel_id):
     channel.play_count += 1
     db.session.commit()
 
+    # On-the-fly Extraction logic (consistent with play_channel)
+    url_low = channel.stream_url.lower()
+    is_direct = any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv', '.mp3', '.aac', 'playlist', 'udp://', 'rtp://', 'rtmp://'])
+    play_url = channel.stream_url
+    
+    if not is_direct:
+        from app.modules.channels.services import ExtractorService
+        ext_res = ExtractorService.extract_direct_url(channel.stream_url)
+        if ext_res.get('success') and ext_res.get('links'):
+            play_url = ext_res['links'][0]['url']
+            logger.info(f"Redirect: Extraction success for {channel.name}")
+
     # Background health check
     def _bg_check(app, cid):
         with app.app_context():
@@ -688,7 +714,7 @@ def track_redirect(channel_id):
     import threading
     threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
 
-    return redirect(channel.stream_url)
+    return redirect(play_url)
 
 @channels_bp.route('/api/stop_session', methods=['POST'])
 @login_required
@@ -739,6 +765,7 @@ def get_active_sessions_api():
     })
 
 @channels_bp.route('/api/proxy')
+@channels_bp.route('/ts-proxy')
 def proxy_stream():
     """
     TVHeadend-style Singleton Proxy Gateway.
@@ -847,6 +874,53 @@ def proxy_stream():
 
     return Response(stream_with_context(generate()), content_type='video/mp2t')
 
+@channels_bp.route('/api/proxy_merge')
+def proxy_merge():
+    """
+    HQ Merger Proxy for YouTube/Web VOD.
+    Uses ffmpeg to combine separate HQ Video and Audio streams into one TS stream.
+    """
+    v_url = request.args.get('v')
+    a_url = request.args.get('a')
+    channel_id = request.args.get('channel_id')
+    token = request.args.get('token')
+    
+    username = validate_proxy_access(token)
+    if not username:
+        return "Unauthorized", 401
+
+    if not v_url or not a_url:
+        return "Missing streams", 400
+
+    from app.modules.channels.services import ActiveSessionManager
+    def generate():
+        import subprocess
+        # Command to merge V + A into MPEG-TS
+        # We MUST re-encode audio to AAC to ensure compatibility in the MPEG-TS container.
+        cmd = [
+            'ffmpeg', '-hide_banner', '-loglevel', 'error',
+            '-i', v_url, '-i', a_url,
+            '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+            '-map', '0:v:0', '-map', '1:a:0',
+            '-f', 'mpegts', 'pipe:1'
+        ]
+        
+        # Start Session
+        if channel_id:
+            ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'HQ Merger (4K/HD)')
+        
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            while True:
+                chunk = proc.stdout.read(256 * 1024) # 256KB chunks
+                if not chunk: break
+                yield chunk
+        finally:
+            try: proc.kill()
+            except: pass
+            
+    return Response(stream_with_context(generate()), content_type='video/mp2t', headers={'Access-Control-Allow-Origin': '*'})
+
 @channels_bp.route('/extractor')
 def extractor_page():
     return render_template('channels/extractor.html')
@@ -941,6 +1015,7 @@ def rewrite_hls_manifest(content, base_url, channel_id, token):
     return "\n".join(new_lines)
 
 @channels_bp.route('/api/proxy_hls_manifest')
+@channels_bp.route('/hls-proxy')
 def proxy_hls_manifest():
     from app.modules.settings.services import SettingService
     if not SettingService.get('ENABLE_HLS_PROXY', True):
@@ -990,6 +1065,12 @@ def proxy_hls_manifest():
         )
     except Exception as e:
         return str(e), 500
+
+@channels_bp.route('/original/<int:channel_id>')
+def direct_original_link(channel_id):
+    """Bypasses everything and redirects to the source URL."""
+    channel = Channel.query.get_or_404(channel_id)
+    return redirect(channel.stream_url)
 
 @channels_bp.route('/api/proxy_hls_segment')
 def proxy_hls_segment():

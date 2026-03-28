@@ -51,8 +51,8 @@ window.IPTVPlayer = {
         const sFormat = (stream_format || '').toLowerCase();
         
         // Comprehensive Detection (Prioritize backend flags, then extensions)
-        const isHlsDetected = sType === 'hls' || sFormat === 'hls' || lowUrl.includes('.m3u8') || lowUrl.includes('m3u8');
-        const isTsDetected = sType === 'ts' || sFormat === 'ts' || sFormat === 'flv' || lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('.flv');
+        const isHlsDetected = sType === 'hls' || sFormat === 'hls' || lowUrl.includes('.m3u8') || lowUrl.includes('m3u8') || lowUrl.includes('hls-proxy');
+        const isTsDetected = sType === 'ts' || sFormat === 'ts' || sFormat === 'flv' || lowUrl.includes('.ts') || lowUrl.includes('mpegts') || lowUrl.includes('.flv') || lowUrl.includes('proxy_merge') || lowUrl.includes('ts-proxy') || lowUrl.includes('smartlink');
         const isNativeDetected = sType === 'vod' || sFormat === 'mp4' || sFormat === 'mkv' || ['.mp4', '.mkv', '.mov', '.avi', '.wmv'].some(ext => lowUrl.includes(ext));
         
         // Expose explicit LIVE state for UI components
