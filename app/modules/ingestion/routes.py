@@ -3,7 +3,7 @@ from app.modules.ingestion.services import IngestionService
 from app.modules.ingestion.data_services import DataExportService, DataImportService
 import io
 
-ingestion_bp = Blueprint('ingestion', __name__, template_folder='templates')
+ingestion_bp = Blueprint('ingestion', __name__)
 
 @ingestion_bp.route('/import', methods=['GET', 'POST'])
 def import_channels():

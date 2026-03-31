@@ -3,10 +3,15 @@ from flask_login import login_user, logout_user, login_required, current_user
 from app.modules.auth.services import AuthService, admin_required
 from app.modules.playlists.models import PlaylistProfile
 
-auth_bp = Blueprint('auth', __name__, template_folder='templates')
+auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    from app.modules.settings.models import SystemSetting
+    use_sso = SystemSetting.query.filter_by(key='USE_CENTRAL_AUTH').first()
+    if use_sso and use_sso.value.lower() == 'true':
+        return redirect(url_for('auth_center.login'))
+
     if current_user.is_authenticated:
         if current_user.role == 'admin':
             return redirect(url_for('channels.index'))
@@ -33,7 +38,16 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    from app.modules.settings.models import SystemSetting
+    use_sso = SystemSetting.query.filter_by(key='USE_CENTRAL_AUTH').first()
+    
     logout_user()
+    
+    if use_sso and use_sso.value.lower() == 'true':
+        api_url = SystemSetting.query.filter_by(key='CENTRAL_AUTH_API_URL').first()
+        if api_url:
+            return redirect(f"{api_url.value.rstrip('/')}/api/auth/logout")
+
     return redirect(url_for('auth.login'))
 
 @auth_bp.route('/dashboard')

@@ -21,11 +21,13 @@ def create_app(config_class=Config):
     from app.modules.playlists.routes import playlists_bp
     from app.modules.auth.routes import auth_bp
     from app.modules.settings.routes import settings_bp
+    from app.modules.auth_center.routes import auth_center_bp
     app.register_blueprint(ingestion_bp, url_prefix='/ingestion')
     app.register_blueprint(channels_bp, url_prefix='/channels')
     app.register_blueprint(playlists_bp, url_prefix='/playlists')
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(settings_bp, url_prefix='/settings')
+    app.register_blueprint(auth_center_bp, url_prefix='/auth-center')
     
     # Initialize Login Manager
     from flask_login import LoginManager
@@ -70,7 +72,48 @@ def create_app(config_class=Config):
     
     # Create tables automatically for development
     with app.app_context():
+        import os
+        # Import all models here to ensure they are registered with SQLAlchemy
+        from app.modules.auth.models import User
+        from app.modules.channels.models import Channel
+        from app.modules.playlists.models import PlaylistProfile
+        from app.modules.settings.models import SystemSetting
+        
+        db_path = app.config['DB_PATH']
+        db_dir = os.path.dirname(db_path)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+            
         db.create_all()
+        
+        # Seed Admin User
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User(username='admin', role='admin')
+            admin.set_password('admin')
+            db.session.add(admin)
+            db.session.commit()
+            print("Seeded admin/admin account.")
+
+        # Seed System Settings for SSO
+        from app.modules.settings.models import SystemSetting
+        default_settings = [
+            {"key": "CENTRAL_AUTH_API_URL", "value": "http://127.0.0.1:5001", "description": "Lần lượt là URL API của CentralAuth Server."},
+            {"key": "CENTRAL_SSO_WEB_URL", "value": "http://127.0.0.1:5001", "description": "URL trang web đăng nhập của CentralAuth."},
+            {"key": "CENTRAL_AUTH_CLIENT_ID", "value": "iptv-manager", "description": "Client ID đăng ký tại CentralAuth."},
+            {"key": "CENTRAL_AUTH_CLIENT_SECRET", "value": "iptv-secret-key-789", "description": "Client Secret đăng ký tại CentralAuth."},
+            {"key": "USE_CENTRAL_AUTH", "value": "false", "description": "Bật/Tắt đăng nhập tập trung SSO."}
+        ]
+        settings_created = False
+        for ds in default_settings:
+            if not SystemSetting.query.filter_by(key=ds['key']).first():
+                new_setting = SystemSetting(**ds)
+                db.session.add(new_setting)
+                settings_created = True
+        if settings_created:
+            db.session.commit()
+            print("Seeded default SSO settings.")
+
         from app.modules.playlists.services import PlaylistService
         PlaylistService.ensure_system_playlist()
         

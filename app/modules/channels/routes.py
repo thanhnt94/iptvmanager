@@ -14,7 +14,7 @@ import time
 import logging
 import queue
 
-channels_bp = Blueprint('channels', __name__, template_folder='templates')
+channels_bp = Blueprint('channels', __name__)
 logger = logging.getLogger('iptv')
 
 # --- Removed Duplicate validate_proxy_access (Consolidated at L666) ---

@@ -6,7 +6,7 @@ from app.modules.channels.services import ChannelService
 from app.modules.channels.models import Channel
 from app.core.database import db
 
-playlists_bp = Blueprint('playlists', __name__, template_folder='templates')
+playlists_bp = Blueprint('playlists', __name__)
 
 @playlists_bp.route('/')
 @login_required

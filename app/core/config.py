@@ -10,9 +10,9 @@ instance_path = os.path.join(basedir, 'instance')
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-12345')
     
-    # Default SQLite database in the instance folder at the project root
-    db_path = os.path.join(instance_path, 'iptv_manager.db')
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
+    # Centralized SQLite database for Ecosystem
+    DB_PATH = "c:\\Code\\Ecosystem\\Storage\\database\\IPTVManager.db"
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', f'sqlite:///{DB_PATH}')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Celery configuration

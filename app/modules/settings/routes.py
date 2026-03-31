@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from .services import SettingService
 
-settings_bp = Blueprint('settings', __name__, template_folder='templates')
+settings_bp = Blueprint('settings', __name__)
 
 @settings_bp.route('/admin')
 @login_required
@@ -73,6 +73,17 @@ def save_settings():
     if 'CUSTOM_USER_AGENT' in data:
         SettingService.set('CUSTOM_USER_AGENT', data['CUSTOM_USER_AGENT'], description='Custom User-Agent for all proxy requests.')
     
+    # CentralAuth SSO Settings
+    SettingService.set('USE_CENTRAL_AUTH', 'true' if 'USE_CENTRAL_AUTH' in data else 'false', type='bool')
+    if 'CENTRAL_AUTH_API_URL' in data:
+        SettingService.set('CENTRAL_AUTH_API_URL', data['CENTRAL_AUTH_API_URL'])
+    if 'CENTRAL_SSO_WEB_URL' in data:
+        SettingService.set('CENTRAL_SSO_WEB_URL', data['CENTRAL_SSO_WEB_URL'])
+    if 'CENTRAL_AUTH_CLIENT_ID' in data:
+        SettingService.set('CENTRAL_AUTH_CLIENT_ID', data['CENTRAL_AUTH_CLIENT_ID'])
+    if 'CENTRAL_AUTH_CLIENT_SECRET' in data:
+        SettingService.set('CENTRAL_AUTH_CLIENT_SECRET', data['CENTRAL_AUTH_CLIENT_SECRET'])
+
     flash('Settings saved successfully.')
     return redirect(url_for('settings.admin_settings'))
 
