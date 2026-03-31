@@ -142,8 +142,8 @@ def create_app(config_class=Config):
         # Seed System Settings for SSO
         from app.modules.settings.models import SystemSetting
         default_settings = [
-            {"key": "CENTRAL_AUTH_API_URL", "value": "http://127.0.0.1:5001", "description": "Lần lượt là URL API của CentralAuth Server."},
-            {"key": "CENTRAL_SSO_WEB_URL", "value": "http://127.0.0.1:5001", "description": "URL trang web đăng nhập của CentralAuth."},
+            {"key": "CENTRAL_AUTH_API_URL", "value": "http://127.0.0.1:5000", "description": "URL API của CentralAuth Server (Cổng 5000)."},
+            {"key": "CENTRAL_SSO_WEB_URL", "value": "http://127.0.0.1:5000", "description": "URL trang web đăng nhập của CentralAuth (Cổng 5000)."},
             {"key": "CENTRAL_AUTH_CLIENT_ID", "value": "iptv-manager", "description": "Client ID đăng ký tại CentralAuth."},
             {"key": "CENTRAL_AUTH_CLIENT_SECRET", "value": "iptv-secret-key-789", "description": "Client Secret đăng ký tại CentralAuth."},
             {"key": "USE_CENTRAL_AUTH", "value": "false", "description": "Bật/Tắt đăng nhập tập trung SSO."}
