@@ -24,7 +24,6 @@ def login():
     return render_template('auth/login.html')
 
 @auth_bp.route('/emergency-login', methods=['GET', 'POST'])
-@auth_bp.route('/admin', methods=['GET', 'POST'])
 def emergency_login():
     """Emergency Local Login: ALWAYS bypasses SSO redirection."""
     if current_user.is_authenticated:

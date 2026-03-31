@@ -4,9 +4,9 @@ from .services import SettingService
 
 settings_bp = Blueprint('settings', __name__)
 
-@settings_bp.route('/admin')
+@settings_bp.route('/config')
 @login_required
-def admin_settings():
+def config_settings():
     if current_user.role != 'admin':
         flash('Access denied.')
         return redirect(url_for('index'))
@@ -75,17 +75,26 @@ def save_settings():
     
     # CentralAuth SSO Settings
     SettingService.set('USE_CENTRAL_AUTH', 'true' if 'USE_CENTRAL_AUTH' in data else 'false', type='bool')
-    if 'CENTRAL_AUTH_API_URL' in data:
-        SettingService.set('CENTRAL_AUTH_API_URL', data['CENTRAL_AUTH_API_URL'])
-    if 'CENTRAL_SSO_WEB_URL' in data:
-        SettingService.set('CENTRAL_SSO_WEB_URL', data['CENTRAL_SSO_WEB_URL'])
+    
+    # Consolidated SSO URL Support (3-field layout)
+    if 'CENTRAL_AUTH_URL' in data and data['CENTRAL_AUTH_URL']:
+        url = data['CENTRAL_AUTH_URL'].rstrip('/')
+        SettingService.set('CENTRAL_AUTH_API_URL', url)
+        SettingService.set('CENTRAL_SSO_WEB_URL', url)
+    else:
+        # Legacy support for separate fields (if still present)
+        if 'CENTRAL_AUTH_API_URL' in data:
+            SettingService.set('CENTRAL_AUTH_API_URL', data['CENTRAL_AUTH_API_URL'])
+        if 'CENTRAL_SSO_WEB_URL' in data:
+            SettingService.set('CENTRAL_SSO_WEB_URL', data['CENTRAL_SSO_WEB_URL'])
+            
     if 'CENTRAL_AUTH_CLIENT_ID' in data:
         SettingService.set('CENTRAL_AUTH_CLIENT_ID', data['CENTRAL_AUTH_CLIENT_ID'])
     if 'CENTRAL_AUTH_CLIENT_SECRET' in data:
         SettingService.set('CENTRAL_AUTH_CLIENT_SECRET', data['CENTRAL_AUTH_CLIENT_SECRET'])
 
     flash('Settings saved successfully.')
-    return redirect(url_for('settings.admin_settings'))
+    return redirect(url_for('admin_portal'))
 
 @settings_bp.route('/admin/test-sso', methods=['POST'])
 @login_required

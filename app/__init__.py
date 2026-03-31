@@ -32,12 +32,38 @@ def create_app(config_class=Config):
     app.register_blueprint(playlists_bp, url_prefix='/playlists')
     app.register_blueprint(auth_bp, url_prefix='/auth')
     
-    # STRICT ADMIN BYPASS: Standard Local Auth Only
-    @app.route('/admin')
-    def admin_bypass_redirect():
-        from flask import session
-        session.clear() # Force clear for a clean local login
-        return redirect(url_for('auth.emergency_login'))
+    # SECURE ADMIN PORTAL: Unified /admin route for fallback and configuration
+    @app.route('/admin', methods=['GET', 'POST'])
+    def admin_portal():
+        from flask_login import current_user, login_user
+        from app.modules.auth.services import AuthService
+        from app.modules.settings.services import SettingService
+        from app.modules.playlists.models import PlaylistProfile
+        from flask import session, render_template, request, flash, redirect, url_for
+
+        if request.method == 'GET':
+            if current_user.is_authenticated and current_user.role == 'admin':
+                # Already logged in as admin, show settings
+                playlists = PlaylistProfile.query.all()
+                return render_template('settings/admin.html', settings=SettingService.get_all(), playlists=playlists)
+            
+            # Not authenticated or not admin, show local login form
+            # Passing emergency=True to show the local login warning (like PodLearn/MindStack)
+            return render_template('auth/login.html', emergency=True)
+
+        if request.method == 'POST':
+            username = request.form.get('username')
+            password = request.form.get('password')
+            remember = True if request.form.get('remember') else False
+            
+            user = AuthService.get_user_by_username(username)
+            
+            if user and user.check_password(password) and user.role == 'admin':
+                login_user(user, remember=remember)
+                return redirect(url_for('admin_portal'))
+            
+            flash('Invalid local credentials or you are not an administrator.', 'danger')
+            return redirect(url_for('admin_portal'))
         
     app.register_blueprint(settings_bp, url_prefix='/settings')
     app.register_blueprint(auth_center_bp, url_prefix='/auth-center')
@@ -57,7 +83,12 @@ def create_app(config_class=Config):
     # Initialize Scheduler
     init_scheduler(app)
     
-    # Routes
+    # --- ECOSYSTEM HEALTH CHECK ---
+    @app.route('/api/health')
+    def api_health():
+        """Public endpoint for CentralAuth health checks."""
+        return jsonify({"status": "online", "service": "iptv-manager"})
+
     @app.route('/')
     def index():
         return redirect(url_for('channels.index'))

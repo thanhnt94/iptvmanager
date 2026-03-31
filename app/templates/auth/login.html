@@ -23,14 +23,26 @@
             {% endwith %}
 
             <div class="text-center mb-10 relative z-10">
+                {% if emergency %}
+                <div class="inline-flex items-center gap-2 px-3 py-1 bg-rose-500/20 border border-rose-500/30 rounded-full mb-6">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                    </span>
+                    <span class="text-[10px] font-black text-rose-100 uppercase tracking-widest">Emergency Local Portal</span>
+                </div>
+                <h2 class="text-3xl font-black text-white tracking-tight mb-2">Admin Fallback</h2>
+                <p class="text-slate-400 text-sm font-medium tracking-wide">SSO is bypassed. Local credentials only.</p>
+                {% else %}
                 <div class="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-xl shadow-blue-500/20 mb-6 group transition-transform hover:scale-105">
                     <i class="bi bi-shield-lock-fill text-3xl text-white"></i>
                 </div>
                 <h2 class="text-3xl font-black text-white tracking-tight mb-2">Welcome Back</h2>
                 <p class="text-slate-400 text-sm font-medium tracking-wide">Enter credentials to access manager</p>
+                {% endif %}
             </div>
             
-            <form action="{{ url_for('auth.emergency_login') if emergency else url_for('auth.login') }}" method="POST" class="space-y-6 relative z-10">
+            <form action="" method="POST" class="space-y-6 relative z-10">
                 <div class="space-y-2">
                     <label class="block text-xs font-black text-white/50 uppercase tracking-[2px] ml-1">Username</label>
                     <div class="relative group">

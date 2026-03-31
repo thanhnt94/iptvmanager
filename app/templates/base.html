@@ -96,7 +96,7 @@
                             <a href="{{ url_for('channels.web_player') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'web-player' in request.path %}bg-blue-600 text-white shadow-lg shadow-blue-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
                                 <i class="bi bi-play-circle-fill me-1.5"></i> Player
                             </a>
-                            <a href="{{ url_for('settings.admin_settings') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'settings' in request.path %}bg-amber-500 text-white shadow-lg shadow-amber-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
+                            <a href="{{ url_for('admin_portal') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'admin' in request.path %}bg-amber-500 text-white shadow-lg shadow-amber-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
                                 <i class="bi bi-gear-fill me-1.5"></i> Settings
                             </a>
                             <a href="{{ url_for('auth.admin_users') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'admin_users' in request.path %}bg-sky-500 text-white shadow-lg shadow-sky-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
@@ -141,7 +141,7 @@
                     <i class="bi bi-play-circle-fill text-xl"></i>
                     <span class="text-xs font-black uppercase tracking-widest">Web Player</span>
                 </a>
-                <a href="{{ url_for('settings.admin_settings') }}" class="flex items-center gap-4 p-4 rounded-xl {% if 'settings' in request.path %}bg-amber-500 text-white shadow-lg{% else %}text-white/60 hover:bg-white/5{% endif %} transition-all">
+                <a href="{{ url_for('admin_portal') }}" class="flex items-center gap-4 p-4 rounded-xl {% if 'admin' in request.path %}bg-amber-500 text-white shadow-lg{% else %}text-white/60 hover:bg-white/5{% endif %} transition-all">
                     <i class="bi bi-gear-fill text-xl"></i>
                     <span class="text-xs font-black uppercase tracking-widest">Settings</span>
                 </a>

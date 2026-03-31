@@ -118,25 +118,28 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                    <div class="space-y-6">
-                        <div class="space-y-2">
-                            <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">CentralAuth API URL</label>
-                            <input type="text" name="CENTRAL_AUTH_API_URL" class="glass-control bg-slate-900/20 font-mono text-xs" value="{{ (settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_API_URL')|first).value if settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_API_URL')|list else '' }}" placeholder="http://127.0.0.1:5001">
-                        </div>
-                        <div class="space-y-2">
-                            <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">Central SSO Web URL</label>
-                            <input type="text" name="CENTRAL_SSO_WEB_URL" class="glass-control bg-slate-900/20 font-mono text-xs" value="{{ (settings|selectattr('key', 'equalto', 'CENTRAL_SSO_WEB_URL')|first).value if settings|selectattr('key', 'equalto', 'CENTRAL_SSO_WEB_URL')|list else '' }}" placeholder="http://127.0.0.1:5001">
-                        </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
+                    <div class="space-y-2">
+                        <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">CentralAuth Base URL</label>
+                        <input type="text" name="CENTRAL_AUTH_URL" class="glass-control bg-slate-900/20 font-mono text-xs" 
+                            value="{{ (settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_API_URL')|first).value if settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_API_URL')|list else 'http://127.0.0.1:5000' }}" 
+                            placeholder="http://127.0.0.1:5000">
                     </div>
-                    <div class="space-y-6">
-                        <div class="space-y-2">
-                            <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">Client ID</label>
-                            <input type="text" name="CENTRAL_AUTH_CLIENT_ID" class="glass-control bg-slate-900/20 font-mono text-xs" value="{{ (settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_ID')|first).value if settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_ID')|list else '' }}" placeholder="iptv-manager">
-                        </div>
-                        <div class="space-y-2">
-                            <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">Client Secret</label>
-                            <input type="password" name="CENTRAL_AUTH_CLIENT_SECRET" class="glass-control bg-slate-900/20 font-mono text-xs" value="{{ (settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_SECRET')|first).value if settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_SECRET')|list else '' }}" placeholder="••••••••••••••••">
+                    <div class="space-y-2">
+                        <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">Client ID</label>
+                        <input type="text" name="CENTRAL_AUTH_CLIENT_ID" class="glass-control bg-slate-900/20 font-mono text-xs" 
+                            value="{{ (settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_ID')|first).value if settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_ID')|list else '' }}" 
+                            placeholder="iptv-manager">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-readable-small font-black text-white/30 uppercase tracking-widest block ml-1">Client Secret</label>
+                        <div class="relative">
+                            <input type="password" id="sso_client_secret" name="CENTRAL_AUTH_CLIENT_SECRET" class="glass-control bg-slate-900/20 font-mono text-xs pr-12" 
+                                value="{{ (settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_SECRET')|first).value if settings|selectattr('key', 'equalto', 'CENTRAL_AUTH_CLIENT_SECRET')|list else '' }}" 
+                                placeholder="••••••••••••••••">
+                            <button type="button" onclick="togglePasswordVisibility('sso_client_secret', this)" class="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors">
+                                <i class="bi bi-eye"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -468,7 +471,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const tsBuf = document.getElementById('TS_BUFFER_SIZE');
         const hlsTtl = document.getElementById('HLS_CACHE_TTL');
         const hlsMax = document.getElementById('HLS_MAX_SEGMENTS');
-        const uaInput = document.querySelector('input[name="CUSTOM_USER_AGENT"]');
+        const uaInput = document.querySelector('textarea[name="CUSTOM_USER_AGENT"]');
 
         if (type === 'low') {
             tsBuf.value = 64; // 1MB
@@ -488,6 +491,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         updateRamCalc();
         alert('Preset "' + type.toUpperCase() + '" applied. Please click SAVE SETTINGS to confirm.');
+    };
+
+    window.togglePasswordVisibility = function(inputId, btn) {
+        const input = document.getElementById(inputId);
+        const icon = btn.querySelector('i');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.replace('bi-eye', 'bi-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.replace('bi-eye-slash', 'bi-eye');
+        }
     };
 
     function updateRamCalc() {
@@ -619,7 +634,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const testSsoBtn = document.getElementById('testSsoBtn');
     if (testSsoBtn) {
         testSsoBtn.addEventListener('click', async function() {
-            const apiUrl = document.querySelector('input[name="CENTRAL_AUTH_API_URL"]').value;
+            const apiUrl = document.querySelector('input[name="CENTRAL_AUTH_URL"]').value;
             const clientId = document.querySelector('input[name="CENTRAL_AUTH_CLIENT_ID"]').value;
             const clientSecret = document.querySelector('input[name="CENTRAL_AUTH_CLIENT_SECRET"]').value;
             
