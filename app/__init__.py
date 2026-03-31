@@ -15,6 +15,11 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     
+    # Initialize Server-side Session
+    from flask_session import Session
+    app.config['SESSION_SQLALCHEMY'] = db
+    Session(app)
+    
     # Register blueprints
     from app.modules.ingestion.routes import ingestion_bp
     from app.modules.channels.routes import channels_bp
@@ -26,6 +31,14 @@ def create_app(config_class=Config):
     app.register_blueprint(channels_bp, url_prefix='/channels')
     app.register_blueprint(playlists_bp, url_prefix='/playlists')
     app.register_blueprint(auth_bp, url_prefix='/auth')
+    
+    # STRICT ADMIN BYPASS: Standard Local Auth Only
+    @app.route('/admin')
+    def admin_bypass_redirect():
+        from flask import session
+        session.clear() # Force clear for a clean local login
+        return redirect(url_for('auth.emergency_login'))
+        
     app.register_blueprint(settings_bp, url_prefix='/settings')
     app.register_blueprint(auth_center_bp, url_prefix='/auth-center')
     

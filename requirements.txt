@@ -17,3 +17,5 @@ flask-login
 psutil
 gunicorn
 yt-dlp
+Flask-Session
+PyJWT

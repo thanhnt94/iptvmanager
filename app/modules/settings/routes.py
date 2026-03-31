@@ -87,6 +87,30 @@ def save_settings():
     flash('Settings saved successfully.')
     return redirect(url_for('settings.admin_settings'))
 
+@settings_bp.route('/admin/test-sso', methods=['POST'])
+@login_required
+def test_sso_connection():
+    """Test connection to CentralAuth with provided parameters."""
+    if current_user.role != 'admin':
+        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+        
+    data = request.get_json()
+    api_url = data.get('api_url')
+    client_id = data.get('client_id')
+    client_secret = data.get('client_secret')
+    
+    if not api_url:
+        return jsonify({"status": "error", "message": "API URL is required"}), 400
+        
+    from app.core.sso.central_auth_client import CentralAuthClient
+    # Use provided values for testing, or fall back to saved ones
+    test_client = CentralAuthClient(api_url=api_url, client_id=client_id, client_secret=client_secret)
+    
+    if test_client.check_health():
+        return jsonify({"status": "success", "message": "Successfully connected to CentralAuth!"})
+    else:
+        return jsonify({"status": "error", "message": "Could not reach CentralAuth. Check URL and Network."})
+
 @settings_bp.route('/api/toggle', methods=['POST'])
 @login_required
 def toggle_setting_api():

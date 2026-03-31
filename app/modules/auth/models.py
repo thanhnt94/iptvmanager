@@ -45,3 +45,14 @@ class TrustedIP(db.Model):
     
     def __repr__(self):
         return f'<TrustedIP {self.ip_address}>'
+
+class UserSession(db.Model):
+    """
+    Explicitly tracks active server-side sessions for a user.
+    Used for implementing Back-channel Logout by deleting session records.
+    """
+    __tablename__ = 'user_sessions'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    session_id = db.Column(db.String(255), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.now())

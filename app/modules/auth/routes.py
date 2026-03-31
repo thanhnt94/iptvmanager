@@ -9,7 +9,8 @@ auth_bp = Blueprint('auth', __name__)
 def login():
     from app.modules.settings.models import SystemSetting
     use_sso = SystemSetting.query.filter_by(key='USE_CENTRAL_AUTH').first()
-    if use_sso and use_sso.value.lower() == 'true':
+    if request.method == 'GET' and use_sso and use_sso.value.lower() == 'true':
+        # ONLY redirect during GET (page load). Allow POST to proceed for local login fallback/emergency.
         return redirect(url_for('auth_center.login'))
 
     if current_user.is_authenticated:
@@ -18,22 +19,38 @@ def login():
         return redirect(url_for('auth.dashboard'))
         
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        remember = True if request.form.get('remember') else False
-        
-        user = AuthService.get_user_by_username(username)
-        
-        if not user or not user.check_password(password):
-            flash('Please check your login details and try again.', 'danger')
-            return redirect(url_for('auth.login'))
-            
-        login_user(user, remember=remember)
-        if user.role == 'admin':
-            return redirect(url_for('channels.index'))
-        return redirect(url_for('auth.dashboard'))
+        return process_local_login()
         
     return render_template('auth/login.html')
+
+@auth_bp.route('/emergency-login', methods=['GET', 'POST'])
+@auth_bp.route('/admin', methods=['GET', 'POST'])
+def emergency_login():
+    """Emergency Local Login: ALWAYS bypasses SSO redirection."""
+    if current_user.is_authenticated:
+        return redirect(url_for('channels.index'))
+        
+    if request.method == 'POST':
+        return process_local_login()
+        
+    return render_template('auth/login.html', emergency=True)
+
+def process_local_login():
+    """Helper to process standard username/password login."""
+    username = request.form.get('username')
+    password = request.form.get('password')
+    remember = True if request.form.get('remember') else False
+    
+    user = AuthService.get_user_by_username(username)
+    
+    if not user or not user.check_password(password):
+        flash('Please check your login details and try again.', 'danger')
+        return redirect(request.referrer or url_for('auth.login'))
+        
+    login_user(user, remember=remember)
+    if user.role == 'admin':
+        return redirect(url_for('channels.index'))
+    return redirect(url_for('auth.dashboard'))
 
 @auth_bp.route('/logout')
 @login_required
