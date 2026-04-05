@@ -83,11 +83,68 @@ def create_app(config_class=Config):
     # Initialize Scheduler
     init_scheduler(app)
     
-    # --- ECOSYSTEM HEALTH CHECK ---
     @app.route('/api/health')
     def api_health():
         """Public endpoint for CentralAuth health checks."""
         return jsonify({"status": "online", "service": "iptv-manager"})
+
+    # --- ECOSYSTEM SYNC API ---
+    @app.route('/api/sso-internal/user-list', methods=['POST'])
+    def internal_user_list():
+        """
+        Standard Internal API for CentralAuth User Synchronization.
+        Protected by Client Secret verification from SystemSettings.
+        """
+        from app.modules.settings.models import SystemSetting
+        from app.modules.auth.models import User
+        
+        secret_header = request.headers.get('X-Client-Secret')
+        setting = SystemSetting.query.filter_by(key='CENTRAL_AUTH_CLIENT_SECRET').first()
+        configured_secret = setting.value if setting else None
+
+        if not secret_header or secret_header != configured_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        users = User.query.all()
+        user_list = []
+        for user in users:
+            user_list.append({
+                "username": user.username,
+                "email": user.email,
+                "full_name": user.username, # IPTV doesn't have a dedicated full_name field in model
+                "central_auth_id": user.central_auth_id
+            })
+            
+        return jsonify({"users": user_list}), 200
+
+    @app.route('/api/sso-internal/link-user', methods=['POST'])
+    def internal_link_user():
+        """Update a user's central_auth_id for ecosystem linking."""
+        from app.modules.settings.models import SystemSetting
+        from app.modules.auth.models import User
+        
+        secret_header = request.headers.get('X-Client-Secret')
+        setting = SystemSetting.query.filter_by(key='CENTRAL_AUTH_CLIENT_SECRET').first()
+        configured_secret = setting.value if setting else None
+
+        if not secret_header or secret_header != configured_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        data = request.get_json()
+        email = data.get('email')
+        ca_id = data.get('central_auth_id')
+        username = data.get('username')
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"error": f"User {email} not found"}), 404
+        
+        user.central_auth_id = str(ca_id)
+        if username:
+            user.username = username
+            
+        db.session.commit()
+        return jsonify({"status": "ok", "message": f"Linked {email} and synced profile to CentralAuth."}), 200
 
     @app.route('/')
     def index():
