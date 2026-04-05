@@ -29,7 +29,7 @@ class DataExportService:
 
 class DataImportService:
     @staticmethod
-    def import_from_excel(file_stream):
+    def import_from_excel(file_stream, visibility='private'):
         """Imports channels from an Excel file with deduplication."""
         df = pd.read_excel(file_stream)
         channels_data = []
@@ -43,4 +43,4 @@ class DataImportService:
             })
         
         from app.modules.ingestion.services import IngestionService
-        return IngestionService.import_channels(channels_data)
+        return IngestionService.import_channels(channels_data, visibility=visibility)

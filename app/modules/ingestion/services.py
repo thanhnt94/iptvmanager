@@ -53,10 +53,14 @@ class IngestionService:
             return []
 
     @staticmethod
-    def import_channels(channel_list):
+    def import_channels(channel_list, visibility='private'):
         """Imports channels with deduplication logic."""
+        from flask_login import current_user
         imported_count = 0
         skipped_count = 0
+        
+        is_public = (visibility == 'public')
+        public_status = 'approved' if is_public else 'pending'
         
         for data in channel_list:
             if not data.get('stream_url'):
@@ -84,7 +88,10 @@ class IngestionService:
                 stream_url=data['stream_url'],
                 stream_format=stream_format,
                 epg_id=data['epg_id'],
-                status='unknown'
+                status='unknown',
+                owner_id=current_user.id if current_user.is_authenticated else None,
+                is_public=is_public,
+                public_status=public_status
             )
             db.session.add(new_channel)
             imported_count += 1

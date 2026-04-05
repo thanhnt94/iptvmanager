@@ -234,8 +234,26 @@ class ChannelService:
     @staticmethod
     def get_all_channels(page=1, per_page=50, search=None, group_filter=None, stream_type_filter=None, 
                          status_filter=None, quality_filter=None, res_filter=None, audio_filter=None, 
-                         sort=None, is_original_filter=None, format_filter=None):
+                         sort=None, is_original_filter=None, format_filter=None, user=None):
+        from app.modules.channels.models import ChannelShare
+        
         query = Channel.query
+        
+        # Apply base permissions if not admin
+        if user and user.role != 'admin':
+            # Subquery to find channels shared with this user and accepted
+            shared_channels_subquery = db.session.query(ChannelShare.channel_id).filter(
+                ChannelShare.to_user_id == user.id,
+                ChannelShare.status == 'accepted'
+            )
+            
+            # User can see: channels they own OR public channels OR channels shared with them
+            query = query.filter(db.or_(
+                Channel.owner_id == user.id,
+                Channel.is_public == True,
+                Channel.id.in_(shared_channels_subquery)
+            ))
+            
         if search:
             if search.isdigit():
                 query = query.filter(db.or_(Channel.name.ilike(f'%{search}%'), Channel.id == int(search)))
@@ -298,7 +316,7 @@ class ChannelService:
         return sorted([a[0] for a in aud if a[0]])
 
     @staticmethod
-    def get_distinct_formats():
+    def get_distinct_formats(user=None):
         """Returns a list of all unique stream formats (hls, ts, etc.) in the database."""
         formats = db.session.query(Channel.stream_format).distinct().all()
         return sorted([f[0] for f in formats if f[0]])
@@ -332,7 +350,8 @@ class ChannelService:
             stream_type='unknown',
             stream_format=stream_format,
             proxy_type=data.get('proxy_type', 'none'),
-            is_original=data.get('is_original') == 'true' or data.get('is_original') == '1' or data.get('is_original') == 'on'
+            is_original=data.get('is_original') == 'true' or data.get('is_original') == '1' or data.get('is_original') == 'on',
+            owner_id=data.get('owner_id')
         )
         db.session.add(new_channel)
         db.session.commit()
@@ -358,9 +377,34 @@ class ChannelService:
         else:
             # If not in data (checkbox unchecked), set to False
             channel.is_original = False
+            
+        # Admin public approval
+        from flask_login import current_user
+        if 'is_public' in data and current_user and current_user.role == 'admin':
+            channel.is_public = data.get('is_public') == 'true' or data.get('is_public') == '1'
+            if channel.is_public:
+                channel.public_status = 'approved'
+            else:
+                channel.public_status = 'none'
         
         db.session.commit()
         return channel
+
+    @staticmethod
+    def get_user_channel_access(channel_id, user):
+        from app.modules.channels.models import ChannelShare
+        channel = Channel.query.get(channel_id)
+        if practically_admin := user.role == 'admin': return 'edit', channel
+        if not channel: return None, None
+        
+        if channel.owner_id == user.id: return 'edit', channel
+        
+        share = ChannelShare.query.filter_by(channel_id=channel_id, to_user_id=user.id, status='accepted').first()
+        if share: return share.access_level, channel
+        
+        if channel.is_public: return 'read', channel
+        
+        return None, channel
 
     @staticmethod
     def play_with_vlc(url):

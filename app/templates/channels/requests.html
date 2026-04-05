@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-[1600px] mx-auto px-4 md:px-10 pb-20 pt-8">
+    <div class="flex flex-col mb-8">
+        <h2 class="text-3xl md:text-4xl font-black text-white tracking-tight mb-2">Lời Mời & Yêu Cầu</h2>
+        <p class="text-slate-400 font-medium text-sm">Quản lý các lời mời chia sẻ kênh và phê duyệt kênh Public.</p>
+    </div>
+
+    <!-- Lời mời chia sẻ kênh (Incoming Shares) -->
+    <div class="glass-panel p-8 mb-10">
+        <h3 class="text-xl font-black text-fuchsia-400 mb-6 flex items-center gap-2"><i class="bi bi-box-arrow-in-down"></i> Lời mời nhận Share</h3>
+        {% if incoming_shares %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for share in incoming_shares %}
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-5 flex flex-col justify-between" id="share-card-{{ share.id }}">
+                <div>
+                    <h4 class="text-white font-bold text-lg mb-1">{{ share.channel.name }}</h4>
+                    <p class="text-white/50 text-xs mb-3">Người gửi: <span class="text-fuchsia-400 font-black">{{ share.from_user.username }}</span></p>
+                    <p class="text-white/50 text-xs mb-4">Quyền: <span class="uppercase font-black text-white">{{ share.access_level }}</span></p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="respondShare({{ share.id }}, 'accept')" class="flex-1 py-2 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-black text-sm transition-colors text-center border border-emerald-500/30">Chấp nhận</button>
+                    <button onclick="respondShare({{ share.id }}, 'reject')" class="flex-1 py-2 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-black text-sm transition-colors text-center border border-rose-500/30">Từ chối</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-10">
+            <i class="bi bi-inbox text-4xl text-white/20 mb-3 block"></i>
+            <p class="text-white/50 font-medium">Bạn không có lời mời chia sẻ kênh nào.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Admin: Phê duyệt yêu cầu Public -->
+    {% if pending_publics is defined and current_user.role == 'admin' %}
+    <div class="glass-panel p-8 mb-10">
+        <h3 class="text-xl font-black text-sky-400 mb-6 flex items-center gap-2"><i class="bi bi-globe"></i> Xin Duyệt Public (Admin Only)</h3>
+        {% if pending_publics %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for channel in pending_publics %}
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-5 flex flex-col justify-between" id="public-card-{{ channel.id }}">
+                <div>
+                    <h4 class="text-white font-bold text-lg mb-1">{{ channel.name }}</h4>
+                    <p class="text-white/50 text-xs mb-4">Chủ sở hữu: <span class="text-sky-400 font-black">User ID {{ channel.owner_id }}</span></p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="respondPublic({{ channel.id }}, 'approve')" class="flex-1 py-2 rounded-xl bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 font-black text-sm transition-colors text-center border border-sky-500/30">Đồng ý</button>
+                    <button onclick="respondPublic({{ channel.id }}, 'reject')" class="flex-1 py-2 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-black text-sm transition-colors text-center border border-rose-500/30">Từ chối</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-10">
+            <i class="bi bi-check-circle text-4xl text-white/20 mb-3 block"></i>
+            <p class="text-white/50 font-medium">Không có yêu cầu Public nào đang chờ duyệt.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function respondShare(id, action) {
+    fetch(`/channels/api/shares/${id}/respond`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: action})
+    }).then(r => r.json()).then(data => {
+        if(data.success) {
+            document.getElementById(`share-card-${id}`).style.display = 'none';
+        } else {
+            alert(data.message);
+        }
+    });
+}
+
+function respondPublic(id, action) {
+    fetch(`/channels/api/approve_public/${id}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: action})
+    }).then(r => r.json()).then(data => {
+        if(data.success) {
+            document.getElementById(`public-card-${id}`).style.display = 'none';
+        } else {
+            alert(data.message);
+        }
+    });
+}
+</script>
+{% endblock %}

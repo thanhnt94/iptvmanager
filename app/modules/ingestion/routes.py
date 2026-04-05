@@ -13,12 +13,14 @@ def import_channels():
             file = request.files['m3u8_file']
             content = file.read().decode('utf-8', errors='ignore')
             channels = IngestionService.parse_m3u8(content)
-            result = IngestionService.import_channels(channels)
+            visibility = request.form.get('visibility', 'private')
+            result = IngestionService.import_channels(channels, visibility=visibility)
         
         elif 'm3u8_url' in request.form and request.form['m3u8_url']:
             url = request.form['m3u8_url']
             channels = IngestionService.parse_m3u8(url, is_url=True)
-            result = IngestionService.import_channels(channels)
+            visibility = request.form.get('visibility', 'private')
+            result = IngestionService.import_channels(channels, visibility=visibility)
             
         if result:
             flash(f"Successfully imported {result['imported']} channels (skipped {result['skipped']} duplicates).")
@@ -40,7 +42,8 @@ def export_excel():
 def import_excel():
     if 'excel_file' in request.files and request.files['excel_file'].filename:
         file = request.files['excel_file']
-        result = DataImportService.import_from_excel(file)
+        visibility = request.form.get('visibility', 'private')
+        result = DataImportService.import_from_excel(file, visibility=visibility)
         flash(f"Excel Import Success: {result['imported']} added, {result['skipped']} skipped.")
         return redirect(url_for('channels.index'))
     

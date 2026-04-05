@@ -24,6 +24,14 @@ class Channel(db.Model):
     last_checked_at = db.Column(db.DateTime)
     is_original = db.Column(db.Boolean, default=False)
     
+    # Permission fields
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    is_public = db.Column(db.Boolean, default=False)
+    public_status = db.Column(db.String(20), default='none') # none, pending, approved, rejected
+    
+    # Optional relationship
+    owner = db.relationship('User', primaryjoin='Channel.owner_id == User.id', foreign_keys=[owner_id])
+    
     # Stats fields
     play_count = db.Column(db.Integer, default=0)
     total_watch_seconds = db.Column(db.Integer, default=0)
@@ -59,3 +67,18 @@ class EPGData(db.Model):
     
     def __repr__(self):
         return f'<EPGData {self.title} @ {self.start}>'
+
+class ChannelShare(db.Model):
+    __tablename__ = 'channel_shares'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    channel_id = db.Column(db.Integer, db.ForeignKey('channels.id', ondelete='CASCADE'), nullable=False)
+    from_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    to_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending') # pending, accepted, rejected
+    access_level = db.Column(db.String(20), default='read') # read, edit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    channel = db.relationship('Channel')
+    from_user = db.relationship('User', foreign_keys=[from_user_id])
+    to_user = db.relationship('User', foreign_keys=[to_user_id])

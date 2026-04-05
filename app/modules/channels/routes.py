@@ -46,7 +46,8 @@ def index():
         audio_filter=audio,
         sort=sort,
         is_original_filter=is_original,
-        format_filter=stream_format
+        format_filter=stream_format,
+        user=current_user
     )
     
     # Calculate stats
@@ -96,7 +97,9 @@ def add_channel():
     
     if request.method == 'POST':
         # 1. Create the channel
-        new_ch = ChannelService.create_channel(request.form)
+        form_data = request.form.to_dict()
+        form_data['owner_id'] = current_user.id
+        new_ch = ChannelService.create_channel(form_data)
         if new_ch:
             # 2. Sync playlist memberships with group IDs
             selected_playlists = request.form.getlist('playlists')
@@ -134,10 +137,15 @@ def edit_channel(channel_id):
     from app.modules.playlists.models import PlaylistProfile, PlaylistEntry
     from app.modules.playlists.services import PlaylistService
     
-    channel = Channel.query.get_or_404(channel_id)
+    access_level, channel = ChannelService.get_user_channel_access(channel_id, current_user)
+    if not channel: return "Not Found", 404
+    if access_level != 'edit':
+        flash('Bạn không có quyền chỉnh sửa kênh này.', 'danger')
+        return redirect(url_for('channels.index'))
     
     if request.method == 'POST':
-        ChannelService.update_channel(channel_id, request.form)
+        form_data = request.form.to_dict()
+        ChannelService.update_channel(channel_id, form_data)
         
         # Sync playlist memberships with group IDs
         selected_playlists = request.form.getlist('playlists')
@@ -174,6 +182,10 @@ def edit_channel(channel_id):
 @login_required
 def delete_channel(channel_id):
     channel = Channel.query.get_or_404(channel_id)
+    if current_user.role != 'admin' and channel.owner_id != current_user.id:
+        flash('Bạn không có quyền xoá kênh này.', 'danger')
+        return redirect(url_for('channels.index'))
+        
     db.session.delete(channel)
     db.session.commit()
     flash('Channel deleted successfully.', 'success')
@@ -1237,3 +1249,108 @@ def proxy_hls_segment():
     except Exception as e:
         logger.error(f"HLS Proxy Error for {url}: {e}")
         return redirect(url)
+
+# --- PERMISSION SYSTEM APIs ---
+
+@channels_bp.route('/api/share/<int:channel_id>', methods=['POST'])
+@login_required
+def share_channel(channel_id):
+    from app.modules.auth.models import User
+    from app.modules.channels.models import ChannelShare
+    
+    channel = Channel.query.get_or_404(channel_id)
+    if current_user.role != 'admin' and channel.owner_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Chỉ chủ sở hữu kênh mới được thao tác chia sẻ.'}), 403
+        
+    data = request.json or {}
+    to_username = data.get('username')
+    access_level = data.get('access_level', 'read')
+    
+    target_user = User.query.filter_by(username=to_username).first()
+    if not target_user:
+        return jsonify({'success': False, 'message': 'User không tồn tại.'}), 404
+        
+    if target_user.id == current_user.id:
+        return jsonify({'success': False, 'message': 'Bạn không thể tự chia sẻ cho chính mình.'}), 400
+
+    existing_share = ChannelShare.query.filter_by(channel_id=channel_id, to_user_id=target_user.id).first()
+    if existing_share:
+        existing_share.access_level = access_level
+        existing_share.status = 'pending'
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã gửi lại yêu cầu chia sẻ.'})
+        
+    new_share = ChannelShare(
+        channel_id=channel_id,
+        from_user_id=current_user.id,
+        to_user_id=target_user.id,
+        access_level=access_level
+    )
+    db.session.add(new_share)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Đã gửi yêu cầu chia sẻ thành công!'})
+
+@channels_bp.route('/shares', methods=['GET'])
+@login_required
+def view_requests():
+    """Page to view incoming share requests"""
+    from app.modules.channels.models import ChannelShare
+    
+    incoming_shares = ChannelShare.query.filter_by(to_user_id=current_user.id, status='pending').all()
+    
+    pending_publics = []
+    if current_user.role == 'admin':
+        pending_publics = Channel.query.filter_by(public_status='pending').all()
+        
+    return render_template('channels/requests.html', incoming_shares=incoming_shares, pending_publics=pending_publics)
+
+@channels_bp.route('/api/shares/<int:share_id>/respond', methods=['POST'])
+@login_required
+def respond_share(share_id):
+    from app.modules.channels.models import ChannelShare
+    share = ChannelShare.query.get_or_404(share_id)
+    
+    if share.to_user_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Không có quyền thao tác'}), 403
+        
+    action = request.json.get('action') # 'accept' or 'reject'
+    if action == 'accept':
+        share.status = 'accepted'
+    elif action == 'reject':
+        share.status = 'rejected'
+    else:
+        return jsonify({'success': False, 'message': 'Invalid action'}), 400
+        
+    db.session.commit()
+    return jsonify({'success': True})
+
+@channels_bp.route('/api/request_public/<int:channel_id>', methods=['POST'])
+@login_required
+def request_public(channel_id):
+    channel = Channel.query.get_or_404(channel_id)
+    if channel.owner_id != current_user.id and current_user.role != 'admin':
+        return jsonify({'success': False, 'message': 'Chỉ chủ sở hữu mới có quyền xin duyệt public.'}), 403
+        
+    channel.public_status = 'pending'
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Đã gửi yêu cầu thao tác Public thành công!'})
+
+@channels_bp.route('/api/approve_public/<int:channel_id>', methods=['POST'])
+@login_required
+def approve_public(channel_id):
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+        
+    action = request.json.get('action') # 'approve' or 'reject'
+    channel = Channel.query.get_or_404(channel_id)
+    
+    if action == 'approve':
+        channel.is_public = True
+        channel.public_status = 'approved'
+    elif action == 'reject':
+        channel.is_public = False
+        channel.public_status = 'rejected'
+        
+    db.session.commit()
+    return jsonify({'success': True})

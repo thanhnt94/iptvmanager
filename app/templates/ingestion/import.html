@@ -1,58 +1,97 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mt-5">
-    <h2>Import IPTV Channels</h2>
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">Upload M3U8 File</div>
-                <div class="card-body">
-                    <form action="{{ url_for('ingestion.import_channels') }}" method="post" enctype="multipart/form-data">
-                        <div class="mb-3">
-                            <input type="file" name="m3u8_file" class="form-control" accept=".m3u, .m3u8">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Import File</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">Import from URL</div>
-                <div class="card-body">
-                    <form action="{{ url_for('ingestion.import_channels') }}" method="post">
-                        <div class="mb-3">
-                            <input type="text" name="m3u8_url" class="form-control" placeholder="http://example.com/playlist.m3u8">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Import URL</button>
-                    </form>
-                </div>
-            </div>
+<div class="max-w-[1440px] mx-auto px-4 md:px-8 pb-20 pt-6 animate-in fade-in duration-300">
+    <!-- Header -->
+    <div class="flex items-end justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-black tracking-tight text-white flex items-center gap-3">
+                <i class="bi bi-cloud-arrow-up-fill text-fuchsia-500"></i> Import Channels
+            </h2>
+            <p class="text-slate-400 font-medium text-sm mt-1">Add new channels from M3U/M3U8 URLs, files, or Excel sheets.</p>
         </div>
     </div>
-    
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">Import from Excel</div>
-                <div class="card-body">
-                    <form action="{{ url_for('ingestion.import_excel') }}" method="post" enctype="multipart/form-data">
-                        <div class="mb-3">
-                            <input type="file" name="excel_file" class="form-control" accept=".xlsx, .xls">
-                        </div>
-                        <button type="submit" class="btn btn-success">Import Excel</button>
-                    </form>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Upload M3U8 File -->
+        <div class="glass-panel p-6 shadow-2xl relative overflow-hidden group">
+            <h3 class="text-lg font-black uppercase tracking-widest text-white/90 mb-4 flex items-center gap-2">
+                <i class="bi bi-file-earmark-music drop-shadow"></i> Upload M3U8 File
+            </h3>
+            <form action="{{ url_for('ingestion.import_channels') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Select File (.m3u, .m3u8)</label>
+                    <input type="file" name="m3u8_file" class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-fuchsia-500/20 file:text-fuchsia-300 hover:file:bg-fuchsia-500/30 transition-all focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500" accept=".m3u, .m3u8">
                 </div>
-            </div>
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Visibility</label>
+                    <select name="visibility" class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-fuchsia-500 transition-all">
+                        <option value="private">Private (Only me)</option>
+                        <option value="public">Public (Everyone)</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full mt-2 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-fuchsia-600 text-white font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-fuchsia-500/20 flex items-center justify-center gap-2">
+                    <i class="bi bi-upload"></i> Import File
+                </button>
+            </form>
         </div>
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">Export Database</div>
-                <div class="card-body">
-                    <a href="{{ url_for('ingestion.export_excel') }}" class="btn btn-info">Export to Excel</a>
+
+        <!-- Import from URL -->
+        <div class="glass-panel p-6 shadow-2xl relative overflow-hidden group">
+            <h3 class="text-lg font-black uppercase tracking-widest text-white/90 mb-4 flex items-center gap-2">
+                <i class="bi bi-link-45deg drop-shadow"></i> Import from URL
+            </h3>
+            <form action="{{ url_for('ingestion.import_channels') }}" method="post" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Playlist URL</label>
+                    <input type="url" name="m3u8_url" class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="http://example.com/playlist.m3u8">
                 </div>
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Visibility</label>
+                    <select name="visibility" class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-all">
+                        <option value="private">Private (Only me)</option>
+                        <option value="public">Public (Everyone)</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full mt-2 py-3.5 rounded-xl bg-gradient-to-r from-teal-500 to-blue-600 text-white font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-blue-500/20 flex items-center justify-center gap-2">
+                    <i class="bi bi-cloud-download"></i> Fetch & Import
+                </button>
+            </form>
+        </div>
+
+        <!-- Import from Excel -->
+        <div class="glass-panel p-6 shadow-2xl relative overflow-hidden group">
+            <h3 class="text-lg font-black uppercase tracking-widest text-white/90 mb-4 flex items-center gap-2">
+                <i class="bi bi-file-earmark-excel drop-shadow"></i> Import from Excel
+            </h3>
+            <form action="{{ url_for('ingestion.import_excel') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Select Excel File</label>
+                    <input type="file" name="excel_file" class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-emerald-500/20 file:text-emerald-300 hover:file:bg-emerald-500/30 transition-all focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" accept=".xlsx, .xls">
+                </div>
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Visibility</label>
+                    <select name="visibility" class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-all">
+                        <option value="private">Private (Only me)</option>
+                        <option value="public">Public (Everyone)</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full mt-2 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2">
+                    <i class="bi bi-table"></i> Import Excel
+                </button>
+            </form>
+        </div>
+
+        <!-- Export Database -->
+        <div class="glass-panel p-6 shadow-2xl flex flex-col justify-center items-center text-center relative overflow-hidden group">
+            <div class="bg-indigo-500/20 p-5 rounded-full mb-6 relative">
+                <i class="bi bi-database-down text-4xl text-indigo-400"></i>
             </div>
+            <h3 class="text-xl font-black text-white mb-2">Export Database</h3>
+            <p class="text-slate-400 text-sm mb-6 max-w-xs">Download all available channels as an Excel spreadsheet for manual editing.</p>
+            <a href="{{ url_for('ingestion.export_excel') }}" class="px-8 py-3.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white font-black text-sm uppercase tracking-widest transition-all shadow-xl w-full flex justify-center items-center gap-2">
+                <i class="bi bi-download"></i> Get Excel File
+            </a>
         </div>
     </div>
 </div>

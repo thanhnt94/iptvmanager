@@ -99,6 +99,9 @@
                             <a href="{{ url_for('admin_portal') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'admin' in request.path %}bg-amber-500 text-white shadow-lg shadow-amber-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
                                 <i class="bi bi-gear-fill me-1.5"></i> Settings
                             </a>
+                            <a href="{{ url_for('channels.view_requests') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'requests' in request.path %}bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
+                                <i class="bi bi-envelope-fill me-1.5"></i> Requests
+                            </a>
                             <a href="{{ url_for('auth.admin_users') }}" class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all {% if 'admin_users' in request.path %}bg-sky-500 text-white shadow-lg shadow-sky-500/20{% else %}text-slate-400 hover:text-white hover:bg-white/10{% endif %}">
                                 <i class="bi bi-people-fill me-1.5"></i> Users
                             </a>
@@ -144,6 +147,10 @@
                 <a href="{{ url_for('admin_portal') }}" class="flex items-center gap-4 p-4 rounded-xl {% if 'admin' in request.path %}bg-amber-500 text-white shadow-lg{% else %}text-white/60 hover:bg-white/5{% endif %} transition-all">
                     <i class="bi bi-gear-fill text-xl"></i>
                     <span class="text-xs font-black uppercase tracking-widest">Settings</span>
+                </a>
+                <a href="{{ url_for('channels.view_requests') }}" class="flex items-center gap-4 p-4 rounded-xl {% if 'requests' in request.path %}bg-fuchsia-500 text-white shadow-lg{% else %}text-white/60 hover:bg-white/5{% endif %} transition-all">
+                    <i class="bi bi-envelope-fill text-xl"></i>
+                    <span class="text-xs font-black uppercase tracking-widest">Requests</span>
                 </a>
                         <a href="{{ url_for('auth.admin_users') }}" class="flex items-center gap-3 p-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white">
                             <i class="bi bi-people-fill text-xl"></i>
