@@ -146,6 +146,30 @@ def create_app(config_class=Config):
         db.session.commit()
         return jsonify({"status": "ok", "message": f"Linked {email} and synced profile to CentralAuth."}), 200
 
+    @app.route('/api/sso-internal/delete-user', methods=['POST'])
+    def internal_delete_user():
+        """Delete a user from this app's database."""
+        from app.modules.settings.models import SystemSetting
+        from app.modules.auth.models import User
+        
+        secret_header = request.headers.get('X-Client-Secret')
+        setting = SystemSetting.query.filter_by(key='CENTRAL_AUTH_CLIENT_SECRET').first()
+        configured_secret = setting.value if setting else None
+
+        if not secret_header or secret_header != configured_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        data = request.get_json()
+        email = data.get('email')
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"error": f"User {email} not found"}), 404
+        
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({"status": "ok", "message": f"Deleted {email}"}), 200
+
     @app.route('/')
     def index():
         return redirect(url_for('channels.index'))
