@@ -1,4 +1,5 @@
 from flask import Flask, render_template, redirect, url_for, request, jsonify
+import os
 from app.core.config import Config
 from app.core.database import db, migrate
 from app.modules.health.tasks import init_scheduler
@@ -6,6 +7,13 @@ from app.modules.health.tasks import init_scheduler
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    
+    # Ensure database directory exists before any extensions initialize
+    db_path = app.config.get('DB_PATH')
+    if db_path:
+        db_dir = os.path.dirname(db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
     
     # Initialize Logging
     from app.core.logging_config import setup_logging
@@ -197,18 +205,12 @@ def create_app(config_class=Config):
     
     # Create tables automatically for development
     with app.app_context():
-        import os
         # Import all models here to ensure they are registered with SQLAlchemy
         from app.modules.auth.models import User
         from app.modules.channels.models import Channel
         from app.modules.playlists.models import PlaylistProfile
         from app.modules.settings.models import SystemSetting
         
-        db_path = app.config['DB_PATH']
-        db_dir = os.path.dirname(db_path)
-        if not os.path.exists(db_dir):
-            os.makedirs(db_dir)
-            
         db.create_all()
         
         # Seed Admin User
