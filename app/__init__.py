@@ -127,7 +127,7 @@ def create_app(config_class=Config):
 
     @app.route('/api/sso-internal/link-user', methods=['POST'])
     def internal_link_user():
-        """Update a user's central_auth_id for ecosystem linking."""
+        """Update a user's central_auth_id for ecosystem linking. Supports Admin Push-Back."""
         from app.modules.settings.models import SystemSetting
         from app.modules.auth.models import User
         
@@ -137,6 +137,53 @@ def create_app(config_class=Config):
 
         if not secret_header or secret_header != configured_secret:
             return jsonify({"error": "Unauthorized"}), 401
+
+        data = request.get_json()
+        email = data.get('email')
+        ca_id = data.get('central_auth_id')
+        username = data.get('username')
+        full_name = data.get('full_name')
+        is_admin_sync = data.get('is_admin_sync', False)
+
+        if not ca_id:
+            return jsonify({"error": "Missing central_auth_id"}), 400
+
+        target_user = None
+
+        # 1. Admin Push-back logic
+        if is_admin_sync:
+            # Target local ID 1
+            target_user = User.query.get(1)
+            if target_user:
+                # Check if already linked to someone else
+                if target_user.central_auth_id and target_user.central_auth_id != ca_id:
+                    return jsonify({"error": "Local ID 1 is already linked to a different CentralAuth account"}), 409
+                
+                # Perform Push-back (Overwrite local admin identity)
+                target_user.username = username or target_user.username
+                target_user.email = email or target_user.email
+                if hasattr(target_user, 'full_name'):
+                    target_user.full_name = full_name or target_user.full_name
+                target_user.central_auth_id = ca_id
+                db.session.commit()
+                return jsonify({"status": "success", "message": f"Admin identity pushed back to local ID 1 ({target_user.username})"}), 200
+
+        # 2. Standard linking logic
+        if not target_user:
+            target_user = User.query.filter_by(email=email).first()
+        
+        if not target_user and not is_admin_sync:
+            # Try finding by username as fallback
+            target_user = User.query.filter_by(username=username).first()
+
+        if target_user:
+            target_user.central_auth_id = ca_id
+            if full_name and hasattr(target_user, 'full_name'):
+                target_user.full_name = full_name
+            db.session.commit()
+            return jsonify({"status": "success", "message": f"User {target_user.username} linked to CentralAuth ID {ca_id}"}), 200
+        
+        return jsonify({"error": "User not found for linking"}), 404
 
         data = request.get_json()
         email = data.get('email')

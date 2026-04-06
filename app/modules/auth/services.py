@@ -33,11 +33,15 @@ class AuthService:
         return User.query.all()
 
     @staticmethod
-    def create_user(username, password, role='user'):
+    def create_user(username, email, password, role='user'):
+        if not email:
+            return None, "Email is required"
         if User.query.filter_by(username=username).first():
             return None, "Username already exists"
+        if User.query.filter_by(email=email).first():
+            return None, "Email already registered"
         
-        user = User(username=username, role=role)
+        user = User(username=username, email=email, role=role)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()

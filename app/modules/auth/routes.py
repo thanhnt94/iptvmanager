@@ -81,15 +81,18 @@ def dashboard():
 def admin_users():
     if request.method == 'POST':
         username = request.form.get('username')
+        email = request.form.get('email')
         password = request.form.get('password')
         role = request.form.get('role', 'user')
         
-        if username and password:
-            user, error = AuthService.create_user(username, password, role)
+        if username and email and password:
+            user, error = AuthService.create_user(username, email, password, role)
             if user:
-                flash(f'User {username} created successfully.', 'success')
+                flash(f'User {username} ({email}) created successfully.', 'success')
             else:
                 flash(error, 'danger')
+        else:
+            flash('Username, Email, and Password are required.', 'warning')
         return redirect(url_for('auth.admin_users'))
         
     users = AuthService.get_all_users()
