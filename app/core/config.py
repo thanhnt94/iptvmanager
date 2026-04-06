@@ -7,8 +7,8 @@ instance_path = os.path.join(basedir, 'instance')
 class Config:
     SECRET_KEY = 'dev-key-12345'
     
-    # Centralized SQLite database for Ecosystem
-    DB_PATH = "c:\\Code\\Ecosystem\\Storage\\database\\IPTVManager.db"
+    # Centralized SQLite database for Ecosystem (Cross-platform path)
+    DB_PATH = os.path.abspath(os.path.join(basedir, '..', 'Storage', 'database', 'IPTVManager.db'))
     SQLALCHEMY_DATABASE_URI = f'sqlite:///{DB_PATH}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
