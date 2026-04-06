@@ -19,3 +19,4 @@ gunicorn
 yt-dlp
 Flask-Session
 PyJWT
+numpy<2.0.0
