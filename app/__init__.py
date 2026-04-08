@@ -1,5 +1,6 @@
 from flask import Flask, render_template, redirect, url_for, request, jsonify
 import os
+import time
 from app.core.config import Config
 from app.core.database import db, migrate
 from app.modules.health.tasks import init_scheduler
@@ -157,8 +158,28 @@ def create_app(config_class=Config):
             if target_user:
                 # Check if already linked to someone else
                 if target_user.central_auth_id and target_user.central_auth_id != ca_id:
-                    return jsonify({"error": "Local ID 1 is already linked to a different CentralAuth account"}), 409
+                    # Log conflict but proceed for admin takeover if explicitly requested
+                    app.logger.warning(f"Admin takeover: Overwriting central_auth_id {target_user.central_auth_id} with {ca_id} for local ID 1")
                 
+                # Collision Handling: If email or username is already taken by ANOTHER user
+                if email:
+                    other_with_email = User.query.filter(User.email == email, User.id != 1).first()
+                    if other_with_email:
+                        app.logger.warning(f"Sync Conflict: Email {email} taken by User {other_with_email.id}. Renaming existing user.")
+                        other_with_email.email = f"{email}_old_{int(time.time())}"
+                
+                if username:
+                    other_with_username = User.query.filter(User.username == username, User.id != 1).first()
+                    if other_with_username:
+                        app.logger.warning(f"Sync Conflict: Username {username} taken by User {other_with_username.id}. Renaming existing user.")
+                        other_with_username.username = f"{username}_old_{int(time.time())}"
+                
+                if ca_id:
+                    other_with_ca = User.query.filter(User.central_auth_id == ca_id, User.id != 1).first()
+                    if other_with_ca:
+                        app.logger.warning(f"Sync Conflict: CA ID {ca_id} taken by User {other_with_ca.id}. Detaching existing user.")
+                        other_with_ca.central_auth_id = None
+
                 # Perform Push-back (Overwrite local admin identity)
                 target_user.username = username or target_user.username
                 target_user.email = email or target_user.email
@@ -185,22 +206,6 @@ def create_app(config_class=Config):
         
         return jsonify({"error": "User not found for linking"}), 404
 
-        data = request.get_json()
-        email = data.get('email')
-        ca_id = data.get('central_auth_id')
-        username = data.get('username')
-        
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            return jsonify({"error": f"User {email} not found"}), 404
-        
-        user.central_auth_id = str(ca_id)
-        if username:
-            user.username = username
-            
-        db.session.commit()
-        return jsonify({"status": "ok", "message": f"Linked {email} and synced profile to CentralAuth."}), 200
-
     @app.route('/api/sso-internal/delete-user', methods=['POST'])
     def internal_delete_user():
         """Delete a user from this app's database."""
@@ -216,14 +221,20 @@ def create_app(config_class=Config):
 
         data = request.get_json()
         email = data.get('email')
+        username = data.get('username')
         
-        user = User.query.filter_by(email=email).first()
+        user = None
+        if email and email != "null":
+            user = User.query.filter_by(email=email).first()
+        if not user and username and username != "null":
+            user = User.query.filter_by(username=username).first()
+            
         if not user:
-            return jsonify({"error": f"User {email} not found"}), 404
+            return jsonify({"error": f"User {username or email} not found"}), 404
         
         db.session.delete(user)
         db.session.commit()
-        return jsonify({"status": "ok", "message": f"Deleted {email}"}), 200
+        return jsonify({"status": "ok", "message": f"Deleted {user.username}"}), 200
 
     @app.route('/')
     def index():
