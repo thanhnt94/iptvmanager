@@ -199,7 +199,30 @@ def create_app(config_class=Config):
             from app.modules.playlists.services import PlaylistService
             app.logger.info("Verifying system playlists...")
             PlaylistService.ensure_system_playlist()
-            
+
+            # 4. Auto-detect FFmpeg/FFprobe
+            from app.modules.settings.services import SettingService
+            import shutil
+            import os
+
+            for tool in ['FFMPEG', 'FFPROBE']:
+                key = f'{tool}_PATH'
+                bin_name = tool.lower()
+                # If current setting is default (basename) or empty, try to find absolute path
+                current = SettingService.get(key)
+                if not current or current == bin_name:
+                    found_path = shutil.which(bin_name)
+                    if not found_path:
+                        # Common Linux paths fallback
+                        for p in [f'/usr/bin/{bin_name}', f'/usr/local/bin/{bin_name}', f'/snap/bin/{bin_name}']:
+                            if os.path.exists(p):
+                                found_path = p
+                                break
+                    if found_path:
+                        app.logger.info(f"Auto-detected {tool} at: {found_path}")
+                        SettingService.set(key, found_path, description=f"Auto-detected {tool} path")
+
+            db.session.commit()
             app.logger.info("Database initialization complete.")
         except Exception as e:
             app.logger.error(f"Database initialization failed: {str(e)}")
