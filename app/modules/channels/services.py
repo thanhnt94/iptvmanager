@@ -36,13 +36,19 @@ class StreamManager:
         ts_buffer_size = SettingService.get('TS_BUFFER_SIZE', 512) # 512 * 4KB = 2MB
         
         with cls._lock:
+            # Detect if we need FFmpeg (Transcode/Remux)
+            is_flv = '.flv' in url.lower().split('?')[0]
+            force_transcode = kwargs.get('transcode', False) or is_flv
+            
             sid = url if use_sm else f"{url}_{time.time()}"
+            if force_transcode: sid = f"trans_{sid}"
             
             if sid not in cls._streams:
+                target = cls._run_ffmpeg_pipe if force_transcode else cls._run_source_pipe
                 cls._streams[sid] = {
                     'clients': [],
                     'buffer': deque(maxlen=ts_buffer_size),
-                    'thread': threading.Thread(target=cls._run_source_pipe, args=(url, headers, sid), daemon=True),
+                    'thread': threading.Thread(target=target, args=(url, headers, sid), daemon=True),
                     'lock': threading.Lock()
                 }
                 cls._streams[sid]['thread'].start()
@@ -131,6 +137,68 @@ class StreamManager:
             except Exception as e:
                 logger.error(f"StreamEngine: Connection lost for {url}: {e}")
                 time.sleep(2) # Auto-reconnect after 2s
+
+    @classmethod
+    def _run_ffmpeg_pipe(cls, url, headers, sid):
+        logger.info(f"StreamEngine: Starting FFmpeg remuxer for {url}")
+        
+        ua = headers.get('User-Agent', 'Mozilla/5.0') if headers else 'Mozilla/5.0'
+        # Command to remux to TS. If it fails, we might need full transcode, 
+        # but -c copy is much faster.
+        cmd = [
+            'ffmpeg', '-y',
+            '-user_agent', ua,
+            '-loglevel', 'error',
+            '-i', url,
+            '-map', '0',
+            '-f', 'mpegts',
+            '-c', 'copy',
+            '-bsf:v', 'h264_mp4toannexb',
+            'pipe:1'
+        ]
+        
+        process = None
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=10**6)
+            
+            while True:
+                # Cleanup check
+                with cls._lock:
+                    if sid not in cls._streams or not cls._streams[sid]['clients']:
+                        logger.info(f"StreamEngine (FFmpeg): No clients for {sid}, stopping.")
+                        break
+
+                # Read from FFmpeg stdout
+                chunk = process.stdout.read(131072) # 128KB
+                if not chunk:
+                    if process.poll() is not None:
+                        err = process.stderr.read().decode('utf-8', 'ignore')
+                        logger.error(f"StreamEngine (FFmpeg) died: {err}")
+                        break
+                    time.sleep(0.1)
+                    continue
+                
+                with cls._lock:
+                    if sid not in cls._streams: break
+                    cls._streams[sid]['buffer'].append(chunk)
+                    
+                    with cls._streams[sid]['lock']:
+                        clients = cls._streams[sid]['clients'][:]
+                        for q in clients:
+                            try:
+                                q.put(chunk, timeout=0.1)
+                            except:
+                                pass
+        except Exception as e:
+            logger.error(f"StreamEngine (FFmpeg) error: {e}")
+        finally:
+            if process:
+                try: process.terminate()
+                except: pass
+            
+            with cls._lock:
+                if sid in cls._streams: del cls._streams[sid]
+            logger.info(f"StreamEngine (FFmpeg): Resources released for {sid}")
 
     @classmethod
     def remove_client(cls, sid, q):

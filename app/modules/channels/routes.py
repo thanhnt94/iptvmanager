@@ -242,7 +242,7 @@ def play_channel(channel_id):
 
     if proxy == 'hls' or '.m3u8' in url_low:
         return redirect(url_for('channels.play_hls', channel_id=channel.id, token=token))
-    elif proxy == 'ts' or '.ts' in url_low:
+    elif proxy == 'ts' or '.ts' in url_low or '.flv' in url_low:
         return redirect(url_for('channels.play_ts', channel_id=channel.id, token=token))
         
     return redirect(play_url)
