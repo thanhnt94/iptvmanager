@@ -29,7 +29,7 @@ class StreamManager:
     _lock = threading.Lock()
 
     @classmethod
-    def get_source_stream(cls, url, headers=None):
+    def get_source_stream(cls, url, headers=None, **kwargs):
         from app.modules.settings.services import SettingService
         use_sm = SettingService.get('ENABLE_STREAM_MANAGER', True)
         # Load dynamic buffer size
