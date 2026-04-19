@@ -98,10 +98,10 @@ export const Dashboard: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
             key={card.label} 
-            className="glass p-6 rounded-3xl relative overflow-hidden group hover:bg-slate-900/60 transition-colors"
+            className="glass-card p-6 rounded-3xl relative overflow-hidden group"
           >
             <div className={`absolute -right-4 -top-4 w-32 h-32 bg-${card.color}-500/5 blur-[60px] group-hover:bg-${card.color}-500/10 transition-all`} />
-            <div className={`w-12 h-12 rounded-2xl bg-${card.color}-500/10 flex items-center justify-center text-${card.color}-400 mb-6`}>
+            <div className={`w-12 h-12 rounded-2xl bg-${card.color}-500/10 flex items-center justify-center text-${card.color}-400 mb-6 group-hover:scale-110 transition-transform`}>
               {card.icon}
             </div>
             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{card.label}</p>
@@ -112,7 +112,7 @@ export const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Channel Health Grid */}
-        <div className="glass p-8 rounded-[2.5rem] flex flex-col justify-between">
+        <div className="glass-card p-8 rounded-[2.5rem] flex flex-col justify-between">
            <div className="flex items-center justify-between mb-8">
               <h3 className="font-black text-xs uppercase tracking-[0.2em] text-white/40">Continuity Health</h3>
               <Tv className="text-slate-700" size={20} />

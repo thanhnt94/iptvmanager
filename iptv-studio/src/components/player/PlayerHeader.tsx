@@ -43,7 +43,7 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ user }) => {
          <div className="w-7 h-7 lg:w-9 lg:h-9 bg-indigo-600 rounded-lg lg:rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
             <Radio className="text-white" size={window.innerWidth < 1024 ? 14 : 20} />
          </div>
-         <h1 className="text-sm lg:text-lg font-black text-white tracking-tighter uppercase italic">IPTV<span className="text-indigo-500">Studio</span></h1>
+         <h1 className="text-sm lg:text-lg font-black text-white tracking-tighter uppercase italic">IPTV<span className="text-indigo-500">Manager</span></h1>
       </div>
 
       {/* Right Actions */}

@@ -54,7 +54,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
             <Radio className="text-white" size={18} />
           </div>
-          <h1 className="text-lg font-black text-white tracking-tighter">IPTV<span className="text-indigo-400">Studio</span></h1>
+          <h1 className="text-lg font-black text-white tracking-tighter uppercase italic">IPTV<span className="text-indigo-500">Manager</span></h1>
         </div>
         <button 
           onClick={() => setIsSidebarOpen(true)}
@@ -78,12 +78,15 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="p-8 flex items-center justify-between">
-           <div className="flex flex-col">
-              <div className="w-12 h-12 bg-indigo-500 rounded-xl flex items-center justify-center mb-4">
-                 <Radio className="text-white" size={24} />
-              </div>
-              <h1 className="text-xl font-black text-white tracking-tighter">IPTV<span className="text-indigo-400">Studio</span></h1>
-           </div>
+           <div className="flex items-center gap-3 px-2 mb-8">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+               <Radio className="text-white" size={24} />
+            </div>
+            <div>
+               <h1 className="text-xl font-black text-white tracking-tighter uppercase italic leading-none">IPTV<span className="text-indigo-500">Manager</span></h1>
+               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 mt-1">Advanced Control</p>
+            </div>
+          </div>
            <button 
             onClick={() => setIsSidebarOpen(false)}
             className="lg:hidden p-2 text-slate-500 hover:text-white"

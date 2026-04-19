@@ -1,1449 +1,400 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context, abort
 from flask_login import login_required, current_user
 import requests
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import json
-from datetime import datetime, timedelta
-import time
-from app.modules.channels.models import Channel, EPGSource, EPGData
-from app.modules.channels.services import ChannelService, EPGService, ActiveSessionManager, StreamManager
-from app.modules.playlists.services import PlaylistService
-from app.core.database import db
 import time
 import logging
 import queue
+import threading
+from datetime import datetime, timedelta
+from app.modules.channels.models import Channel, EPGSource, EPGData, ChannelShare
+from app.modules.channels.services import ChannelService, EPGService, ActiveSessionManager, StreamManager, HLSEngine
+from app.modules.playlists.services import PlaylistService
+from app.core.database import db
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 channels_bp = Blueprint('channels', __name__)
 logger = logging.getLogger('iptv')
 
-# --- Removed Duplicate validate_proxy_access (Consolidated at L666) ---
-# --- End of duplicate removal ---
-
-@channels_bp.route('/')
-@login_required
-def index():
-    page = request.args.get('page', 1, type=int)
-    search = request.args.get('search', '')
-    group = request.args.get('group', '')
-    stream_type = request.args.get('stream_type', '')
-    status = request.args.get('status', '')
-    quality = request.args.get('quality', '')
-    res_filter = request.args.get('resolution', '')
-    audio = request.args.get('audio', '')
-    sort = request.args.get('sort', '')
-    is_original = request.args.get('is_original', '')
-    stream_format = request.args.get('format', '')
-
-    pagination = ChannelService.get_all_channels(
-        page=page, 
-        search=search, 
-        group_filter=group,
-        stream_type_filter=stream_type,
-        status_filter=status,
-        quality_filter=quality,
-        res_filter=res_filter,
-        audio_filter=audio,
-        sort=sort,
-        is_original_filter=is_original,
-        format_filter=stream_format,
-        user=current_user
-    )
-    
-    # Calculate stats
-    stats = {
-        'total': Channel.query.count(),
-        'live': Channel.query.filter_by(status='live').count(),
-        'die': Channel.query.filter_by(status='die').count(),
-        'unknown': Channel.query.filter((Channel.status == None) | (Channel.status == 'unknown')).count()
-    }
-    
-    distinct_groups = ChannelService.get_distinct_groups()
-    distinct_res = ChannelService.get_distinct_resolutions()
-    distinct_audio = ChannelService.get_distinct_audio_codecs()
-    distinct_formats = ChannelService.get_distinct_formats()
-    
-    from app.modules.playlists.models import PlaylistProfile
-    playlists = PlaylistProfile.query.all()
-    
-    return render_template('channels/index.html', 
-                           channels=pagination.items, 
-                           pagination=pagination,
-                           stats=stats,
-                           search=search,
-                           group=group,
-                           group_filter=group, # ensure compatibility
-                           stream_type_filter=stream_type,
-                           status_filter=status,
-                           quality_filter=quality,
-                           res_filter=res_filter,
-                           is_original=is_original,
-                           audio_filter=audio,
-                           sort=sort,
-                           stream_format=stream_format,
-                           distinct_groups=distinct_groups,
-                           distinct_res=distinct_res,
-                           distinct_audio=distinct_audio,
-                           distinct_formats=distinct_formats,
-                           playlists=playlists)
-
-@channels_bp.route('/add', methods=['GET', 'POST'])
-@login_required
-def add_channel():
-    from app.modules.playlists.models import PlaylistProfile
-    from app.modules.playlists.services import PlaylistService
-    
-    prefill_url = request.args.get('stream_url', '')
-    
-    if request.method == 'POST':
-        # 1. Create the channel
-        form_data = request.form.to_dict()
-        form_data['owner_id'] = current_user.id
-        new_ch = ChannelService.create_channel(form_data)
-        if new_ch:
-            # 2. Sync playlist memberships with group IDs
-            selected_playlists = request.form.getlist('playlists')
-            playlist_data = {}
-            for pid in selected_playlists:
-                group_id = request.form.get(f'group_{pid}')
-                playlist_data[pid] = group_id
-                
-            PlaylistService.sync_channel_playlists(new_ch.id, playlist_data, request.form.to_dict(flat=False).get('new_group'))
-            
-            # 3. IMMEDIATE HEALTH CHECK
-            # Perform a full scan right now so the user sees technical specs immediately
-            from app.modules.health.services import HealthCheckService
-            HealthCheckService.check_stream(new_ch.id)
-            
-            flash('Channel added successfully!', 'success')
-            return redirect(url_for('channels.index'))
-        else:
-            # Handle potential duplicate error from ChannelService
-            flash('Error adding channel. It might already exist.', 'danger')
-            return render_template('channels/add.html', 
-                                 form_data=request.form, 
-                                 distinct_groups=ChannelService.get_distinct_groups(),
-                                 all_playlists=PlaylistProfile.query.filter_by(is_system=False).all())
-
-    # GET: fetch data for the enhanced UI
-    return render_template('channels/add.html', 
-                         prefill_url=prefill_url,
-                         distinct_groups=ChannelService.get_distinct_groups(),
-                         all_playlists=PlaylistProfile.query.filter_by(is_system=False).all())
-
-@channels_bp.route('/edit/<int:channel_id>', methods=['GET', 'POST'])
-@login_required
-def edit_channel(channel_id):
-    from app.modules.playlists.models import PlaylistProfile, PlaylistEntry
-    from app.modules.playlists.services import PlaylistService
-    
-    access_level, channel = ChannelService.get_user_channel_access(channel_id, current_user)
-    if not channel: return "Not Found", 404
-    if access_level != 'edit':
-        flash('Bạn không có quyền chỉnh sửa kênh này.', 'danger')
-        return redirect(url_for('channels.index'))
-    
-    if request.method == 'POST':
-        form_data = request.form.to_dict()
-        ChannelService.update_channel(channel_id, form_data)
-        
-        # Sync playlist memberships with group IDs
-        selected_playlists = request.form.getlist('playlists')
-        playlist_data = {}
-        for pid in selected_playlists:
-            group_id = request.form.get(f'group_{pid}')
-            playlist_data[pid] = group_id
-            
-        PlaylistService.sync_channel_playlists(channel_id, playlist_data)
-        
-        flash('Channel updated successfully!')
-        return redirect(url_for('channels.index'))
-    
-    # For GET: fetch all available playlists (non-system) with their groups
-    all_playlists = PlaylistProfile.query.filter_by(is_system=False).all()
-    # Fetch current playlist memberships mapping pid -> group_id
-    current_entries = PlaylistEntry.query.filter_by(channel_id=channel_id).all()
-    current_memberships = {e.playlist_id: e.group_id for e in current_entries}
-    
-    # Navigation: Find previous and next channel IDs
-    prev_channel = Channel.query.filter(Channel.id < channel_id).order_by(Channel.id.desc()).first()
-    next_channel = Channel.query.filter(Channel.id > channel_id).order_by(Channel.id.asc()).first()
-    prev_id = prev_channel.id if prev_channel else None
-    next_id = next_channel.id if next_channel else None
-    
-    return render_template('channels/edit.html', 
-                         channel=channel, 
-                         all_playlists=all_playlists,
-                         current_memberships=current_memberships,
-                         prev_id=prev_id,
-                         next_id=next_id)
-
-@channels_bp.route('/delete/<int:channel_id>', methods=['POST'])
-@login_required
-def delete_channel(channel_id):
-    channel = Channel.query.get_or_404(channel_id)
-    if current_user.role != 'admin' and channel.owner_id != current_user.id:
-        flash('Bạn không có quyền xoá kênh này.', 'danger')
-        return redirect(url_for('channels.index'))
-        
-    db.session.delete(channel)
-    db.session.commit()
-    flash('Channel deleted successfully.', 'success')
-    return redirect(url_for('channels.index'))
-
-@channels_bp.route('/api/clean_dead_channels', methods=['POST'])
-@login_required
-def clean_dead_channels():
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
-        
-    # Find channels that are 'die' and NOT 'is_original'
-    # We use (Channel.is_original == False) | (Channel.is_original == None) for safety
-    query = Channel.query.filter(
-        Channel.status == 'die',
-        db.or_(Channel.is_original == False, Channel.is_original == None)
-    )
-    
-    count = query.count()
-    query.delete(synchronize_session=False)
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'deleted_count': count,
-        'message': f'Đã xoá thành công {count} kênh die.'
-    })
-
-@channels_bp.route('/api/toggle_original/<int:channel_id>', methods=['POST'])
-@login_required
-def toggle_original(channel_id):
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
-        
-    channel = Channel.query.get_or_404(channel_id)
-    channel.is_original = not channel.is_original
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'is_original': channel.is_original,
-        'message': f'Đã cập nhật trạng thái bảo vệ cho kênh: {channel.name}'
-    })
-
-@channels_bp.route('/api/player/playlists')
-@login_required
-def get_player_playlists():
-    from app.modules.playlists.models import PlaylistProfile
-    from app.modules.auth.services import AuthService
-    
-    if current_user.role == 'admin':
-        playlists = PlaylistProfile.query.all()
-    else:
-        playlists = AuthService.get_user_playlists(current_user.id)
-    
-    result = []
-    for p in playlists:
-        result.append({
-            'id': p.id,
-            'name': p.name,
-            'slug': p.slug,
-            'is_system': p.is_system
-        })
-
-    # Always ensure a system-wide "All Channels" is available
-    if not any(p['is_system'] for p in result):
-        result.insert(0, {
-            'id': 'system_all',
-            'name': 'All IPTV Channels',
-            'is_system': True
-        })
-    
-    return jsonify(result)
-
-@channels_bp.route('/web-player')
-@channels_bp.route('/web-player/<int:channel_id>')
-@login_required
-def web_player(channel_id=None):
-    from app.modules.playlists.models import PlaylistProfile
-    from app.modules.auth.services import AuthService
-    
-    if current_user.role == 'admin':
-        playlists = PlaylistProfile.query.all()
-    else:
-        playlists = AuthService.get_user_playlists(current_user.id)
-        
-    initial_id = channel_id or request.args.get('id', type=int)
-    return render_template('channels/player.html', playlists=playlists, initial_id=initial_id)
-
-@channels_bp.route('/api/channel/<int:channel_id>')
-@login_required
-def get_channel_info(channel_id):
-    from app.modules.playlists.models import PlaylistEntry
-    channel = Channel.query.get_or_404(channel_id)
-    
-    # Try to find which playlist this channel belongs to
-    entry = PlaylistEntry.query.filter_by(channel_id=channel_id).first()
-    playlist_id = entry.playlist_id if entry else None
-    
-    return jsonify({
-        'status': 'ok',
-        'channel': {
-            'id': channel.id,
-            'name': channel.name,
-            'logo': channel.logo_url,
-            'group': channel.group_name or 'Uncategorized',
-            'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
-            'stream_url': channel.stream_url,
-            'playlist_id': playlist_id,
-            'stream_type': channel.stream_type or 'live',
-            'stream_format': channel.stream_format
-        }
-    })
-
-@channels_bp.route('/web-player/channels/<playlist_id>')
-@login_required
-def player_playlist_channels(playlist_id):
-    from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
-    from app.modules.auth.models import UserPlaylist
-    
-    page = request.args.get('page', 1, type=int)
-    limit = request.args.get('limit', 100, type=int)
-    group_filter = request.args.get('group')
-    q = request.args.get('q', '')
-    offset = (page - 1) * limit
-    
-    is_system_all = str(playlist_id) == 'system_all'
-    
-    if not is_system_all:
-        try:
-            p_id = int(playlist_id)
-            profile = PlaylistProfile.query.get_or_404(p_id)
-            
-            # Permission Check
-            if current_user.role != 'admin':
-                access = UserPlaylist.query.filter_by(user_id=current_user.id, playlist_id=p_id).first()
-                if not access:
-                    return jsonify({'status': 'error', 'message': 'Access denied'}), 403
-        except (ValueError, TypeError):
-            return jsonify({'status': 'error', 'message': 'Invalid playlist ID'}), 400
-            
-    channels_data = []
-    total_count = 0
-
-    if is_system_all or profile.is_system:
-        # All Channels or specific system playlist
-        query = Channel.query
-        if group_filter:
-            query = query.filter(Channel.group_name == group_filter)
-        if q:
-            query = query.filter(Channel.name.ilike(f'%{q}%'))
-            
-        total_count = query.count()
-        channels = query.order_by(Channel.name).offset(offset).limit(limit).all()
-        token = current_user.api_token
-        
-        for channel in channels:
-            channels_data.append({
-                'id': channel.id,
-                'name': channel.name,
-                'logo': channel.logo_url,
-                'group': channel.group_name or 'Uncategorized',
-                'status': channel.status,
-                'quality': channel.quality or 'N/A',
-                'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=token, _external=True),
-                'stream_url': channel.stream_url,
-                'stream_type': channel.stream_type,
-                'stream_format': channel.stream_format,
-                'proxy_type': channel.proxy_type or 'none'
-            })
-    else:
-        # Custom User Playlist
-        query = db.session.query(PlaylistEntry, Channel, PlaylistGroup.name.label('group_name'))\
-            .join(Channel, PlaylistEntry.channel_id == Channel.id)\
-            .outerjoin(PlaylistGroup, PlaylistEntry.group_id == PlaylistGroup.id)\
-            .filter(PlaylistEntry.playlist_id == int(playlist_id))
-        
-        if group_filter:
-            query = query.filter(PlaylistGroup.name == group_filter)
-        if q:
-            query = query.filter(Channel.name.ilike(f'%{q}%'))
-        
-        total_count = query.count()
-        entries = query.order_by(PlaylistEntry.order_index).offset(offset).limit(limit).all()
-        token = current_user.api_token
-            
-        for entry, channel, group_name in entries:
-            channels_data.append({
-                'id': channel.id,
-                'name': channel.name,
-                'logo': channel.logo_url,
-                'group': group_name or 'Uncategorized',
-                'status': channel.status,
-                'quality': channel.quality or 'N/A',
-                'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=token, _external=True),
-                'stream_url': channel.stream_url,
-                'stream_type': channel.stream_type,
-                'stream_format': channel.stream_format,
-                'proxy_type': channel.proxy_type or 'none'
-            })
-        
-    return jsonify({
-        'status': 'ok', 
-        'channels': channels_data,
-        'has_more': (offset + limit) < total_count,
-        'page': page,
-        'total': total_count
-    })
-
-@channels_bp.route('/web-player/categories/<playlist_id>')
-@login_required
-def player_playlist_categories(playlist_id):
-    from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
-    
-    is_system_all = str(playlist_id) == 'system_all'
-    
-    if is_system_all:
-        from app.modules.channels.models import Channel
-        categories = db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()
-        categories = [c[0] for c in categories]
-    else:
-        try:
-            p_id = int(playlist_id)
-            profile = PlaylistProfile.query.get_or_404(p_id)
-            
-            if profile.is_system:
-                from app.modules.channels.models import Channel
-                categories = db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()
-                categories = [c[0] for c in categories]
-            else:
-                categories = db.session.query(PlaylistGroup.name).filter_by(playlist_id=p_id).distinct().all()
-                categories = [c[0] for c in categories]
-        except (ValueError, TypeError):
-            return jsonify({'status': 'error', 'message': 'Invalid playlist ID'}), 400
-        
-    return jsonify({'status': 'ok', 'categories': sorted(categories)})
-
-
-@channels_bp.route('/check/<int:channel_id>', methods=['POST'])
-@login_required
-def check_channel(channel_id):
-    from app.modules.health.services import HealthCheckService
-    from datetime import datetime
-    
-    HealthCheckService.check_stream(channel_id)
-    channel = Channel.query.get(channel_id)
-    
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('ajax'):
-        return jsonify({
-            'success': True,
-            'status': channel.status,
-            'stream_type': channel.stream_type,
-            'stream_format': channel.stream_format,
-            'quality': channel.quality,
-            'resolution': channel.resolution,
-            'audio_codec': channel.audio_codec,
-            'latency': round(channel.latency, 1) if channel.latency else 0,
-            'last_checked': channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never'
-        })
-        
-    flash('Channel check completed!')
-    return redirect(url_for('channels.index'))
-
-@channels_bp.route('/play_vlc/<int:channel_id>', methods=['POST'])
-def play_vlc(channel_id):
-    channel = Channel.query.get_or_404(channel_id)
-    # Include the token for authorized playback in VLC
-    wrapper_url = url_for('channels.play_channel', channel_id=channel_id, token=current_user.api_token, _external=True)
-    success = ChannelService.play_with_vlc(wrapper_url)
-    return jsonify({'success': success})
-
-@channels_bp.route('/epg/sources')
-def epg_sources():
-    sources = EPGSource.query.all()
-    return render_template('channels/epg_sources.html', sources=sources)
-
-@channels_bp.route('/epg')
-def epg_management():
-    from app.modules.channels.services import EPGService
-    sources = EPGService.get_sources()
-    return render_template('channels/epg.html', sources=sources)
-
-@channels_bp.route('/epg/add', methods=['POST'])
-def add_epg_source():
-    from app.modules.channels.services import EPGService
-    name = request.form.get('name')
-    url = request.form.get('url')
-    if name and url:
-        EPGService.add_source(name, url)
-    return redirect(url_for('channels.epg_management'))
-
-@channels_bp.route('/epg/delete/<int:id>', methods=['POST'])
-def delete_epg_source(id):
-    from app.modules.channels.services import EPGService
-    EPGService.delete_source(id)
-    return redirect(url_for('channels.epg_management'))
-
-@channels_bp.route('/epg/sync/<int:id>', methods=['POST'])
-def sync_epg(id):
-    from app.modules.channels.services import EPGService
-    result = EPGService.sync_epg(id)
-    return jsonify(result)
-
-@channels_bp.route('/play/ts/<int:channel_id>')
-def play_ts(channel_id):
-    token = request.args.get('token')
-    return redirect(url_for('channels.play_channel', channel_id=channel_id, token=token, forced='ts'))
-
-@channels_bp.route('/play/hls/<int:channel_id>')
-def play_hls(channel_id):
-    token = request.args.get('token')
-    return redirect(url_for('channels.play_channel', channel_id=channel_id, token=token, forced='hls'))
-
-@channels_bp.route('/vlc-launcher/<int:channel_id>')
-def vlc_launcher(channel_id):
-    """Generates a small M3U file to trigger VLC playback on client side."""
-    token = request.args.get('token')
-    if not token:
-        from app.modules.auth.models import User
-        admin_user = User.query.filter_by(role='admin').first()
-        if admin_user: token = admin_user.api_token
-
-    play_url = url_for('channels.play_channel', channel_id=channel_id, token=token, _external=True)
-    channel = Channel.query.get_or_404(channel_id)
-    
-    m3u_content = f"#EXTM3U\n#EXTINF:-1,{channel.name}\n{play_url}"
-    return Response(
-        m3u_content,
-        mimetype='application/x-mpegurl',
-        headers={
-            'Content-Disposition': f'attachment; filename=play_{channel_id}.m3u'
-        }
-    )
-
-@channels_bp.route('/play/<int:channel_id>')
-@channels_bp.route('/smartlink/<int:channel_id>', endpoint='play_channel')
-def play_channel(channel_id):
-    """
-    Playback redirector that obfuscates the original URL and 
-    performs a quick health check on access (crowdsourced status).
-    Now also triggers a background metadata refresh if live.
-    """
-    import threading
-    from app.modules.health.services import HealthCheckService
-    
-    channel = Channel.query.get_or_404(channel_id)
-    
-    # 1. Update Play Count (Initial)
-    channel.play_count = (channel.play_count or 0) + 1
-    channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 1 # Initial ping
-    db.session.commit()
-    
-    # 2. Trigger Crowdsourced Health Check (Background)
-    # This ensures the channel status is updated whenever played via system links
-    def run_auto_check(app_ctx, cid):
-        with app_ctx:
-            try:
-                HealthCheckService.check_stream(cid)
-            except Exception as e:
-                logger.error(f"Auto-Check Background Error: {e}")
-
-    threading.Thread(target=run_auto_check, args=(current_app.app_context(), channel.id), daemon=True).start()
-    
-    token = request.args.get('token')
-    
-    # SMART AUTH: If no token provided, automatically use the Admin token 
-    from app.modules.auth.models import User, TrustedIP
-    if not token:
-        admin_user = User.query.filter_by(role='admin').first()
-        if admin_user: token = admin_user.api_token
-    
-    # TRUST IP LOGIC
-    if token:
-        from app.modules.playlists.models import PlaylistProfile
-        # Check if token is valid (User or Playlist Profile)
-        is_user = User.query.filter_by(api_token=token).first()
-        is_playlist = PlaylistProfile.query.filter_by(security_token=token).first()
-        
-        if is_user or is_playlist:
-            ip = request.remote_addr
-            trusted = TrustedIP.query.filter_by(ip_address=ip).first()
-            if not trusted:
-                trusted = TrustedIP(ip_address=ip)
-                db.session.add(trusted)
-                db.session.commit()
-
-    # 2. On-the-fly Extraction for Web Links
-    url_low = channel.stream_url.lower()
-    is_direct = any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv', '.mp3', '.aac', 'playlist', 'udp://', 'rtp://', 'rtmp://'])
-    play_url = channel.stream_url
-    audio_url = None
-    
-    if not is_direct:
-        logger.info(f"SmartGateway: Extraction needed for {channel.name}")
-        from app.modules.channels.services import ExtractorService
-        ext_res = ExtractorService.extract_direct_url(channel.stream_url)
-        if ext_res.get('success') and ext_res.get('links'):
-            # YouTube/HQ check: if 2 links return, assume Video and Audio
-            links = ext_res['links']
-            if len(links) >= 2 and any('googlevideo' in l['url'] for l in links):
-                play_url = links[0]['url']
-                audio_url = links[1]['url']
-                logger.info(f"SmartGateway: Multi-stream extraction (HQ Video + Audio)")
-            else:
-                play_url = links[0]['url']
-            url_low = play_url.lower() # Re-detect based on real link
-
-    # 3. Detect Format for Real Play URL
-    format_low = (channel.stream_format or '').lower()
-    is_hls = '.m3u8' in url_low or 'playlist' in url_low or 'm3u8' in format_low or 'hls' in format_low
-    is_ts = '.ts' in url_low or 'mpegts' in url_low or 'type=ts' in url_low or 'ts' in format_low
-    is_vod = any(ext in url_low for ext in ['.mp4', '.mkv', '.avi', '.mov', '.mp3', '.aac'])
-    
-    from app.modules.settings.services import SettingService
-    enable_stats = SettingService.get('ENABLE_PROXY_STATS', True)
-    enable_ts_proxy = SettingService.get('ENABLE_TS_PROXY', True)
-    
-    # RESPECT MANUAL OVERRIDE (forced=ts/hls/etc)
-    proxy_type = request.args.get('forced') or getattr(channel, 'proxy_type', 'default')
-    
-    # 3.1 HQ Multi-stream Redirection (YouTube 1080p+)
-    if audio_url:
-        logger.info(f"SmartGateway: Redirecting to HQ Merger for {channel.name}")
-        # Mark as VOD if not clearly a live event
-        is_live_yt = any(x in channel.name.lower() or x in (channel.group_name or '').lower() for x in ['live', 'news', 'broadcast'])
-        v_type = 'live' if is_live_yt else 'vod'
-        return redirect(url_for('channels.proxy_merge', v=play_url, a=audio_url, channel_id=channel.id, token=token, vtype=v_type))
-
-    # 3.2 Force Modes
-    if proxy_type == 'hls':
-        logger.info(f"SmartGateway: [FORCED_HLS] routing {channel.name}")
-        return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token, url=play_url))
-    elif proxy_type == 'ts':
-        logger.info(f"SmartGateway: [FORCED_TS] routing {channel.name}")
-        return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
-    elif proxy_type == 'vod':
-        logger.info(f"SmartGateway: [FORCED_VOD] routing {channel.name}")
-        return redirect(url_for('channels.proxy_vod', url=play_url, token=token))
-    elif proxy_type == 'tracking':
-        logger.info(f"SmartGateway: [FORCED_TRACKING] routing {channel.name}")
-        return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
-    elif proxy_type == 'direct' or proxy_type == 'none':
-        logger.info(f"SmartGateway: [FORCED_DIRECT] routing {channel.name}")
-        return redirect(play_url)
-        
-    # 3.3 Smart Mode
-    if is_hls:
-        logger.info(f"SmartGateway: [SMART_HLS] routing {channel.name}")
-        return redirect(url_for('channels.proxy_hls_manifest', channel_id=channel.id, token=token, url=play_url))
-    elif is_ts:
-        if enable_ts_proxy:
-            logger.info(f"SmartGateway: [SMART_TS] routing {channel.name}")
-            return redirect(url_for('channels.proxy_stream', url=play_url, token=token, channel_id=channel.id))
-    elif is_vod:
-        logger.info(f"SmartGateway: [SMART_VOD] routing {channel.name}")
-        # Use our Range-aware VOD Proxy for static files (MP4/MKV)
-        return redirect(url_for('channels.proxy_vod', url=play_url, token=token))
-    
-    # Fallback
-    if enable_stats:
-        return redirect(url_for('channels.track_redirect', channel_id=channel.id, token=token))
-    return redirect(play_url)
-
-@channels_bp.route('/api/proxy_vod')
-def proxy_vod():
-    """
-    Range-aware VOD Proxy to bypass CORS and allow seeking (supports Range headers).
-    """
-    url = request.args.get('url')
-    token = request.args.get('token')
-    
-    if not validate_proxy_access(token):
-        return "Unauthorized", 401
-
-    if not url: return "No URL", 400
-
-    def generate(stream_resp):
-        for chunk in stream_resp.iter_content(chunk_size=128*1024):
-            yield chunk
-
-    try:
-        from app.modules.settings.services import SettingService
-        # Pass Range header to source
-        headers = {'User-Agent': SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')}
-        if 'Range' in request.headers:
-            headers['Range'] = request.headers['Range']
-
-        # Ensure we don't verify SSL if specified, helps with some self-signed VOD sources
-        resp = requests.get(url, headers=headers, stream=True, timeout=30, verify=False)
-        
-        # Build response headers with pass-through
-        excluded_headers = ['content-encoding', 'transfer-encoding', 'connection', 'content-length', 'content-range']
-        proxy_headers = [(name, value) for (name, value) in resp.headers.items()
-                         if name.lower() not in excluded_headers]
-        
-        # Set a proper media type if the source is generic
-        content_type = resp.headers.get('Content-Type')
-        if not content_type or 'octet-stream' in content_type:
-            if '.mp4' in url.lower(): content_type = 'video/mp4'
-            elif '.mkv' in url.lower(): content_type = 'video/x-matroska'
-            elif '.mp3' in url.lower(): content_type = 'audio/mpeg'
-        
-        response = Response(stream_with_context(generate(resp)), status=resp.status_code, content_type=content_type)
-        for name, value in proxy_headers:
-            response.headers[name] = value
-        
-        # Explicitly support Range + Exact pass-through of range headers
-        response.headers['Accept-Ranges'] = 'bytes'
-        if 'Content-Range' in resp.headers:
-            response.headers['Content-Range'] = resp.headers['Content-Range']
-        if 'Content-Length' in resp.headers:
-            response.headers['Content-Length'] = resp.headers['Content-Length']
-        if 'Last-Modified' in resp.headers:
-            response.headers['Last-Modified'] = resp.headers['Last-Modified']
-        if 'ETag' in resp.headers:
-            response.headers['ETag'] = resp.headers['ETag']
-        
-        # Robust CORS Support for Native Player
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Expose-Headers'] = 'Content-Range, Content-Length, Accept-Ranges'
-        
-        return response
-    except Exception as e:
-        logger.error(f"VOD Proxy Error: {e}")
-        return str(e), 500
-
-@channels_bp.route('/api/stats/<int:channel_id>')
-@login_required
-def get_channel_stats(channel_id):
-    channel = Channel.query.get_or_404(channel_id)
-    
-    # Format duration
-    hours = channel.total_watch_seconds // 3600
-    minutes = (channel.total_watch_seconds % 3600) // 60
-    seconds = channel.total_watch_seconds % 60
-    duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-    
-    return jsonify({
-        'status': 'ok',
-        'stats': {
-            'id': channel.id,
-            'name': channel.name,
-            'play_count': channel.play_count,
-            'total_watch_time': duration_str,
-            'bandwidth_mb': round(channel.total_bandwidth_mb, 2),
-            'last_checked': channel.last_checked_at.strftime('%Y-%m-%d %H:%M') if channel.last_checked_at else 'Never',
-            'created_at': channel.created_at.strftime('%Y-%m-%d %H:%M'),
-            'resolution': channel.resolution or 'N/A',
-            'stream_format': channel.stream_format.upper() if channel.stream_format else 'N/A',
-            'stream_type': (channel.stream_type or 'live').upper(),
-            'quality': (channel.quality or 'N/A').title(),
-            'video_codec': channel.video_codec or 'N/A',
-            'audio_codec': channel.audio_codec or 'N/A',
-            'bitrate': f"{channel.bitrate} kbps" if channel.bitrate else 'N/A',
-            'error_message': channel.error_message
-        }
-    })
-
-@channels_bp.route('/api/scan_status')
-def get_scan_status():
-    from app.modules.health.services import HealthCheckService
-    return jsonify(HealthCheckService.get_status())
-
-_heartbeat_throttles = {} # (ip, channel_id) -> last_time
-
-@channels_bp.route('/api/player_ping', methods=['POST'])
-def player_ping():
-    """
-    Heartbeat API called by web player every 20s.
-    Estimates bandwidth based on resolution.
-    Includes server-side throttling (max 1 per 10s per IP/Channel) to prevent storms.
-    """
-    data = request.json or {}
-    channel_id = data.get('channel_id')
-    seconds = data.get('seconds', 30)
-    
-    if not channel_id:
-        return jsonify({'error': 'No channel_id'}), 400
-
-    # 1. Server-side Throttling
-    now = time.time()
-    ip = request.remote_addr
-    throttle_key = (ip, channel_id)
-    last_time = _heartbeat_throttles.get(throttle_key, 0)
-    
-    # If less than 10 seconds since last ping, ignore but return OK to satisfy client
-    if now - last_time < 10:
-        return jsonify({'status': 'throttled', 'info': 'too frequent'})
-    
-    _heartbeat_throttles[throttle_key] = now
-    
-    # 2. Process Heartbeat
-        
-    channel = Channel.query.get(channel_id)
-    if not channel:
-        return jsonify({'error': 'Channel not found'}), 404
-        
-    bitrate = 2.0 
-    if channel.resolution:
-        res = channel.resolution.lower()
-        if '3840' in res or '4k' in res: bitrate = 25.0
-        elif '1920' in res or '1080' in res: bitrate = 8.0
-        elif '1280' in res or '720' in res: bitrate = 4.0
-    
-    mb_used = (bitrate * seconds) / 8
-    channel.total_watch_seconds += seconds
-    channel.total_bandwidth_mb += mb_used
-    
-    # Update Real-time Session with source info
-    from app.modules.channels.services import ActiveSessionManager
-    # Calculate kbps: bitrate (Mbps) * 1024
-    kbps = int(bitrate * 1024)
-    ActiveSessionManager.update_session(
-        channel.id, 
-        current_user.username if current_user.is_authenticated else 'Guest', 
-        request.remote_addr, 
-        'Web Player',
-        bandwidth_kbps=kbps,
-        user_agent=request.headers.get('User-Agent')
-    )
-    
-    db.session.commit()
-    return jsonify({'status': 'ok'})
-
 def validate_proxy_access(token=None):
-    """Universal validator for proxy and stream access (Returns username or None)"""
     if current_user.is_authenticated:
         return current_user.username
-        
     if token:
         from app.modules.auth.models import User
         from app.modules.playlists.models import PlaylistProfile
-        # Check User API Token
         user = User.query.filter_by(api_token=token).first()
         if user: return user.username
-        # Check Playlist Security Token
         playlist = PlaylistProfile.query.filter_by(security_token=token).first()
         if playlist: return f"Playlist: {playlist.name}"
-        
-    # IP-BASED BYPASS
     from app.modules.auth.models import TrustedIP
     ip = request.remote_addr
     trusted = TrustedIP.query.filter_by(ip_address=ip).first()
-    if trusted: 
-        logger.debug(f"Proxy Auth: Success via Trusted IP {ip}")
-        return f"Trusted IP: {ip}"
-    
-    logger.warning(f"Proxy Auth: FAILED for IP {ip} (Token: {token})")
+    if trusted: return f"Trusted IP: {ip}"
     return None
 
-@channels_bp.route('/track/<int:channel_id>')
-@channels_bp.route('/redirect/<int:channel_id>')
-def track_redirect(channel_id):
-    from app.modules.settings.services import SettingService
-    if not SettingService.get('ENABLE_PROXY_STATS', True):
-        return "Usage tracking is currently disabled.", 403
+# --- REST DATA APIs (Mounted at /api/channels) ---
+
+@channels_bp.route('/', methods=['GET'])
+@login_required
+def list_channels():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '')
+    group = request.args.get('group', '')
+    status = request.args.get('status', '')
+    
+    query = Channel.query
+    if search:
+        query = query.filter(Channel.name.ilike(f'%{search}%'))
+    if group:
+        query = query.filter(Channel.group_name == group)
+    if status:
+        query = query.filter(Channel.status == status)
         
-    token = request.args.get('token')
-    username = validate_proxy_access(token)
-    if not username:
-        return "Unauthorized: Valid token required for tracking.", 401
+    pagination = query.order_by(Channel.name).paginate(page=page, per_page=per_page)
+    
+    channels = []
+    token = current_user.api_token
+    for ch in pagination.items:
+        channels.append({
+            'id': ch.id,
+            'name': ch.name,
+            'logo_url': ch.logo_url,
+            'group_name': ch.group_name,
+            'stream_url': ch.stream_url,
+            'status': ch.status,
+            'stream_format': ch.stream_format,
+            'stream_type': ch.stream_type,
+            'quality': ch.quality,
+            'resolution': ch.resolution,
+            'latency': ch.latency or 0,
+            'is_original': ch.is_original,
+            'last_checked': ch.last_checked_at.isoformat() if hasattr(ch, 'last_checked_at') and ch.last_checked_at else None,
+            'play_links': {
+                'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
+                'tracking': url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True),
+                'hls': url_for('channels.play_hls', channel_id=ch.id, token=token, _external=True),
+                'ts': url_for('channels.play_ts', channel_id=ch.id, token=token, _external=True)
+            }
+        })
         
-    channel = Channel.query.get_or_404(channel_id)
-    from app.modules.channels.services import ActiveSessionManager
-    ActiveSessionManager.update_session(
-        channel.id, 
-        username, 
-        request.remote_addr, 
-        'Direct Link (Tracked)',
-        user_agent=request.headers.get('User-Agent')
+    return jsonify({
+        'channels': channels,
+        'pagination': {
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page,
+            'has_next': pagination.has_next,
+            'has_prev': pagination.has_prev
+        }
+    })
+
+@channels_bp.route('/filters', methods=['GET'])
+@login_required
+def get_filters():
+    groups = [c[0] for c in db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()]
+    resolutions = [r[0] for r in db.session.query(Channel.resolution).distinct().filter(Channel.resolution != None).all()]
+    formats = [f[0] for f in db.session.query(Channel.stream_format).distinct().filter(Channel.stream_format != None).all()]
+    return jsonify({
+        'groups': sorted(groups),
+        'resolutions': sorted(resolutions),
+        'formats': sorted(formats)
+    })
+
+@channels_bp.route('/<int:id>/info', methods=['GET'])
+@login_required
+def get_info(id):
+    ch = Channel.query.get_or_404(id)
+    from app.modules.playlists.models import PlaylistEntry
+    memberships = [e.playlist_id for e in PlaylistEntry.query.filter_by(channel_id=id).all()]
+    token = current_user.api_token
+    return jsonify({
+        'status': 'ok',
+        'channel': {
+            'id': ch.id, 'name': ch.name, 'stream_url': ch.stream_url,
+            'logo_url': ch.logo_url, 'group_name': ch.group_name,
+            'epg_id': ch.epg_id, 'proxy_type': ch.proxy_type or 'none',
+            'is_original': ch.is_original,
+            'play_links': {
+                'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
+                'tracking': url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True),
+                'hls': url_for('channels.play_hls', channel_id=ch.id, token=token, _external=True),
+                'ts': url_for('channels.play_ts', channel_id=ch.id, token=token, _external=True)
+            }
+        },
+        'memberships': memberships
+    })
+
+@channels_bp.route('/add', methods=['POST'])
+@login_required
+def add_channel():
+    data = request.json
+    ch = Channel(
+        name=data.get('name'),
+        stream_url=data.get('stream_url'),
+        logo_url=data.get('logo_url'),
+        group_name=data.get('group_name'),
+        epg_id=data.get('epg_id'),
+        proxy_type=data.get('proxy_type', 'none'),
+        is_original=data.get('is_original', False)
     )
-    channel.play_count += 1
+    db.session.add(ch)
+    db.session.flush()
+    
+    playlist_ids = data.get('selected_playlists', [])
+    for p_id in playlist_ids:
+        PlaylistService.add_channel_to_playlist(p_id, ch.id)
+        
     db.session.commit()
+    return jsonify({'status': 'ok', 'id': ch.id})
 
-    # On-the-fly Extraction logic (consistent with play_channel)
-    url_low = channel.stream_url.lower()
-    is_direct = any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv', '.mp3', '.aac', 'playlist', 'udp://', 'rtp://', 'rtmp://'])
-    play_url = channel.stream_url
-    
-    if not is_direct:
-        from app.modules.channels.services import ExtractorService
-        ext_res = ExtractorService.extract_direct_url(channel.stream_url)
-        if ext_res.get('success') and ext_res.get('links'):
-            play_url = ext_res['links'][0]['url']
-            logger.info(f"Redirect: Extraction success for {channel.name}")
-
-    # Background health check
-    def _bg_check(app, cid):
-        with app.app_context():
-            from app.modules.health.services import HealthCheckService
-            HealthCheckService.check_stream(cid)
-    import threading
-    threading.Thread(target=_bg_check, args=(current_app._get_current_object(), channel_id)).start()
-
-    return redirect(play_url)
-
-@channels_bp.route('/api/stop_session', methods=['POST'])
+@channels_bp.route('/<int:id>', methods=['PATCH', 'PUT'])
 @login_required
-def stop_session_api():
-    data = request.json or {}
-    session_key = data.get('key')
-    if not session_key:
-        return jsonify({'error': 'No session key'}), 400
+def update_channel(id):
+    ch = Channel.query.get_or_404(id)
+    data = request.json
+    ch.name = data.get('name', ch.name)
+    ch.stream_url = data.get('stream_url', ch.stream_url)
+    ch.logo_url = data.get('logo_url', ch.logo_url)
+    ch.group_name = data.get('group_name', ch.group_name)
+    ch.epg_id = data.get('epg_id', ch.epg_id)
+    ch.proxy_type = data.get('proxy_type', ch.proxy_type)
+    ch.is_original = data.get('is_original', ch.is_original)
     
-    from app.modules.channels.services import ActiveSessionManager
-    success = ActiveSessionManager.remove_session(session_key)
-    return jsonify({'status': 'ok' if success else 'error'})
+    playlist_ids = data.get('selected_playlists', [])
+    from app.modules.playlists.models import PlaylistEntry
+    PlaylistEntry.query.filter_by(channel_id=id).delete()
+    for p_id in playlist_ids:
+        PlaylistService.add_channel_to_playlist(p_id, id)
+        
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
-@channels_bp.route('/active')
+@channels_bp.route('/<int:id>', methods=['DELETE'])
 @login_required
-def active_sessions_page():
-    return render_template('channels/active_sessions.html')
+def delete_channel(id):
+    ch = Channel.query.get_or_404(id)
+    db.session.delete(ch)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
-@channels_bp.route('/api/active_sessions')
+@channels_bp.route('/<int:id>/check', methods=['POST'])
 @login_required
-def get_active_sessions_api():
-    from app.modules.channels.services import ActiveSessionManager
-    from app.modules.channels.models import Channel
-    
+def check_channel(id):
+    from app.modules.health.services import HealthCheckService
+    result = HealthCheckService.check_stream(id)
+    return jsonify(result)
+
+# --- MONITORING APIs (Mounted at /api/streams) ---
+
+streams_bp = Blueprint('streams', __name__)
+
+@streams_bp.route('/active', methods=['GET'])
+@login_required
+def get_active_sessions():
     sessions = ActiveSessionManager.get_active_sessions()
-    server_stats = ActiveSessionManager.get_server_stats()
-    
     results = []
     for s in sessions:
         ch = Channel.query.get(s['channel_id'])
         results.append({
             'key': s.get('key'),
             'channel_name': ch.name if ch else 'Unknown',
-            'channel_id': s['channel_id'],
+            'channel_logo': ch.logo_url if ch else None,
             'user': s['user'],
             'ip': s['ip'],
-            'start_time': s['start_time'].strftime('%H:%M:%S'),
             'type': s['type'],
             'source': s.get('source', 'Unknown'),
             'bandwidth_kbps': s.get('bandwidth_kbps', 0),
-            'duration': int((datetime.now() - s['start_time']).total_seconds())
+            'start_time': s['start_time'].strftime('%H:%M:%S'),
+            'duration': str(datetime.now() - s['start_time']).split('.')[0]
         })
-    
-    return jsonify({
-        'status': 'ok', 
-        'sessions': results,
-        'server_stats': server_stats
-    })
+    return jsonify(results)
 
-@channels_bp.route('/api/proxy')
-@channels_bp.route('/ts-proxy')
-def proxy_stream():
-    """
-    TVHeadend-style Singleton Proxy Gateway.
-    Secured by token to prevent Auth Redirect loops in media players.
-    """
-    token = request.args.get('token')
-    username = validate_proxy_access(token)
-    if not username:
-        return "Unauthorized", 401
-    
-    # Handle nested query params in URL correctly
-    full_query = request.query_string.decode('utf-8')
-    import re
-    from urllib.parse import unquote
-    url_match = re.search(r'url=(.*?)(?:&channel_id=|&token=|$)', full_query)
-    if url_match:
-        url = unquote(url_match.group(1))
-    else:
-        url = request.args.get('url')
+@streams_bp.route('/<path:key>', methods=['DELETE'])
+@login_required
+def kill_session(key):
+    success = ActiveSessionManager.remove_session(key)
+    return jsonify({'status': 'ok' if success else 'error'})
 
-    channel_id = request.args.get('channel_id', type=int)
-    
-    if not url:
-        return "No URL provided", 400
-    
-    if url.startswith('/'):
-        url = f"{request.scheme}://{request.host}{url}"
-    
-    # 2. Singleton Proxy Logic (TVHeadend-style)
-    # This ensures only ONE connection to the source IPTV server
-    from app.modules.settings.services import SettingService
-    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
-    
-    headers = {
-        'User-Agent': ua,
-        'Accept': '*/*',
-        'Referer': url.rsplit('/', 1)[0] + '/' if '/' in url else url,
-        'Connection': 'keep-alive',
-    }
-    
-    # Background health check removed here (redundant)
+# --- PLAYBACK & REDIRECTS (Compatibility) ---
 
-    # Get the broadcast queue from the manager
-    from app.modules.channels.services import StreamManager
-    from app.modules.settings.services import SettingService
-    if not SettingService.get('ENABLE_TS_PROXY', True):
-        return "MPEG-TS Proxy is currently disabled.", 403
+@channels_bp.route('/play/<int:channel_id>', endpoint='play_channel')
+@channels_bp.route('/smartlink/<int:channel_id>')
+def play_channel(channel_id):
+    channel = Channel.query.get_or_404(channel_id)
+    channel.play_count = (channel.play_count or 0) + 1
+    db.session.commit()
+    
+    token = request.args.get('token') or (current_user.api_token if current_user.is_authenticated else None)
+    proxy = request.args.get('forced') or getattr(channel, 'proxy_type', 'none')
+    
+    url_low = channel.stream_url.lower()
+    play_url = channel.stream_url
+    
+    # Auto-extraction logic for non-direct links
+    if not any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv']):
+        from app.modules.channels.services import ExtractorService
+        res = ExtractorService.extract_direct_url(channel.stream_url)
+        if res.get('success') and res.get('links'):
+            play_url = res['links'][0]['url']
+            url_low = play_url.lower()
+
+    if proxy == 'hls' or '.m3u8' in url_low:
+        return redirect(url_for('channels.play_hls', channel_id=channel.id, token=token))
+    elif proxy == 'ts' or '.ts' in url_low:
+        return redirect(url_for('channels.play_ts', channel_id=channel.id, token=token))
         
-    global stream_manager
-    q, sid = StreamManager.get_source_stream(url, headers=headers)
+    return redirect(play_url)
+
+# --- HLS PROXY ENGINE (Optimized for performance and matching) ---
+
+@channels_bp.route('/hls-manifest/<int:channel_id>/index.m3u8', endpoint='play_hls')
+def play_hls(channel_id):
+    channel = Channel.query.get_or_404(channel_id)
+    token = request.args.get('token')
+    user = validate_proxy_access(token)
+    if not user: abort(401)
     
-    # Update Session Tracking
-    ActiveSessionManager.update_session(
-        channel_id or 0, 
-        username, 
-        request.remote_addr, 
-        'TS Singleton Proxy',
-        bandwidth_kbps=8000, 
-        user_agent=request.headers.get('User-Agent')
-    )
+    ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'HLS Proxy', bandwidth_kbps=4500)
     
-    def generate():
-        start_time = time.time()
-        bytes_total = 0
-        bytes_since_last = 0
-        try:
-            last_ping = 0
-            while True:
-                try:
-                    # Timeout ensures we don't hang if the source dies
-                    try:
-                        chunk = q.get(timeout=20) 
-                    except queue.Empty:
-                        continue # Source is slow, just keep waiting...
-                        
-                    if chunk is None: break
-                    yield chunk
-                    bytes_total += len(chunk)
-                    bytes_since_last += len(chunk)
-                    
-                    # Heartbeat for Real-time Dashboard (every 3 seconds for better bandwidth resolution)
-                    if channel_id and time.time() - last_ping > 3:
-                        # Calculate real-time bandwidth
-                        elapsed = time.time() - (last_ping or start_time)
-                        if elapsed > 0:
-                            # bits per second -> kbps
-                            kbps = int((bytes_since_last * 8) / (elapsed * 1024))
-                            ActiveSessionManager.update_session(
-                                channel_id, username, request.remote_addr, 'Proxy (TS)', 
-                                bandwidth_kbps=kbps,
-                                user_agent=request.headers.get('User-Agent')
-                            )
-                        last_ping = time.time()
-                        bytes_since_last = 0
-                except Exception as e:
-                    # Real error or disconnect
-                    break
-        finally:
-            # Clean up: remove this client from the broadcast list
-            StreamManager.remove_client(sid, q)
+    try:
+        # Standardize URL and handle potential query parameters in base_url
+        clean_stream_url = channel.stream_url.split('?')[0]
+        base_url = clean_stream_url.rsplit('/', 1)[0]
+        
+        # Use simple session with generous timeout
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
+        # Pass through query params if the source expects them (e.g. auth tokens)
+        source_url = channel.stream_url
+        resp = requests.get(source_url, headers=headers, timeout=15, verify=False)
+        
+        if resp.status_code != 200:
+            logger.error(f"HLS Source Error: {resp.status_code} for {source_url}")
+            abort(resp.status_code)
+
+        m3u8_content = resp.text
+        lines = m3u8_content.split('\n')
+        new_lines = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line: continue
             
-            # Record total stats when they finally disconnect
-            if channel_id:
-                duration = int(time.time() - start_time)
-                ActiveSessionManager.update_session(channel_id, username, request.remote_addr, 'Proxy (TS)')
+            if not line.startswith('#'):
+                # This is a URL (either variant playlist or segment)
+                url_val = line
+                if not url_val.startswith('http'):
+                    url_val = f"{base_url}/{url_val}"
                 
-                if duration > 1: # Only track if they actually connected for a bit
-                    # Use the already imported Channel and db
-                    ch = Channel.query.get(channel_id)
-                    if ch:
-                        ch.total_watch_seconds += duration
-                        # Estimate bandwidth
-                        bitrate = 2.0 
-                        if ch.resolution:
-                            res = ch.resolution.lower()
-                            if '3840' in res or '4k' in res: bitrate = 25.0
-                            elif '1920' in res or '1080' in res: bitrate = 8.0
-                            elif '1280' in res or '720' in res: bitrate = 4.0
-                        
-                        ch.total_bandwidth_mb += (bitrate * duration) / 8
-                        db.session.commit()
-
-    return Response(stream_with_context(generate()), content_type='video/mp2t')
-
-@channels_bp.route('/api/proxy_merge')
-def proxy_merge():
-    """
-    HQ Merger Proxy for YouTube/Web VOD.
-    Uses ffmpeg to combine separate HQ Video and Audio streams into one TS stream.
-    """
-    v_url = request.args.get('v')
-    a_url = request.args.get('a')
-    channel_id = request.args.get('channel_id')
-    token = request.args.get('token')
-    
-    username = validate_proxy_access(token)
-    if not username:
-        return "Unauthorized", 401
-
-    if not v_url or not a_url:
-        return "Missing streams", 400
-
-    from app.modules.channels.services import ActiveSessionManager
-    def generate():
-        import subprocess
-        from app.modules.settings.services import SettingService
-        ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
-        
-        # Command to merge V + A into MPEG-TS
-        # We add Referer and UA to each input to bypass YouTube blocks
-        cmd = [
-            'ffmpeg', '-hide_banner', '-loglevel', 'error',
-            '-headers', f'User-Agent: {ua}\r\nReferer: https://www.youtube.com/\r\n',
-            '-i', v_url,
-            '-headers', f'User-Agent: {ua}\r\nReferer: https://www.youtube.com/\r\n',
-            '-i', a_url,
-            '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
-            '-map', '0:v:0', '-map', '1:a:0',
-            '-f', 'mpegts', 'pipe:1'
-        ]
-        
-        # Start Session
-        if channel_id:
-            ActiveSessionManager.update_session(int(channel_id), username, request.remote_addr, 'HQ Merger (4K/HD)')
-        
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        try:
-            while True:
-                chunk = proc.stdout.read(256 * 1024) # 256KB chunks
-                if not chunk: break
-                yield chunk
-        finally:
-            try: proc.kill()
-            except: pass
-            
-    return Response(stream_with_context(generate()), content_type='video/mp2t', headers={
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Range',
-        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
-    })
-
-@channels_bp.route('/extractor')
-def extractor_page():
-    return render_template('channels/extractor.html')
-
-@channels_bp.route('/extract_link', methods=['POST'])
-def extract_link():
-    from app.modules.channels.services import ExtractorService
-    data = request.json or {}
-    web_url = data.get('url')
-    if not web_url:
-        return jsonify({'success': False, 'error': 'No URL provided'})
-    
-    result = ExtractorService.extract_direct_url(web_url)
-    return jsonify(result)
-
-
-@channels_bp.route('/api/playlists_with_groups')
-@login_required
-def get_playlists_with_groups():
-    from app.modules.playlists.models import PlaylistProfile
-    playlists = PlaylistProfile.query.filter_by(is_system=False).all()
-    
-    result = []
-    for pl in playlists:
-        groups = [{"id": g.id, "name": g.name} for g in pl.groups]
-        result.append({
-            "id": pl.id,
-            "name": pl.name,
-            "groups": groups
-        })
-    return jsonify({"status": "ok", "playlists": result})
-
-@channels_bp.route('/api/quick_add', methods=['POST'])
-@login_required
-def quick_add():
-    data = request.get_json()
-    channel_id = data.get('channel_id')
-    playlist_id = data.get('playlist_id')
-    group_id = data.get('group_id')
-    
-    if not channel_id or not playlist_id:
-        return jsonify({"status": "error", "message": "Missing required fields"}), 400
-        
-    from app.modules.playlists.services import PlaylistService
-    try:
-        PlaylistService.add_channel_to_playlist(playlist_id, channel_id, group_id)
-        return jsonify({"status": "ok", "message": "Added successfully"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-def rewrite_hls_manifest(content, base_url, channel_id, token):
-    """Common helper to rewrite HLS manifest URLs to proxy URLs."""
-    lines = content.splitlines()
-    new_lines = []
-
-    for line in lines:
-        line = line.strip()
-        if not line: continue
-
-        if line.startswith('#'):
-            # Handle Encryption Keys
-            if 'URI=' in line:
-                import re
-                match = re.search(r'URI=["\']?(.*?)["\']?(?:,|$)', line)
-                if match:
-                    key_url = match.group(1)
-                    if not key_url.startswith('http'):
-                        if key_url.startswith('/'):
-                            from urllib.parse import urlparse
-                            p = urlparse(base_url) # base_url already contains host
-                            key_url = f"{p.scheme}://{p.netloc}{key_url}"
-                        else:
-                            key_url = base_url + key_url
-
-                    proxied_key = url_for('channels.proxy_hls_segment', channel_id=channel_id, url=key_url, token=token, _external=True)
-                    line = line.replace(match.group(1), proxied_key)
-            new_lines.append(line)
-        else:
-            # It's a segment or variant playlist
-            seg_url = line
-            if not seg_url.startswith('http'):
-                if seg_url.startswith('/'):
-                    from urllib.parse import urlparse
-                    p = urlparse(base_url)
-                    seg_url = f"{p.scheme}://{p.netloc}{seg_url}"
+                # RECURSIVE PROXY: If child is also an m3u8, route it back through play_hls
+                if '.m3u8' in url_val.split('?')[0].lower():
+                    # We use _external=True to ensure compatibility with external players (Smartlink)
+                    proxy_url = url_for('channels.play_hls_direct', url=url_val, token=token, _external=True)
                 else:
-                    seg_url = base_url + seg_url
-
-            new_lines.append(url_for('channels.proxy_hls_segment', channel_id=channel_id, url=seg_url, token=token, _external=True))
-
-    return "\n".join(new_lines)
-
-@channels_bp.route('/api/proxy_hls_manifest')
-@channels_bp.route('/hls-proxy')
-def proxy_hls_manifest():
-    from app.modules.settings.services import SettingService
-    if not SettingService.get('ENABLE_HLS_PROXY', True):
-        return "HLS Proxy is currently disabled.", 403
-
-    token = request.args.get('token')
-    username = validate_proxy_access(token)
-    if not username:
-        return "Unauthorized", 401
-
-    channel_id = request.args.get('channel_id')
-    channel = Channel.query.get_or_404(channel_id)
-
-    url = request.args.get('url') or channel.stream_url
-    if not url:
-        return "No URL provided", 400
-
-    from app.modules.settings.services import SettingService
-    ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
-    headers = { 'User-Agent': ua }
-
-    # Background health check removed here (redundant)
-
-    try:
-        from app.modules.channels.services import ActiveSessionManager
+                    # Media Segment
+                    proxy_url = url_for('channels.proxy_hls_segment', token=token, url=url_val, _external=True)
+                
+                new_lines.append(proxy_url)
+            else:
+                new_lines.append(line)
         
-        resp = requests.get(url, headers=headers, timeout=10, verify=False)
-        pure_url = url.split('?')[0]
-        base_url = pure_url.rsplit('/', 1)[0] + '/'
-
-        rewritten = rewrite_hls_manifest(resp.text, base_url, channel_id, token)
-        
-        # Update Session Tracking
-        ActiveSessionManager.update_session(
-            channel.id, username, request.remote_addr, 'HLS Proxy',
-            bandwidth_kbps=4000, # Approximate for HLS
-            user_agent=request.headers.get('User-Agent')
-        )
-
-        return Response(
-            rewritten, 
-            mimetype='application/vnd.apple.mpegurl',
-            headers={
-                'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'no-cache'
-            }
-        )
+        return Response('\n'.join(new_lines), mimetype='application/x-mpegurl')
     except Exception as e:
-        return str(e), 500
+        logger.error(f"HLS Manifest Proxy Error: {e}", exc_info=True)
+        abort(502)
 
-@channels_bp.route('/original/<int:channel_id>')
-def direct_original_link(channel_id):
-    """Bypasses everything and redirects to the source URL."""
+@channels_bp.route('/hls-direct', endpoint='play_hls_direct')
+def play_hls_direct():
+    """Proxy for nested playlists that doesn't rely on a Channel ID from Database."""
+    url = request.args.get('url')
+    token = request.args.get('token')
+    if not validate_proxy_access(token): abort(401)
+    
+    try:
+        base_url = url.split('?')[0].rsplit('/', 1)[0]
+        resp = requests.get(url, timeout=15, verify=False)
+        lines = resp.text.split('\n')
+        new_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+            if not line.startswith('#'):
+                full_url = line if line.startswith('http') else f"{base_url}/{line}"
+                if '.m3u8' in full_url.split('?')[0].lower():
+                    proxy_url = url_for('channels.play_hls_direct', url=full_url, token=token, _external=True)
+                else:
+                    proxy_url = url_for('channels.proxy_hls_segment', token=token, url=full_url, _external=True)
+                new_lines.append(proxy_url)
+            else:
+                new_lines.append(line)
+        return Response('\n'.join(new_lines), mimetype='application/x-mpegurl')
+    except Exception as e:
+        logger.error(f"Nested HLS Proxy Error: {e}")
+        abort(502)
+
+@channels_bp.route('/hls-segment', endpoint='proxy_hls_segment')
+def proxy_hls_segment():
+    url = request.args.get('url')
+    token = request.args.get('token')
+    if not validate_proxy_access(token): abort(401)
+    
+    data = HLSEngine.get_segment(url)
+    if not data: abort(404)
+    return Response(data, mimetype='video/MP2T')
+
+@channels_bp.route('/ts-proxy/<int:channel_id>', endpoint='play_ts')
+def play_ts(channel_id):
     channel = Channel.query.get_or_404(channel_id)
+    token = request.args.get('token')
+    user = validate_proxy_access(token)
+    if not user: abort(401)
+    
+    ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'TS Proxy', bandwidth_kbps=8000)
+    return redirect(url_for('channels.proxy_stream', url=channel.stream_url, channel_id=channel.id, token=token))
+
+
+@channels_bp.route('/track/<int:channel_id>')
+def track_redirect(channel_id):
+    channel = Channel.query.get_or_404(channel_id)
+    token = request.args.get('token')
+    user = validate_proxy_access(token)
+    if not user: abort(401)
+    ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'Redirect', bandwidth_kbps=4000)
     return redirect(channel.stream_url)
 
-@channels_bp.route('/api/proxy_hls_segment')
-def proxy_hls_segment():
-    from app.modules.settings.services import SettingService
-    if not SettingService.get('ENABLE_HLS_PROXY', True):
-        return "HLS Proxy is currently disabled.", 403
-
-    token = request.args.get('token')
-    username = validate_proxy_access(token)
-    if not username:
-        return "Unauthorized", 401
-
-    channel_id = request.args.get('channel_id')
+@channels_bp.route('/proxy/ts')
+def proxy_stream():
     url = request.args.get('url')
-
-    if not channel_id or not url:
-        return "Missing params", 400
-
-    from app.modules.settings.services import SettingService
-    default_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-    ua = SettingService.get('CUSTOM_USER_AGENT', default_ua)
-    headers = { 'User-Agent': ua }
-
-    try:
-        from app.modules.channels.services import ActiveSessionManager, HLSEngine
-        from app.modules.channels.models import Channel
-        ch = Channel.query.get(channel_id)
-        bitrate = 2.0
-        if ch and ch.resolution:
-            res = ch.resolution.lower()
-            if '3840' in res or '4k' in res: bitrate = 25.0
-            elif '1920' in res or '1080' in res: bitrate = 8.0
-            elif '1280' in res or '720' in res: bitrate = 4.0
-
-        ActiveSessionManager.update_session(
-            int(channel_id), username, request.remote_addr, 'Proxy (HLS)',
-            bandwidth_kbps=int(bitrate * 1024),
-            user_agent=request.headers.get('User-Agent')
-        )
-
-        # 1. Check if it's a Variant Playlist (m3u8)
-        if '.m3u8' in url.lower() or 'playlist' in url.lower():
-            resp = requests.get(url, headers=headers, timeout=10)
-            pure_url = url.split('?')[0]
-            base_url = pure_url.rsplit('/', 1)[0] + '/'
-
-            rewritten = rewrite_hls_manifest(resp.text, base_url, channel_id, token)
-            return Response(
-                rewritten, 
-                mimetype='application/vnd.apple.mpegurl',
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-
-        # 2. It's a Media Segment (ts, m4s). Use Cache Engine.
-        data = HLSEngine.get_segment(url, headers=headers)
-
-        if data:
-            if ch:
-                ch.total_watch_seconds = (ch.total_watch_seconds or 0) + 8 
-                db.session.commit()
-
-            content_type = 'video/mp2t'
-            if url.lower().endswith('.m4s'): content_type = 'video/iso.segment'
-            if url.lower().endswith('.aac'): content_type = 'audio/aac'
-
-            return Response(
-                data, 
-                content_type=content_type,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-        else:
-            return redirect(url)
-
-    except Exception as e:
-        logger.error(f"HLS Proxy Error for {url}: {e}")
-        return redirect(url)
-
-# --- PERMISSION SYSTEM APIs ---
-
-@channels_bp.route('/api/share/<int:channel_id>', methods=['POST'])
-@login_required
-def share_channel(channel_id):
-    from app.modules.auth.models import User
-    from app.modules.channels.models import ChannelShare
+    cid = request.args.get('channel_id')
+    token = request.args.get('token')
+    user = validate_proxy_access(token)
+    if not user: abort(401)
     
-    channel = Channel.query.get_or_404(channel_id)
-    if current_user.role != 'admin' and channel.owner_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Chỉ chủ sở hữu kênh mới được thao tác chia sẻ.'}), 403
-        
+    q, sid = StreamManager.get_source_stream(url)
+    def generate():
+        try:
+            while True:
+                chunk = q.get(timeout=20)
+                if chunk is None: break
+                yield chunk
+        finally:
+            StreamManager.remove_client(sid, q)
+            
+    return Response(stream_with_context(generate()), content_type='video/mp2t')
+
+@channels_bp.route('/player_ping', methods=['POST'])
+def player_ping():
     data = request.json or {}
-    to_username = data.get('username')
-    access_level = data.get('access_level', 'read')
+    cid = data.get('channel_id')
+    sec = data.get('seconds', 30)
+    ch = Channel.query.get(cid)
+    if not ch: return jsonify({'error': 'NF'}), 404
     
-    target_user = User.query.filter_by(username=to_username).first()
-    if not target_user:
-        return jsonify({'success': False, 'message': 'User không tồn tại.'}), 404
-        
-    if target_user.id == current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không thể tự chia sẻ cho chính mình.'}), 400
-
-    existing_share = ChannelShare.query.filter_by(channel_id=channel_id, to_user_id=target_user.id).first()
-    if existing_share:
-        existing_share.access_level = access_level
-        existing_share.status = 'pending'
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Đã gửi lại yêu cầu chia sẻ.'})
-        
-    new_share = ChannelShare(
-        channel_id=channel_id,
-        from_user_id=current_user.id,
-        to_user_id=target_user.id,
-        access_level=access_level
-    )
-    db.session.add(new_share)
+    bitrate = 8.0 # Default HD estimate
+    ch.total_watch_seconds = (ch.total_watch_seconds or 0) + sec
+    ch.total_bandwidth_mb = (ch.total_bandwidth_mb or 0) + (bitrate * sec) / 8
+    
+    ActiveSessionManager.update_session(cid, current_user.username if current_user.is_authenticated else 'Guest', request.remote_addr, 'Web Player', bandwidth_kbps=int(bitrate * 1024))
     db.session.commit()
-    
-    return jsonify({'success': True, 'message': 'Đã gửi yêu cầu chia sẻ thành công!'})
-
-@channels_bp.route('/shares', methods=['GET'])
-@login_required
-def view_requests():
-    """Page to view incoming share requests"""
-    from app.modules.channels.models import ChannelShare
-    
-    incoming_shares = ChannelShare.query.filter_by(to_user_id=current_user.id, status='pending').all()
-    
-    pending_publics = []
-    if current_user.role == 'admin':
-        pending_publics = Channel.query.filter_by(public_status='pending').all()
-        
-    return render_template('channels/requests.html', incoming_shares=incoming_shares, pending_publics=pending_publics)
-
-@channels_bp.route('/api/shares/<int:share_id>/respond', methods=['POST'])
-@login_required
-def respond_share(share_id):
-    from app.modules.channels.models import ChannelShare
-    share = ChannelShare.query.get_or_404(share_id)
-    
-    if share.to_user_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Không có quyền thao tác'}), 403
-        
-    action = request.json.get('action') # 'accept' or 'reject'
-    if action == 'accept':
-        share.status = 'accepted'
-    elif action == 'reject':
-        share.status = 'rejected'
-    else:
-        return jsonify({'success': False, 'message': 'Invalid action'}), 400
-        
-    db.session.commit()
-    return jsonify({'success': True})
-
-@channels_bp.route('/api/request_public/<int:channel_id>', methods=['POST'])
-@login_required
-def request_public(channel_id):
-    channel = Channel.query.get_or_404(channel_id)
-    if channel.owner_id != current_user.id and current_user.role != 'admin':
-        return jsonify({'success': False, 'message': 'Chỉ chủ sở hữu mới có quyền xin duyệt public.'}), 403
-        
-    channel.public_status = 'pending'
-    db.session.commit()
-    return jsonify({'success': True, 'message': 'Đã gửi yêu cầu thao tác Public thành công!'})
-
-@channels_bp.route('/api/approve_public/<int:channel_id>', methods=['POST'])
-@login_required
-def approve_public(channel_id):
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
-        
-    action = request.json.get('action') # 'approve' or 'reject'
-    channel = Channel.query.get_or_404(channel_id)
-    
-    if action == 'approve':
-        channel.is_public = True
-        channel.public_status = 'approved'
-    elif action == 'reject':
-        channel.is_public = False
-        channel.public_status = 'rejected'
-        
-    db.session.commit()
-    return jsonify({'success': True})
+    return jsonify({'status': 'ok'})

@@ -15,7 +15,7 @@ export const Player: React.FC<{ user: { username: string, role: string } }> = ({
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
-  const [activeMode, setActiveMode] = useState<string>('smart');
+  const [activeMode, setActiveMode] = useState<string>('SMART');
   const [stats, setStats] = useState({ fps: 0, audio: 'SCANNING...', resolution: '0X0' });
   const videoEngineRef = useRef<VideoEngineRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -23,7 +23,7 @@ export const Player: React.FC<{ user: { username: string, role: string } }> = ({
   const handleSelectChannel = (channel: any) => {
     setActiveChannel(channel);
     setCurrentUrl(channel.play_url);
-    setActiveMode('smart');
+    setActiveMode('SMART');
     setStatus('loading');
     setError(null);
     setStats({ fps: 0, audio: 'SCANNING...', resolution: '0X0' });
@@ -47,7 +47,7 @@ export const Player: React.FC<{ user: { username: string, role: string } }> = ({
 
   const handleOpenVLC = () => {
     if (!activeChannel) return;
-    window.location.assign(`/channels/vlc-launcher/${activeChannel.id}`);
+    window.location.assign(`/api/channels/play/${activeChannel.id}?token=${localStorage.getItem('api_token') || ''}&forced=vlc`);
   };
 
   return (

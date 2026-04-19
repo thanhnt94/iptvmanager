@@ -74,7 +74,7 @@ class PlaylistService:
         return entry
 
     @staticmethod
-    def generate_m3u(playlist_id, epg_url=None, token=None):
+    def generate_m3u(playlist_id, epg_url=None, token=None, hide_die=False, mode=None):
         """Generates M3U8 string for a playlist with wrapped playback URLs."""
         from flask import url_for
         from app.modules.playlists.models import PlaylistProfile
@@ -89,56 +89,74 @@ class PlaylistService:
         
         # Determine which channels to include
         if profile.is_system:
-            # System playlist ONLY includes LIVE channels
-            channels = Channel.query.filter_by(status='live').all()
+            # System playlist handling
+            if hide_die:
+                channels = Channel.query.filter_by(status='live').all()
+            else:
+                channels = Channel.query.all()
+                
             for ch in channels:
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch.name}'
                 m3u_lines.append(extinf)
-                # ALL CHANNELS NOW USE THE SMART GATEWAY BY DEFAULT
+                
                 wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
                 
-                ptype = ch.proxy_type or 'default'
-                
-                if ptype == 'none' or ptype == 'direct':
-                    # Only use raw URL if explicitly set to direct
+                # Determine URL based on forced mode or channel default
+                if mode == 'direct':
                     wrapper_url = ch.stream_url
-                elif ptype == 'tracking':
+                elif mode == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                elif ptype == 'hls':
-                    wrapper_url = url_for('channels.proxy_hls_manifest', **wrapper_params)
-                else: # 'default' or 'ts'
-                    # The Smart Brain Gateway
+                elif mode == 'smart':
                     wrapper_url = url_for('channels.play_channel', **wrapper_params)
+                else:
+                    # Fallback to channel specific setting
+                    ptype = ch.proxy_type or 'default'
+                    if ptype == 'none' or ptype == 'direct':
+                        wrapper_url = ch.stream_url
+                    elif ptype == 'tracking':
+                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
+                    elif ptype == 'hls':
+                        wrapper_url = url_for('channels.play_hls', **wrapper_params)
+                    else:
+                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 
                 m3u_lines.append(wrapper_url)
         else:
             # Regular playlist uses its entries
             for entry in profile.entries:
                 ch = entry.channel
-                if ch.status == 'die':
+                # Filter if hide_die is active
+                if hide_die and ch.status != 'live':
                     continue
+                    
                 group_name = entry.group.name if entry.group else ch.group_name or ""
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch.name}'
                 m3u_lines.append(extinf)
-                # ALL CHANNELS NOW USE THE SMART GATEWAY BY DEFAULT
+                
                 wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
-                
-                ptype = ch.proxy_type or 'default'
-                
-                if ptype == 'none' or ptype == 'direct':
-                    # Only use raw URL if explicitly set to direct
+
+                # Determine URL based on forced mode or channel default
+                if mode == 'direct':
                     wrapper_url = ch.stream_url
-                elif ptype == 'tracking':
+                elif mode == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                elif ptype == 'hls':
-                    wrapper_url = url_for('channels.proxy_hls_manifest', **wrapper_params)
-                else: # 'default' or 'ts'
-                    # The Smart Brain Gateway
+                elif mode == 'smart':
                     wrapper_url = url_for('channels.play_channel', **wrapper_params)
+                else:
+                    # Fallback to channel specific setting
+                    ptype = ch.proxy_type or 'default'
+                    if ptype == 'none' or ptype == 'direct':
+                        wrapper_url = ch.stream_url
+                    elif ptype == 'tracking':
+                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
+                    elif ptype == 'hls':
+                        wrapper_url = url_for('channels.play_hls', **wrapper_params)
+                    else:
+                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 
                 m3u_lines.append(wrapper_url)
             
-        return "\n".join(m3u_lines)
+        return "\r\n".join(m3u_lines)
 
     @staticmethod
     def generate_xmltv(playlist_id):
@@ -287,3 +305,16 @@ class PlaylistService:
             db.session.commit()
             return True
         return False
+
+    @staticmethod
+    def delete_profile(playlist_id):
+        """Deletes a playlist profile if it is not a system playlist."""
+        profile = PlaylistProfile.query.get(playlist_id)
+        if not profile:
+            return False, "Playlist not found"
+        if profile.is_system:
+            return False, "Cannot delete system playlist"
+        
+        db.session.delete(profile)
+        db.session.commit()
+        return True, "Playlist deleted"

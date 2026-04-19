@@ -60,7 +60,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ channel, onClose }) 
 
   useEffect(() => {
     if (channel) {
-      setActiveUrl(channel.play_links?.smart || `/channels/play/${channel.id}?token=${localStorage.getItem('api_token') || ''}`);
+      setActiveUrl(channel.play_links?.smart || `/api/channels/play/${channel.id}?token=${localStorage.getItem('api_token') || ''}`);
       setActiveMode('smart');
       setIsPlaying(true);
       setCurrentTime(0);
@@ -120,7 +120,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ channel, onClose }) 
     
     try {
       // Trigger backend check to refresh source
-      await fetch(`/channels/check/${channel.id}`, { method: 'POST' });
+      await fetch(`/api/channels/${channel.id}/check`, { method: 'POST' });
       // Restore URL
       setTimeout(() => {
         setActiveUrl(originalUrl);
@@ -380,7 +380,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ channel, onClose }) 
                       </button>
 
                       <button 
-                        onClick={() => window.location.assign(`/channels/vlc-launcher/${channel.id}?token=${localStorage.getItem('api_token') || ''}`)}
+                        onClick={() => window.location.assign(`/api/channels/play/${channel.id}?token=${localStorage.getItem('api_token') || ''}&forced=vlc`)}
                         className="h-[48px] px-6 bg-orange-600 hover:bg-orange-500 text-white rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg shadow-orange-600/20 active:scale-95 border border-white/10 shrink-0"
                         title="Launch VLC Media Player"
                       >

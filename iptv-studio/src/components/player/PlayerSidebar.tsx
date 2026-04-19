@@ -58,59 +58,105 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('');
   const [channels, setChannels] = useState<Channel[]>([]);
   const [search, setSearch] = useState('');
+  const [hideDie, setHideDie] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
   
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch initial playlists
   useEffect(() => {
-    fetch('/channels/api/player/playlists')
-      .then(res => res.json())
+    setLoading(true);
+    const timeout = setTimeout(() => {
+      if (loading) setLoading(false);
+    }, 5000); // 5s absolute fail-safe
+
+    fetch('/api/playlists')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => {
-        setPlaylists(data);
-        if (data.length > 0) setSelectedPlaylist(data[0].id);
+        clearTimeout(timeout);
+        if (Array.isArray(data)) {
+          setPlaylists(data);
+          if (data.length > 0) {
+            setSelectedPlaylist(data[0].id);
+          } else {
+            setLoading(false);
+          }
+        } else {
+          throw new Error("Invalid format");
+        }
+      })
+      .catch(err => {
+        clearTimeout(timeout);
+        console.error("Playlists fetch error:", err);
+        setError("Source catalog unreachable");
+        setLoading(false);
       });
   }, []);
 
   // Fetch categories when playlist changes
   useEffect(() => {
     if (selectedPlaylist === null) return;
-    fetch(`/channels/web-player/categories/${selectedPlaylist}`)
+    fetch(`/api/playlists/groups/${selectedPlaylist}`)
       .then(res => res.json())
-      .then(data => setCategories(data.categories || []));
+      .then(data => {
+        const cats = data.categories || data.groups || [];
+        setCategories(Array.isArray(cats) ? cats : []);
+      })
+      .catch(err => console.error("Categories fetch error:", err));
   }, [selectedPlaylist]);
 
   const fetchChannels = useCallback(async (reset = false) => {
-    if (selectedPlaylist === null) return;
+    if (selectedPlaylist === null) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setError(null);
     const currentPage = reset ? 1 : page;
     const params = new URLSearchParams({
       page: currentPage.toString(),
       group: selectedCategory,
       q: debouncedSearch,
+      hide_die: hideDie.toString(),
       limit: '100'
     });
 
     try {
-      const res = await fetch(`/channels/web-player/channels/${selectedPlaylist}?${params.toString()}`);
+      const res = await fetch(`/api/playlists/entries/${selectedPlaylist}?${params.toString()}`);
+      const contentType = res.headers.get("content-type");
+      if (!res.ok || !contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Non-JSON response received:", text.substring(0, 200));
+        throw new Error(`Invalid response: ${res.status} ${contentType}`);
+      }
+
       const data = await res.json();
       
-      const enhancedChannels = (data.channels || []).map((ch: any) => ({
-        ...ch,
-        play_links: {
-          'SMART': ch.play_url,
-          'ORIGINAL': ch.stream_url,
-          'VLC': `vlc://${ch.play_url.replace(/^https?:\/\//, '')}`,
-          'POTPLAYER': `potplayer://${ch.play_url.replace(/^https?:\/\//, '')}`
-        }
-      }));
+      const enhancedChannels = (data.channels || []).map((ch: any) => {
+        // Backend now returns play_links. We preserve them and add VLC/PotPlayer
+        const playLinks = ch.play_links || { 'smart': ch.play_url };
+        const smartUrl = playLinks.smart || ch.play_url || '';
+        const cleanUrl = smartUrl.replace(/^https?:\/\//, '');
+        
+        return {
+          ...ch,
+          play_links: {
+            ...playLinks,
+            'vlc': smartUrl ? `vlc://${cleanUrl}` : '',
+            'potplayer': smartUrl ? `potplayer://${cleanUrl}` : ''
+          }
+        };
+      });
 
       if (reset) {
         setChannels(enhancedChannels);
-        // Scroll to top on fresh list
         if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
       } else {
         setChannels(prev => [...prev, ...enhancedChannels]);
@@ -118,16 +164,17 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
       setHasMore(data.has_more);
       setPage(currentPage + 1);
     } catch (err) {
-      console.error("Fetch failed", err);
+      console.error("Fetch channels failed:", err);
+      setError("Failed to load channel data. Check console for details.");
     } finally {
       setLoading(false);
     }
-  }, [selectedPlaylist, selectedCategory, debouncedSearch, page]);
+  }, [selectedPlaylist, selectedCategory, debouncedSearch, page, hideDie]);
 
-  // Handle fresh load on filter/search change
+  // Trigger fetch on filter change
   useEffect(() => {
     fetchChannels(true);
-  }, [selectedPlaylist, selectedCategory, debouncedSearch]);
+  }, [selectedPlaylist, selectedCategory, debouncedSearch, hideDie, fetchChannels]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -185,19 +232,33 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
               </div>
             </div>
 
-            {/* Search Input */}
-            <div className="relative group">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
-               <input 
-                 type="text" 
-                 placeholder="Quick Search..." 
-                 value={search}
-                 onChange={e => setSearch(e.target.value)}
-                 className="w-full bg-slate-950/60 border border-white/5 rounded-xl pl-10 pr-4 py-2 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/20 placeholder:text-white/10 hover:bg-slate-950 transition-all"
-               />
-               {loading && search && (
-                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-500 animate-spin" size={14} />
-               )}
+            {/* Search Input & Toolbelt */}
+            <div className="flex gap-2">
+               <div className="relative flex-1 group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
+                  <input 
+                    type="text" 
+                    placeholder="Quick Search..." 
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full bg-slate-950/60 border border-white/5 rounded-xl pl-10 pr-4 py-2 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/20 placeholder:text-white/10 hover:bg-slate-950 transition-all font-bold"
+                  />
+                  {loading && search && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-500 animate-spin" size={14} />
+                  )}
+               </div>
+
+               <button 
+                onClick={() => setHideDie(!hideDie)}
+                title={hideDie ? "Showing Live Only" : "Exclude Offline"}
+                className={`flex items-center justify-center w-9 h-9 rounded-xl border transition-all ${
+                  hideDie 
+                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.2)]' 
+                  : 'bg-white/5 border-white/5 text-white/20 hover:bg-white/10'
+                }`}
+               >
+                 {hideDie ? <WifiOff size={16} /> : <Zap size={16} />}
+               </button>
             </div>
          </div>
       </div>
@@ -291,6 +352,13 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
         {loading && (
           <div className="py-12 text-center">
              <Loader2 className="animate-spin text-indigo-500/40 mx-auto" size={24} />
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="py-12 text-center px-4">
+            <p className="text-[10px] text-rose-400 font-black uppercase tracking-widest mb-2">{error}</p>
+            <p className="text-[8px] text-white/20 uppercase tracking-[0.2em] leading-relaxed">Please check your connection or console for details</p>
           </div>
         )}
       </div>

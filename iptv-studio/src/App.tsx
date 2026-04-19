@@ -35,7 +35,7 @@ const App: React.FC = () => {
   if (user === undefined) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-500 animate-pulse text-xs font-black uppercase tracking-widest">Identifying Session...</div>;
 
   return (
-    <Router basename="/studio">
+    <Router>
       <Routes>
         <Route path="/login" element={
           user ? <Navigate to="/" replace /> : <LoginPage onLoginSuccess={(u) => setUser(u)} />

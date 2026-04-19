@@ -441,23 +441,24 @@ class HLSEngine:
 
     @classmethod
     def get_segment(cls, url, headers=None):
+        if not url:
+            return None
+            
         from app.modules.settings.services import SettingService
         now = time.time()
         
         # 1. Check Cache
         with cls._lock:
             if url in cls._cache:
-                # logger.debug(f"HLSEngine: Cache HIT for {url[-20:]}")
                 return cls._cache[url]['data']
 
         # 2. Cache MISS: Download from source
         try:
-            # logger.debug(f"HLSEngine: Cache MISS, downloading {url[-20:]}")
             if not headers:
                 ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
                 headers = {'User-Agent': ua, 'Referer': url.rsplit('/', 1)[0] + '/'}
                 
-            resp = requests.get(url, headers=headers, timeout=10, verify=False)
+            resp = requests.get(url, headers=headers, timeout=12, verify=False)
             if resp.status_code == 200:
                 data = resp.content
                 
@@ -471,9 +472,9 @@ class HLSEngine:
                         
                 return data
             else:
-                logger.error(f"HLSEngine: Source returned {resp.status_code} for {url[-40:]}")
+                logger.error(f"HLSEngine: Source HTTP {resp.status_code} for {url}")
         except Exception as e:
-            logger.error(f"HLSEngine: Download error for {url[-40:]}: {e}")
+            logger.error(f"HLSEngine: Fetch exception for {url}: {e}")
             
         return None
 

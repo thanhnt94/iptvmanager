@@ -96,7 +96,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
         >
           {/* Top Bar - Pro OSD & Action Central */}
           <div className="bg-gradient-to-b from-black/90 to-transparent p-[clamp(12px,2.5cqw,24px)] pointer-events-auto">
-             <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
+             <div className="flex items-center justify-between w-full max-max-7xl mx-auto">
                 <div className="flex items-center gap-[clamp(12px,2.5cqw,24px)]">
                    <button onClick={onTogglePlay} className="text-white hover:text-indigo-400 transition-all hover:scale-110 active:scale-95">
                       {isPlaying ? <Pause size="clamp(20px,3cqw,28px)" fill="currentColor" /> : <Play size="clamp(20px,3cqw,28px)" fill="currentColor" />}
@@ -161,7 +161,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
           <div className="flex-1" />
 
           {/* Bottom HUD - Pro High-Contrast Area - RESTORED BUT SLIM ON MOBILE */}
-          <div className="bg-slate-950/80 lg:bg-slate-950/95 backdrop-blur-2xl lg:backdrop-blur-3xl border-t border-white/5 p-3 lg:p-[clamp(8px,2cqw,24px)] lg:pb-[clamp(16px,4cqw,40px)] pointer-events-auto shrink-0">
+          <div className="bg-slate-950/80 lg:bg-slate-950/95 backdrop-blur-2xl lg:backdrop-blur-3xl border-t border-white/5 p-3 lg:p-[clamp(8px,2cqw,24px)] lg:pb-[clamp(16px,4cqw,40px)] pointer-events-auto shrink-0 relative">
              <div className="flex items-center lg:items-end justify-between gap-3 lg:gap-[clamp(12px,4cqw,24px)] max-w-7xl mx-auto">
                 <div className="flex items-center gap-3 lg:gap-[clamp(10px,4cqw,24px)] min-w-0 w-full lg:w-auto">
                    {/* White Logo Box - Scaled for Mobile/Desktop */}
@@ -280,38 +280,51 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                    </div>
                 </div>
              </div>
-          </div>
 
-          {/* Source Selector Overlay - More Pro UI */}
-          <AnimatePresence>
-             {showSettings && (
-               <motion.div 
-                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                 className="absolute bottom-[clamp(100px,15vh,200px)] lg:bottom-full left-1/2 -translate-x-1/2 lg:left-[clamp(80px,15cqw,120px)] lg:translate-x-0 mb-[clamp(10px,2cqw,20px)] bg-slate-900/90 backdrop-blur-3xl rounded-2xl border border-white/10 p-[clamp(8px,1.5cqw,16px)] shadow-3xl z-50 min-w-[clamp(180px,20cqw,250px)]"
-               >
-                  <div className="space-y-1">
-                     <span className="font-black text-white/20 uppercase tracking-[0.2em] px-3 block mb-2" style={{ fontSize: 'clamp(7px,0.8cqw,10px)' }}>Link Gateway</span>
-                     {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => (
-                       <button 
-                         key={mode}
-                         onClick={() => {
-                           onSelectLink(url, mode);
-                           setShowSettings(false);
-                         }}
-                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
-                           activeMode === mode ? 'bg-indigo-600 text-white' : 'hover:bg-white/5 text-white/40'
-                         }`}
-                       >
-                         <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(10px,1cqw,12px)' }}>{mode}</span>
-                         {activeMode === mode && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-                       </button>
-                     ))}
-                  </div>
-               </motion.div>
-             )}
-          </AnimatePresence>
+             {/* Source Selector Overlay - Nested for pointer-events consistency */}
+             <AnimatePresence>
+                {showSettings && (
+                   <motion.div 
+                     initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                     animate={{ opacity: 1, scale: 1, y: 0 }}
+                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                     className="absolute bottom-full left-1/2 -translate-x-1/2 lg:left-[clamp(80px,15cqw,120px)] lg:translate-x-0 mb-[clamp(10px,2cqw,20px)] bg-slate-900/90 backdrop-blur-3xl rounded-2xl border border-white/10 p-[clamp(8px,1.5cqw,16px)] shadow-3xl z-50 min-w-[clamp(180px,20cqw,250px)] pointer-events-auto"
+                   >
+                     <div className="space-y-1">
+                        <span className="font-black text-white/20 uppercase tracking-[0.2em] px-3 block mb-2" style={{ fontSize: 'clamp(7px,0.8cqw,10px)' }}>Link Gateway</span>
+                        {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
+                          const labelMap: Record<string, string> = {
+                            'hls': 'HLS Cache',
+                            'ts': 'TLS Cache',
+                            'tracking': 'Tracking',
+                            'original': 'Original',
+                            'smart': 'SMart',
+                            'vlc': 'VLC Player',
+                            'potplayer': 'PotPlayer'
+                          };
+                          const displayLabel = labelMap[mode.toLowerCase()] || mode.toUpperCase();
+
+                          return (
+                            <button 
+                              key={mode}
+                              onClick={() => {
+                                onSelectLink(url as string, mode);
+                                setShowSettings(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
+                                activeMode === mode ? 'bg-indigo-600 text-white' : 'hover:bg-white/5 text-white/40'
+                              }`}
+                            >
+                              <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(10px,1cqw,12px)' }}>{displayLabel}</span>
+                              {activeMode === mode && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+                            </button>
+                          );
+                        })}
+                     </div>
+                  </motion.div>
+                )}
+             </AnimatePresence>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
