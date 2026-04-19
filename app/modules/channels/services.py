@@ -1,4 +1,5 @@
 import subprocess
+import shutil
 import xml.etree.ElementTree as ET
 from datetime import datetime
 import os
@@ -140,13 +141,22 @@ class StreamManager:
 
     @classmethod
     def _run_ffmpeg_pipe(cls, url, headers, sid):
-        logger.info(f"StreamEngine: Starting FFmpeg remuxer for {url}")
+        from app.modules.settings.services import SettingService
+        ffmpeg_bin = SettingService.get('FFMPEG_PATH', 'ffmpeg')
+        
+        # Robust path discovery
+        ffmpeg_path = shutil.which(ffmpeg_bin)
+        if not ffmpeg_path:
+            logger.error(f"StreamEngine: FFmpeg binary not found: {ffmpeg_bin}. Please install FFmpeg or set FFMPEG_PATH.")
+            with cls._lock:
+                if sid in cls._streams: del cls._streams[sid]
+            return
+
+        logger.info(f"StreamEngine: Starting FFmpeg remuxer ({ffmpeg_path}) for {url}")
         
         ua = headers.get('User-Agent', 'Mozilla/5.0') if headers else 'Mozilla/5.0'
-        # Command to remux to TS. If it fails, we might need full transcode, 
-        # but -c copy is much faster.
         cmd = [
-            'ffmpeg', '-y',
+            ffmpeg_path, '-y',
             '-user_agent', ua,
             '-loglevel', 'error',
             '-i', url,

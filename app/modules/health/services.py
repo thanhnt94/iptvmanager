@@ -1,5 +1,6 @@
 import requests
 import subprocess
+import shutil
 import json
 import time
 from datetime import datetime
@@ -123,8 +124,16 @@ class HealthCheckService:
                 probe_url = ext_res['links'][0]['url']
                 logger.debug(f"HealthCheck: Probing extracted URL for {channel.name}")
 
+        from app.modules.settings.services import SettingService
+        ffprobe_bin = SettingService.get('FFPROBE_PATH', 'ffprobe')
+        ffprobe_path = shutil.which(ffprobe_bin)
+        
+        if not ffprobe_path:
+            logger.error(f"HealthCheckService: FFprobe binary not found: {ffprobe_bin}. Please install FFmpeg/FFprobe.")
+            return False
+
         cmd = [
-            'ffprobe', '-v', 'quiet', 
+            ffprobe_path, '-v', 'quiet', 
             '-print_format', 'json', 
             '-show_streams', '-show_format',
             '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
