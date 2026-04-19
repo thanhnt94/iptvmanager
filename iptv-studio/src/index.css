@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+body {
+  background-color: #020617; /* slate-950 */
+  color: #f8fafc; /* slate-50 */
+  font-family: Inter, sans-serif;
+  min-height: 100vh;
+}
+
+.glass {
+  background-color: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.player-container {
+  container-type: inline-size;
+  container-name: player;
+}

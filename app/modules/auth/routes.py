@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from app.modules.auth.services import AuthService, admin_required
 from app.modules.playlists.models import PlaylistProfile
@@ -10,8 +10,19 @@ def login():
     from app.modules.settings.models import SystemSetting
     use_sso = SystemSetting.query.filter_by(key='USE_CENTRAL_AUTH').first()
     if request.method == 'GET' and use_sso and use_sso.value.lower() == 'true':
-        # ONLY redirect during GET (page load). Allow POST to proceed for local login fallback/emergency.
-        return redirect(url_for('auth_center.login'))
+        # HEARTBEAT CHECK: Verify if Central Auth is actually reachable before redirecting
+        api_url = SystemSetting.query.filter_by(key='CENTRAL_AUTH_API_URL').first()
+        if api_url:
+            try:
+                # Fast ping to health endpoint
+                health_check_url = f"{api_url.value.rstrip('/')}/api/health"
+                requests.get(health_check_url, timeout=0.8)
+                # If we reach here, service is up
+                return redirect(url_for('auth_center.login'))
+            except Exception as e:
+                # Service is down or unreachable, do NOT redirect. Fallback to local login.
+                current_app.logger.warning(f"SSO Heartbeat failed: {e}. Falling back to local login.")
+                flash("Central Auth is currently unavailable. Using local fallback.", "warning")
 
     if current_user.is_authenticated:
         if current_user.role == 'admin':

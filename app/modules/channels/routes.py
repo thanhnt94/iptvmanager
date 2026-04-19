@@ -230,6 +230,36 @@ def toggle_original(channel_id):
         'message': f'Đã cập nhật trạng thái bảo vệ cho kênh: {channel.name}'
     })
 
+@channels_bp.route('/api/player/playlists')
+@login_required
+def get_player_playlists():
+    from app.modules.playlists.models import PlaylistProfile
+    from app.modules.auth.services import AuthService
+    
+    if current_user.role == 'admin':
+        playlists = PlaylistProfile.query.all()
+    else:
+        playlists = AuthService.get_user_playlists(current_user.id)
+    
+    result = []
+    for p in playlists:
+        result.append({
+            'id': p.id,
+            'name': p.name,
+            'slug': p.slug,
+            'is_system': p.is_system
+        })
+
+    # Always ensure a system-wide "All Channels" is available
+    if not any(p['is_system'] for p in result):
+        result.insert(0, {
+            'id': 'system_all',
+            'name': 'All IPTV Channels',
+            'is_system': True
+        })
+    
+    return jsonify(result)
+
 @channels_bp.route('/web-player')
 @channels_bp.route('/web-player/<int:channel_id>')
 @login_required
@@ -270,7 +300,7 @@ def get_channel_info(channel_id):
         }
     })
 
-@channels_bp.route('/web-player/channels/<int:playlist_id>')
+@channels_bp.route('/web-player/channels/<playlist_id>')
 @login_required
 def player_playlist_channels(playlist_id):
     from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
@@ -282,19 +312,26 @@ def player_playlist_channels(playlist_id):
     q = request.args.get('q', '')
     offset = (page - 1) * limit
     
-    profile = PlaylistProfile.query.get_or_404(playlist_id)
+    is_system_all = str(playlist_id) == 'system_all'
     
-    # Permission Check
-    if current_user.role != 'admin':
-        access = UserPlaylist.query.filter_by(user_id=current_user.id, playlist_id=playlist_id).first()
-        if not access:
-            return jsonify({'status': 'error', 'message': 'Access denied'}), 403
+    if not is_system_all:
+        try:
+            p_id = int(playlist_id)
+            profile = PlaylistProfile.query.get_or_404(p_id)
+            
+            # Permission Check
+            if current_user.role != 'admin':
+                access = UserPlaylist.query.filter_by(user_id=current_user.id, playlist_id=p_id).first()
+                if not access:
+                    return jsonify({'status': 'error', 'message': 'Access denied'}), 403
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': 'Invalid playlist ID'}), 400
             
     channels_data = []
     total_count = 0
 
-    if profile.is_system:
-        # For system "All Channels" playlist
+    if is_system_all or profile.is_system:
+        # All Channels or specific system playlist
         query = Channel.query
         if group_filter:
             query = query.filter(Channel.group_name == group_filter)
@@ -303,6 +340,8 @@ def player_playlist_channels(playlist_id):
             
         total_count = query.count()
         channels = query.order_by(Channel.name).offset(offset).limit(limit).all()
+        token = current_user.api_token
+        
         for channel in channels:
             channels_data.append({
                 'id': channel.id,
@@ -312,18 +351,18 @@ def player_playlist_channels(playlist_id):
                 'status': channel.status,
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
+                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=token, _external=True),
                 'stream_url': channel.stream_url,
                 'stream_type': channel.stream_type,
                 'stream_format': channel.stream_format,
                 'proxy_type': channel.proxy_type or 'none'
             })
     else:
-        # Fetch Channels ordered by index for custom playlists
+        # Custom User Playlist
         query = db.session.query(PlaylistEntry, Channel, PlaylistGroup.name.label('group_name'))\
             .join(Channel, PlaylistEntry.channel_id == Channel.id)\
             .outerjoin(PlaylistGroup, PlaylistEntry.group_id == PlaylistGroup.id)\
-            .filter(PlaylistEntry.playlist_id == playlist_id)
+            .filter(PlaylistEntry.playlist_id == int(playlist_id))
         
         if group_filter:
             query = query.filter(PlaylistGroup.name == group_filter)
@@ -332,6 +371,7 @@ def player_playlist_channels(playlist_id):
         
         total_count = query.count()
         entries = query.order_by(PlaylistEntry.order_index).offset(offset).limit(limit).all()
+        token = current_user.api_token
             
         for entry, channel, group_name in entries:
             channels_data.append({
@@ -342,7 +382,7 @@ def player_playlist_channels(playlist_id):
                 'status': channel.status,
                 'quality': channel.quality or 'N/A',
                 'resolution': channel.resolution or 'SD',
-                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=current_user.api_token, _external=True),
+                'play_url': url_for('channels.play_channel', channel_id=channel.id, token=token, _external=True),
                 'stream_url': channel.stream_url,
                 'stream_type': channel.stream_type,
                 'stream_format': channel.stream_format,
@@ -357,34 +397,34 @@ def player_playlist_channels(playlist_id):
         'total': total_count
     })
 
-@channels_bp.route('/web-player/categories/<int:playlist_id>')
+@channels_bp.route('/web-player/categories/<playlist_id>')
 @login_required
 def player_playlist_categories(playlist_id):
     from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
     
-    profile = PlaylistProfile.query.get_or_404(playlist_id)
+    is_system_all = str(playlist_id) == 'system_all'
     
-    if profile.is_system:
+    if is_system_all:
+        from app.modules.channels.models import Channel
         categories = db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()
         categories = [c[0] for c in categories]
     else:
-        categories = db.session.query(PlaylistGroup.name).filter_by(playlist_id=playlist_id).distinct().all()
-        categories = [c[0] for c in categories]
+        try:
+            p_id = int(playlist_id)
+            profile = PlaylistProfile.query.get_or_404(p_id)
+            
+            if profile.is_system:
+                from app.modules.channels.models import Channel
+                categories = db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()
+                categories = [c[0] for c in categories]
+            else:
+                categories = db.session.query(PlaylistGroup.name).filter_by(playlist_id=p_id).distinct().all()
+                categories = [c[0] for c in categories]
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': 'Invalid playlist ID'}), 400
         
     return jsonify({'status': 'ok', 'categories': sorted(categories)})
 
-@channels_bp.route('/vlc-launcher/<int:channel_id>')
-def vlc_launcher(channel_id):
-    token = request.args.get('token')
-    channel = Channel.query.get_or_404(channel_id)
-    playback_url = url_for('channels.play_channel', channel_id=channel.id, token=token, _external=True)
-    
-    m3u_content = f"#EXTM3U\n#EXTINF:-1,{channel.name}\n{playback_url}"
-    return Response(
-        m3u_content,
-        mimetype='application/x-mpegURL',
-        headers={'Content-Disposition': f'attachment; filename=play_{channel_id}.m3u'}
-    )
 
 @channels_bp.route('/check/<int:channel_id>', methods=['POST'])
 @login_required
@@ -450,8 +490,40 @@ def sync_epg(id):
     from app.modules.channels.services import EPGService
     result = EPGService.sync_epg(id)
     return jsonify(result)
+
+@channels_bp.route('/play/ts/<int:channel_id>')
+def play_ts(channel_id):
+    token = request.args.get('token')
+    return redirect(url_for('channels.play_channel', channel_id=channel_id, token=token, forced='ts'))
+
+@channels_bp.route('/play/hls/<int:channel_id>')
+def play_hls(channel_id):
+    token = request.args.get('token')
+    return redirect(url_for('channels.play_channel', channel_id=channel_id, token=token, forced='hls'))
+
+@channels_bp.route('/vlc-launcher/<int:channel_id>')
+def vlc_launcher(channel_id):
+    """Generates a small M3U file to trigger VLC playback on client side."""
+    token = request.args.get('token')
+    if not token:
+        from app.modules.auth.models import User
+        admin_user = User.query.filter_by(role='admin').first()
+        if admin_user: token = admin_user.api_token
+
+    play_url = url_for('channels.play_channel', channel_id=channel_id, token=token, _external=True)
+    channel = Channel.query.get_or_404(channel_id)
+    
+    m3u_content = f"#EXTM3U\n#EXTINF:-1,{channel.name}\n{play_url}"
+    return Response(
+        m3u_content,
+        mimetype='application/x-mpegurl',
+        headers={
+            'Content-Disposition': f'attachment; filename=play_{channel_id}.m3u'
+        }
+    )
+
 @channels_bp.route('/play/<int:channel_id>')
-@channels_bp.route('/smartlink/<int:channel_id>')
+@channels_bp.route('/smartlink/<int:channel_id>', endpoint='play_channel')
 def play_channel(channel_id):
     """
     Playback redirector that obfuscates the original URL and 
@@ -468,7 +540,16 @@ def play_channel(channel_id):
     channel.total_watch_seconds = (channel.total_watch_seconds or 0) + 1 # Initial ping
     db.session.commit()
     
-    # Background health check removed here (redundant)
+    # 2. Trigger Crowdsourced Health Check (Background)
+    # This ensures the channel status is updated whenever played via system links
+    def run_auto_check(app_ctx, cid):
+        with app_ctx:
+            try:
+                HealthCheckService.check_stream(cid)
+            except Exception as e:
+                logger.error(f"Auto-Check Background Error: {e}")
+
+    threading.Thread(target=run_auto_check, args=(current_app.app_context(), channel.id), daemon=True).start()
     
     token = request.args.get('token')
     
@@ -524,7 +605,8 @@ def play_channel(channel_id):
     enable_stats = SettingService.get('ENABLE_PROXY_STATS', True)
     enable_ts_proxy = SettingService.get('ENABLE_TS_PROXY', True)
     
-    proxy_type = getattr(channel, 'proxy_type', 'default')
+    # RESPECT MANUAL OVERRIDE (forced=ts/hls/etc)
+    proxy_type = request.args.get('forced') or getattr(channel, 'proxy_type', 'default')
     
     # 3.1 HQ Multi-stream Redirection (YouTube 1080p+)
     if audio_url:
@@ -903,6 +985,16 @@ def proxy_stream():
     global stream_manager
     q, sid = StreamManager.get_source_stream(url, headers=headers)
     
+    # Update Session Tracking
+    ActiveSessionManager.update_session(
+        channel_id or 0, 
+        username, 
+        request.remote_addr, 
+        'TS Singleton Proxy',
+        bandwidth_kbps=8000, 
+        user_agent=request.headers.get('User-Agent')
+    )
+    
     def generate():
         start_time = time.time()
         bytes_total = 0
@@ -1144,25 +1236,26 @@ def proxy_hls_manifest():
 
     try:
         from app.modules.channels.services import ActiveSessionManager
-        ActiveSessionManager.update_session(
-            channel.id, username, request.remote_addr, 'Proxy (HLS)',
-            bandwidth_kbps=2048,
-            user_agent=request.headers.get('User-Agent')
-        )
-
+        
         resp = requests.get(url, headers=headers, timeout=10, verify=False)
         pure_url = url.split('?')[0]
         base_url = pure_url.rsplit('/', 1)[0] + '/'
 
         rewritten = rewrite_hls_manifest(resp.text, base_url, channel_id, token)
+        
+        # Update Session Tracking
+        ActiveSessionManager.update_session(
+            channel.id, username, request.remote_addr, 'HLS Proxy',
+            bandwidth_kbps=4000, # Approximate for HLS
+            user_agent=request.headers.get('User-Agent')
+        )
+
         return Response(
             rewritten, 
             mimetype='application/vnd.apple.mpegurl',
             headers={
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, OPTIONS',
-                'Access-Control-Allow-Headers': 'Range',
-                'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
+                'Cache-Control': 'no-cache'
             }
         )
     except Exception as e:

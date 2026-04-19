@@ -240,7 +240,10 @@ class ChannelService:
         query = Channel.query
         
         # Apply base permissions if not admin
-        if user and user.role != 'admin':
+        is_auth = user and user.is_authenticated
+        is_admin = is_auth and hasattr(user, 'role') and user.role == 'admin'
+
+        if not is_admin:
             # Subquery to find channels shared with this user and accepted
             shared_channels_subquery = db.session.query(ChannelShare.channel_id).filter(
                 ChannelShare.to_user_id == user.id,

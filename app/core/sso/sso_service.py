@@ -55,6 +55,7 @@ class SSOService:
         """JIT Provisioning: Sync CentralAuth user into IPTV database."""
         email = user_payload.get('email')
         username = user_payload.get('username') or email.split('@')[0]
+        ca_id = str(user_payload.get('sub')) if user_payload.get('sub') else None
         
         # 1. Lookup by username or email
         user = User.query.filter((User.email == email) | (User.username == username)).first()
@@ -63,6 +64,8 @@ class SSOService:
             # Sync existing user
             user.email = email
             user.username = username
+            if ca_id:
+                user.central_auth_id = ca_id
             db.session.commit()
             return user
         else:
@@ -70,7 +73,8 @@ class SSOService:
             user = User(
                 username=username,
                 email=email,
-                role='user' # Default to standard user
+                role='user', # Default to standard user
+                central_auth_id=ca_id
             )
             # Set a random password for local record safety
             import uuid
