@@ -172,19 +172,38 @@ def create_app(config_class=Config):
         return "Internal Server Error", 500
 
 
-    # SEEDING & SETUP
+    # --- DATABASE INITIALIZATION & SEEDING ---
     with app.app_context():
-        # Setup Admin
-        from app.modules.auth.models import User
-        admin = User.query.filter_by(username='admin').first()
-        if not admin:
-            admin = User(username='admin', email='admin@iptv.local', role='admin')
-            admin.set_password('admin')
-            db.session.add(admin)
-            db.session.commit()
-        
-        # Setup Playlists
-        from app.modules.playlists.services import PlaylistService
-        PlaylistService.ensure_system_playlist()
+        try:
+            # 1. Ensure all tables are created
+            app.logger.info("Verifying database schema...")
+            db.create_all()
+            
+            # 2. Seed Admin User
+            from app.modules.auth.models import User
+            admin = User.query.filter_by(username='admin').first()
+            if not admin:
+                app.logger.info("Seeding default admin user...")
+                admin = User(
+                    username='admin', 
+                    email='admin@iptv.local', 
+                    role='admin',
+                    full_name='System Administrator'
+                )
+                admin.set_password('admin')
+                db.session.add(admin)
+                db.session.commit()
+                app.logger.info("Admin user created successfully.")
+            
+            # 3. Seed System Playlists
+            from app.modules.playlists.services import PlaylistService
+            app.logger.info("Verifying system playlists...")
+            PlaylistService.ensure_system_playlist()
+            
+            app.logger.info("Database initialization complete.")
+        except Exception as e:
+            app.logger.error(f"Database initialization failed: {str(e)}")
+            # Do not raise here to allow app to start even if DB is partially broken, 
+            # though usually this is critical.
 
     return app
