@@ -1,5 +1,6 @@
 from flask import Flask, render_template, redirect, url_for, request, jsonify, send_from_directory, abort
 import os
+import shutil
 import time
 from datetime import datetime
 from app.core.config import Config
@@ -202,8 +203,6 @@ def create_app(config_class=Config):
 
             # 4. Auto-detect FFmpeg/FFprobe
             from app.modules.settings.services import SettingService
-            import shutil
-            import os
 
             for tool in ['FFMPEG', 'FFPROBE']:
                 key = f'{tool}_PATH'

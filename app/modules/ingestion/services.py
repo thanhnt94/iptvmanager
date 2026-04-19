@@ -1,7 +1,10 @@
 import re
 import requests
+import logging
 from app.modules.channels.models import Channel
 from app.core.database import db
+
+logger = logging.getLogger('iptv')
 
 class IngestionService:
     @staticmethod
@@ -9,9 +12,11 @@ class IngestionService:
         """Parses M3U8/M3U content and returns a list of channel data dictionaries."""
         try:
             if is_url:
-                response = requests.get(content_or_url, timeout=10)
+                logger.info(f"IngestionService: Fetching remote M3U8 from {content_or_url}")
+                response = requests.get(content_or_url, timeout=15)
                 response.raise_for_status()
                 content = response.text
+                logger.info(f"IngestionService: Successfully fetched {len(content)} bytes")
             else:
                 content = content_or_url
             
@@ -20,6 +25,8 @@ class IngestionService:
             lines = content.splitlines()
             current_channel = None
             
+            logger.info(f"IngestionService: Parsing {len(lines)} lines")
+            
             for line in lines:
                 line = line.strip()
                 if not line:
@@ -27,7 +34,7 @@ class IngestionService:
                     
                 if line.startswith("#EXTINF"):
                     # Extract title (after last comma)
-                    title = "Unknown"
+                    title = "Unknown Channel"
                     if ',' in line:
                         title = line.split(',')[-1].strip()
                     
@@ -37,19 +44,22 @@ class IngestionService:
                     
                     current_channel = {
                         'name': title,
-                        'logo_url': attrs.get('tvg-logo') or attrs.get('logo'),
+                        'logo_url': attrs.get('tvg-logo') or attrs.get('logo') or attrs.get('tvg-logo-url'),
                         'group_name': attrs.get('group-title') or attrs.get('group'),
                         'epg_id': attrs.get('tvg-id') or attrs.get('epg-id'),
                         'stream_url': None
                     }
                 elif not line.startswith("#") and current_channel:
-                    current_channel['stream_url'] = line
-                    channels.append(current_channel)
+                    # Ignore lines that don't look like URLs
+                    if ':' in line:
+                        current_channel['stream_url'] = line
+                        channels.append(current_channel)
                     current_channel = None
-                    
+            
+            logger.info(f"IngestionService: Found {len(channels)} valid stream candidates")
             return channels
         except Exception as e:
-            print(f"Error parsing M3U: {e}")
+            logger.error(f"IngestionService: Parse error: {e}")
             return []
 
     @staticmethod

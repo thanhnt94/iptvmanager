@@ -35,7 +35,6 @@ class StreamManager:
         use_sm = SettingService.get('ENABLE_STREAM_MANAGER', True)
         # Load dynamic buffer size
         ts_buffer_size = SettingService.get('TS_BUFFER_SIZE', 512) # 512 * 4KB = 2MB
-        
         with cls._lock:
             # Detect if we need FFmpeg (Transcode/Remux)
             is_flv = '.flv' in url.lower().split('?')[0]
@@ -44,29 +43,31 @@ class StreamManager:
             sid = url if use_sm else f"{url}_{time.time()}"
             if force_transcode: sid = f"trans_{sid}"
             
-            if sid not in cls._streams:
-                target = cls._run_ffmpeg_pipe if force_transcode else cls._run_source_pipe
-                cls._streams[sid] = {
-                    'clients': [],
-                    'buffer': deque(maxlen=ts_buffer_size),
-                    'thread': threading.Thread(target=target, args=(url, headers, sid), daemon=True),
-                    'lock': threading.Lock()
-                }
-                cls._streams[sid]['thread'].start()
-            
             # Create a new client queue
             # Increased size to 256 for better depth and fewer drops
             q = queue.Queue(maxsize=256) 
             
-            # PRE-FILL (Burst-start): Fill the new client's queue with historical data from RAM
-            with cls._streams[sid]['lock']:
-                for chunk in cls._streams[sid]['buffer']:
-                    try:
-                        q.put_nowait(chunk)
-                    except:
-                        break
-                
-                cls._streams[sid]['clients'].append(q)
+            if sid not in cls._streams:
+                target = cls._run_ffmpeg_pipe if force_transcode else cls._run_source_pipe
+                cls._streams[sid] = {
+                    'clients': [q], # Add first client BEFORE starting thread
+                    'buffer': deque(maxlen=ts_buffer_size),
+                    'thread': threading.Thread(target=target, args=(url, headers, sid), daemon=True),
+                    'lock': threading.Lock(),
+                    'last_client_at': time.time()
+                }
+                cls._streams[sid]['thread'].start()
+            else:
+                # PRE-FILL (Burst-start): Fill the new client's queue with historical data from RAM
+                with cls._streams[sid]['lock']:
+                    for chunk in cls._streams[sid]['buffer']:
+                        try:
+                            q.put_nowait(chunk)
+                        except:
+                            break
+                    
+                    cls._streams[sid]['clients'].append(q)
+                    cls._streams[sid]['last_client_at'] = time.time()
                 
             return q, sid
 
@@ -84,11 +85,19 @@ class StreamManager:
         headers['Connection'] = 'keep-alive'
 
         while True:
-            # Cleanup check
+            # Cleanup check with 5s grace period
             with cls._lock:
-                if sid not in cls._streams or not cls._streams[sid]['clients']:
-                    logger.info(f"StreamEngine: No clients for {sid}, releasing resources.")
-                    if sid in cls._streams: del cls._streams[sid]
+                if sid in cls._streams:
+                    clients = cls._streams[sid]['clients']
+                    if not clients:
+                        last_active = cls._streams[sid].get('last_client_at', 0)
+                        if time.time() - last_active > 5:
+                            logger.info(f"StreamEngine: No clients for {sid} after 5s grace, releasing resources.")
+                            del cls._streams[sid]
+                            return
+                    else:
+                        cls._streams[sid]['last_client_at'] = time.time()
+                else:
                     return
 
             try:
@@ -172,10 +181,18 @@ class StreamManager:
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=10**6)
             
             while True:
-                # Cleanup check
+                # Cleanup check with 5s grace period
                 with cls._lock:
-                    if sid not in cls._streams or not cls._streams[sid]['clients']:
-                        logger.info(f"StreamEngine (FFmpeg): No clients for {sid}, stopping.")
+                    if sid in cls._streams:
+                        clients = cls._streams[sid]['clients']
+                        if not clients:
+                            last_active = cls._streams[sid].get('last_client_at', 0)
+                            if time.time() - last_active > 5:
+                                logger.info(f"StreamEngine (FFmpeg): No clients for {sid} after 5s grace, stopping.")
+                                break
+                        else:
+                            cls._streams[sid]['last_client_at'] = time.time()
+                    else:
                         break
 
                 # Read from FFmpeg stdout

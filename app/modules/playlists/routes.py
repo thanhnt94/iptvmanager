@@ -31,7 +31,13 @@ def list_playlists():
 @login_required
 def get_groups(playlist_id):
     """Returns a list of unique group names (categories) for a specific playlist."""
-    if playlist_id == 0:
+    is_system_playlist = False
+    if playlist_id > 0:
+        p = PlaylistProfile.query.get(playlist_id)
+        if p and p.is_system:
+            is_system_playlist = True
+
+    if playlist_id == 0 or is_system_playlist:
         # System-wide groups
         groups = [g[0] for g in db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()]
     else:
@@ -49,7 +55,13 @@ def get_entries(playlist_id):
     group = request.args.get('group', '')
     hide_die = request.args.get('hide_die', 'false').lower() == 'true'
 
-    if playlist_id == 0 or str(playlist_id) == 'system_all':
+    is_system_playlist = False
+    if playlist_id > 0:
+        p = PlaylistProfile.query.get(playlist_id)
+        if p and p.is_system:
+            is_system_playlist = True
+
+    if playlist_id == 0 or str(playlist_id) == 'system_all' or is_system_playlist:
         query = Channel.query
     else:
         query = Channel.query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
@@ -74,6 +86,13 @@ def get_entries(playlist_id):
     channels = []
     for ch in pagination.items:
         try:
+            # Check if this is an FLV stream
+            is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
+            
+            # Default smart link logic: Use tracking for FLV, else standard play
+            smart_url = url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True) if is_flv \
+                        else url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True)
+            
             ch_data = {
                 'id': ch.id,
                 'name': ch.name,
@@ -83,9 +102,9 @@ def get_entries(playlist_id):
                 'quality': ch.quality,
                 'resolution': ch.resolution,
                 'stream_format': ch.stream_format,
-                'play_url': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
+                'play_url': smart_url,
                 'play_links': {
-                    'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
+                    'smart': smart_url,
                     'original': ch.stream_url,
                     'tracking': url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True),
                     'hls': url_for('channels.play_hls', channel_id=ch.id, token=token, _external=True),

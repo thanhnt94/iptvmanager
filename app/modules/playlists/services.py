@@ -102,18 +102,23 @@ class PlaylistService:
                 wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
                 
                 # Determine URL based on forced mode or channel default
+                is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
+                
                 if mode == 'direct':
                     wrapper_url = ch.stream_url
                 elif mode == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
                 elif mode == 'smart':
-                    wrapper_url = url_for('channels.play_channel', **wrapper_params)
+                    if is_flv:
+                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
+                    else:
+                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 else:
                     # Fallback to channel specific setting
                     ptype = ch.proxy_type or 'default'
                     if ptype == 'none' or ptype == 'direct':
                         wrapper_url = ch.stream_url
-                    elif ptype == 'tracking':
+                    elif ptype == 'tracking' or (ptype == 'default' and is_flv):
                         wrapper_url = url_for('channels.track_redirect', **wrapper_params)
                     elif ptype == 'hls':
                         wrapper_url = url_for('channels.play_hls', **wrapper_params)
@@ -136,18 +141,23 @@ class PlaylistService:
                 wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
 
                 # Determine URL based on forced mode or channel default
+                is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
+
                 if mode == 'direct':
                     wrapper_url = ch.stream_url
                 elif mode == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
                 elif mode == 'smart':
-                    wrapper_url = url_for('channels.play_channel', **wrapper_params)
+                    if is_flv:
+                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
+                    else:
+                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
                 else:
                     # Fallback to channel specific setting
                     ptype = ch.proxy_type or 'default'
                     if ptype == 'none' or ptype == 'direct':
                         wrapper_url = ch.stream_url
-                    elif ptype == 'tracking':
+                    elif ptype == 'tracking' or (ptype == 'default' and is_flv):
                         wrapper_url = url_for('channels.track_redirect', **wrapper_params)
                     elif ptype == 'hls':
                         wrapper_url = url_for('channels.play_hls', **wrapper_params)
