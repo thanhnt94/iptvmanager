@@ -100,6 +100,17 @@ class HealthCheckService:
             
         channel.last_checked_at = datetime.utcnow()
         db.session.commit()
+        
+        return {
+            'status': channel.status,
+            'latency': channel.latency,
+            'resolution': channel.resolution,
+            'stream_format': channel.stream_format,
+            'stream_type': channel.stream_type,
+            'quality': channel.quality,
+            'error_message': channel.error_message,
+            'last_checked': channel.last_checked_at.isoformat()
+        }
 
     @staticmethod
     def _update_stream_specs(channel):
@@ -315,6 +326,22 @@ class HealthCheckService:
 
         import threading
         thread = threading.Thread(target=run_scan, args=(app.app_context(), mode, days, playlist_id))
+        thread.daemon = True
+        thread.start()
+
+    @staticmethod
+    def trigger_passive_check(channel_id):
+        """Triggers a background health check when a channel is accessed."""
+        from flask import current_app
+        app = current_app._get_current_object()
+        
+        def run_passive():
+            with app.app_context():
+                logger.debug(f"Passive HealthCheck triggered for channel {channel_id}")
+                HealthCheckService.check_stream(channel_id)
+        
+        import threading
+        thread = threading.Thread(target=run_passive)
         thread.daemon = True
         thread.start()
 

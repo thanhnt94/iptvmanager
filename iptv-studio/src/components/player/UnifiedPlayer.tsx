@@ -95,6 +95,35 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
           >
             <Loader2 className="animate-spin text-indigo-500 mb-4" size={layout === 'full' ? 48 : 32} />
             <span className="text-[10px] font-black text-white uppercase tracking-[0.5em] animate-pulse">Establishing Signal...</span>
+            
+            {/* Quick Link Selector - Enabled during loading as requested */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-8 px-6">
+              {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
+                const labelMap: Record<string, string> = {
+                  'hls': 'HLS',
+                  'ts': 'TS',
+                  'tracking': 'Track',
+                  'original': 'Origin',
+                  'smart': 'SMart'
+                };
+                const label = labelMap[mode.toLowerCase()];
+                if (!label || mode.toLowerCase() === activeMode.toLowerCase()) return null;
+
+                return (
+                  <button 
+                    key={mode}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectLink(url as string, mode);
+                    }}
+                    className="px-3 py-2 bg-white/10 border border-white/10 text-white/60 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white hover:border-indigo-500 transition-all flex items-center gap-2"
+                  >
+                    <Zap size={10} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </motion.div>
         )}
 

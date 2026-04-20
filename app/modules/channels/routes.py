@@ -259,6 +259,10 @@ def kill_session(key):
 def play_channel(channel_id):
     channel = Channel.query.get_or_404(channel_id)
     channel.play_count = (channel.play_count or 0) + 1
+    
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.trigger_passive_check(channel_id)
+    
     db.session.commit()
     
     token = request.args.get('token') or (current_user.api_token if current_user.is_authenticated else None)
@@ -317,6 +321,9 @@ def play_hls(channel_id):
     if not user: abort(401)
     
     ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'HLS Proxy', bandwidth_kbps=4500)
+    
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.trigger_passive_check(channel_id)
     
     try:
         # Standardize URL and handle potential query parameters in base_url
@@ -411,6 +418,10 @@ def play_ts(channel_id):
     if not user: abort(401)
     
     ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'TS Proxy', bandwidth_kbps=8000)
+    
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.trigger_passive_check(channel_id)
+    
     return redirect(url_for('channels.proxy_stream', url=channel.stream_url, channel_id=channel.id, token=token))
 
 
@@ -421,6 +432,9 @@ def track_redirect(channel_id):
     user = validate_proxy_access(token)
     if not user: abort(401)
     ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'Tracking', bandwidth_kbps=4000)
+    
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.trigger_passive_check(channel_id)
     
     url_low = channel.stream_url.lower()
     if '.m3u8' in url_low:
@@ -466,6 +480,9 @@ def player_ping():
     bitrate = 8.0 # Default HD estimate
     ch.total_watch_seconds = (ch.total_watch_seconds or 0) + sec
     ch.total_bandwidth_mb = (ch.total_bandwidth_mb or 0) + (bitrate * sec) / 8
+    
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.trigger_passive_check(cid)
     
     ActiveSessionManager.update_session(cid, current_user.username if current_user.is_authenticated else 'Guest', request.remote_addr, 'Web Player', bandwidth_kbps=int(bitrate * 1024))
     db.session.commit()

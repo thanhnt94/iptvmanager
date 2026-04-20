@@ -18,8 +18,13 @@ import {
   Activity,
   Tv,
   Eye,
-  CloudDownload
+  CloudDownload,
+  Share2,
+  X,
+  Copy,
+  Check
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
 import { PreviewModal } from '../components/channels/PreviewModal';
 import { useNavigate } from 'react-router-dom';
@@ -82,7 +87,9 @@ export const Channels: React.FC = () => {
    const [isFormOpen, setIsFormOpen] = useState(false);
    const [editingId, setEditingId] = useState<number | null>(null);
    const [previewChannel, setPreviewChannel] = useState<Channel | null>(null);
+   const [shareChannel, setShareChannel] = useState<Channel | null>(null);
    const [jumpPage, setJumpPage] = useState('');
+   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const fetchChannels = useCallback(() => {
@@ -155,6 +162,12 @@ export const Channels: React.FC = () => {
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
    const updateParams = (updates: Record<string, string>) => {
@@ -361,7 +374,7 @@ export const Channels: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/5 bg-white/[0.02]">
-                <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Identification</th>
+                <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.05em] w-[35%]">Identification</th>
                 <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Group</th>
                 <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Health</th>
                 <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em] text-right">Actions</th>
@@ -375,17 +388,17 @@ export const Channels: React.FC = () => {
               ) : (
                 channels.map((ch) => (
                   <tr key={ch.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border border-white/5 group-hover:border-indigo-500/30 transition-colors shrink-0">
-                          {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={20} />}
+                    <td className="px-6 py-4 max-w-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border border-white/5 group-hover:border-indigo-500/30 transition-colors shrink-0">
+                          {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={16} />}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                            <div className="flex items-center gap-2">
-                             <h4 className="text-sm font-black text-white truncate">{ch.name}</h4>
-                             {ch.is_original && <Shield className="text-indigo-400" size={12} />}
+                             <h4 className="text-sm font-black text-white truncate leading-tight">{ch.name}</h4>
+                             {ch.is_original && <Shield className="text-indigo-400 shrink-0" size={12} />}
                            </div>
-                           <p className="text-[10px] text-slate-500 truncate max-w-[200px] mt-0.5">{ch.stream_url}</p>
+                           <p className="text-[9px] text-slate-500 truncate mt-0.5 opacity-60 font-medium">{ch.stream_url}</p>
                         </div>
                       </div>
                     </td>
@@ -403,9 +416,10 @@ export const Channels: React.FC = () => {
                        </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                       <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1">
                           {[
                             { icon: <Eye size={16} />, onClick: () => setPreviewChannel(ch), title: 'Preview' },
+                            { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute' },
                             { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />, onClick: () => handleCheck(ch.id), title: 'Check' },
                             { icon: ch.is_original ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_original },
                             { icon: <Settings2 size={16} />, onClick: () => openEdit(ch.id), title: 'Edit' },
@@ -414,6 +428,7 @@ export const Channels: React.FC = () => {
                             <button 
                               key={idx}
                               onClick={btn.onClick}
+                              title={btn.title}
                               className={`p-2 rounded-xl transition-all ${
                                 btn.danger ? 'text-slate-600 hover:text-rose-400 hover:bg-rose-500/10' :
                                 btn.active ? 'text-indigo-400 bg-indigo-500/10' :
@@ -423,7 +438,7 @@ export const Channels: React.FC = () => {
                               {btn.icon}
                             </button>
                           ))}
-                       </div>
+                        </div>
                     </td>
                   </tr>
                 ))
@@ -503,6 +518,91 @@ export const Channels: React.FC = () => {
         {isFormOpen && <ChannelForm channelId={editingId} onClose={() => setIsFormOpen(false)} onSuccess={fetchChannels} />}
         {previewChannel && <PreviewModal channel={previewChannel} onClose={() => setPreviewChannel(null)} />}
       </AnimatePresence>
+
+      {/* Share Links Modal Portal */}
+      {createPortal(
+        <AnimatePresence>
+          {shareChannel && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-[1000] p-4 pointer-events-auto backdrop-blur-sm"
+              onClick={() => setShareChannel(null)}
+            >
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  className="bg-slate-900 w-full max-w-lg rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl relative"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <header className="p-8 border-b border-white/5 flex items-center justify-between">
+                      <div>
+                        <h3 className="text-xl font-black text-white tracking-tight uppercase">Distribute Signal</h3>
+                        <p className="text-[10px] text-white/30 font-black uppercase tracking-widest mt-1">{shareChannel.name}</p>
+                      </div>
+                      <button 
+                        onClick={() => setShareChannel(null)}
+                        className="p-3 bg-white/5 rounded-2xl text-slate-400 hover:text-white transition-all"
+                      >
+                          <X size={20} />
+                      </button>
+                  </header>
+
+                  <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                      {shareChannel.play_links && (['direct', 'tracking', 'smart', 'hls', 'ts'] as const).map((mode) => {
+                        const url = shareChannel.play_links?.[mode];
+                        if (!url) return null;
+
+                        const labelMap: Record<string, string> = {
+                          'smart': 'SMart Dynamic Gateway',
+                          'tracking': 'Direct Landing Track',
+                          'direct': 'Original Source Link',
+                          'hls': 'HLS Edge Cache',
+                          'ts': 'TS Stream Proxy'
+                        };
+                        const label = labelMap[mode] || mode.toUpperCase();
+                        
+                        return (
+                          <div 
+                            key={mode}
+                            className="p-4 rounded-3xl bg-white/[0.03] border border-white/5 group hover:bg-white/5 transition-all"
+                          >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{label}</span>
+                                <button 
+                                  onClick={() => handleCopy(url as string, mode)}
+                                  className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${
+                                    copiedKey === mode 
+                                    ? 'bg-emerald-500 text-slate-950 scale-95' 
+                                    : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'
+                                  }`}
+                                >
+                                    {copiedKey === mode ? (
+                                        <><Check size={14} /> Copied</>
+                                    ) : (
+                                        <><Copy size={12} /> Copy link</>
+                                    )}
+                                </button>
+                              </div>
+                              <div className="text-[11px] font-medium text-slate-500 truncate bg-black/20 p-3 rounded-xl border border-white/5 select-all">
+                                {url as string}
+                              </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  <div className="p-8 border-t border-white/5 bg-indigo-500/5 text-center">
+                      <p className="text-[10px] font-black text-indigo-400/60 uppercase tracking-[0.2em]">Signal Distribution System v3.1</p>
+                  </div>
+                </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.getElementById('portal-root') || document.body
+      )}
     </div>
   );
 };
