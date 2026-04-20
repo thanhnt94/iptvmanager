@@ -35,54 +35,106 @@ export const Import: React.FC = () => {
   const [visibility, setVisibility] = useState('private');
   const [result, setResult] = useState<{ imported: number, skipped: number } | null>(null);
 
+  const parseM3U8Text = (content: string): Candidate[] => {
+    const channels: Candidate[] = [];
+    const lines = content.split('\n');
+    let currentChannel: Partial<Candidate> = {};
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+
+      if (line.startsWith('#EXTINF')) {
+        // Parse metadata: #EXTINF:-1 tvg-id="..." group-title="..." tvg-logo="...",Name
+        const metadataPart = line.substring(line.indexOf(':') + 1);
+        const lastCommaIndex = metadataPart.lastIndexOf(',');
+        
+        if (lastCommaIndex !== -1) {
+          const attributesStr = metadataPart.substring(0, lastCommaIndex);
+          const name = metadataPart.substring(lastCommaIndex + 1).trim();
+          
+          currentChannel.name = name;
+          
+          // EXTRACT ATTRIBUTES
+          const extractAttr = (key: string) => {
+            const match = attributesStr.match(new RegExp(`${key}="([^"]+)"`, 'i'));
+            return match ? match[1] : null;
+          };
+
+          currentChannel.group_name = extractAttr('group-title') || 'Uncategorized';
+          currentChannel.logo_url = extractAttr('tvg-logo');
+          currentChannel.epg_id = extractAttr('tvg-id') || '';
+        }
+      } else if (!line.startsWith('#') && (line.startsWith('http') || line.startsWith('rtmp') || line.startsWith('rtsp'))) {
+        currentChannel.stream_url = line;
+        if (currentChannel.name && currentChannel.stream_url) {
+          channels.push(currentChannel as Candidate);
+        }
+        currentChannel = {};
+      }
+    }
+    return channels;
+  };
+
   const handleParse = async () => {
     if (sourceType === 'url' && !url) return;
     setParsing(true);
     setResult(null);
 
     try {
-      const res = await fetch('/api/ingestion/parse-m3u8', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: url, is_url: true })
-      });
-      const data = await res.json();
-      if (data.channels) {
-        setCandidates(data.channels.map((c: any) => ({ ...c, selected: true })));
-      }
+      const res = await fetch(url);
+      const text = await res.text();
+      const parsed = parseM3U8Text(text);
+      setCandidates(parsed.map(c => ({ ...c, selected: true })));
     } catch (err) {
-      alert('Parse failed');
+      alert('Parse failed for remote URL. CORS might be blocking the request.');
     } finally {
       setParsing(false);
     }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     setParsing(true);
     setResult(null);
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const content = event.target?.result as string;
-      try {
-        const res = await fetch('/api/ingestion/parse-m3u8', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: content, is_url: false })
-        });
-        const data = await res.json();
-        if (data.channels) {
-          setCandidates(data.channels.map((c: any) => ({ ...c, selected: true })));
-        }
-      } catch (err) {
-        alert('File parse failed');
-      } finally {
-        setParsing(false);
-      }
+    const fileContents: string[] = [];
+
+    const readFile = (file: File) => {
+      return new Promise<void>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          fileContents.push(event.target?.result as string);
+          resolve();
+        };
+        reader.onerror = () => reject();
+        reader.readAsText(file);
+      });
     };
-    reader.readAsText(file);
+
+    try {
+      await Promise.all(Array.from(files).map(f => readFile(f)));
+      
+      let allParsed: Candidate[] = [];
+      fileContents.forEach(content => {
+        allParsed = [...allParsed, ...parseM3U8Text(content)];
+      });
+      
+      // Local deduplication by stream_url to be efficient
+      const seen = new Set();
+      const unique = allParsed.filter(c => {
+        if (seen.has(c.stream_url)) return false;
+        seen.add(c.stream_url);
+        return true;
+      });
+
+      setCandidates(unique.map(c => ({ ...c, selected: true })));
+    } catch (err) {
+      alert('Error reading files.');
+    } finally {
+      setParsing(false);
+    }
   };
 
   const handleCommit = async () => {
@@ -150,7 +202,7 @@ export const Import: React.FC = () => {
             </div>
             
             <h3 className="text-2xl font-black text-white mt-8 uppercase tracking-tighter">
-              {parsing ? 'Parsing Streams...' : 'Committing Registry...'}
+              {parsing ? 'Parsing Multiple Streams...' : 'Committing Registry...'}
             </h3>
             
             {importing && (
@@ -222,6 +274,7 @@ export const Import: React.FC = () => {
               <div className="relative border-2 border-dashed border-white/10 rounded-3xl p-12 text-center hover:border-indigo-500/50 transition-all group overflow-hidden">
                 <input 
                   type="file" 
+                  multiple
                   accept=".m3u,.m3u8"
                   onChange={handleFileUpload}
                   className="absolute inset-0 opacity-0 cursor-pointer z-10"
@@ -231,8 +284,8 @@ export const Import: React.FC = () => {
                     <FileUp size={32} />
                   </div>
                   <div>
-                    <h4 className="text-white font-bold">Drop M3U8 File</h4>
-                    <p className="text-slate-500 text-xs mt-1">or click to browse local storage</p>
+                    <h4 className="text-white font-bold">Drop M3U8 Files</h4>
+                    <p className="text-slate-500 text-xs mt-1">or click to browse multiple playlists</p>
                   </div>
                 </div>
               </div>
