@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
   Save, 
@@ -9,8 +9,11 @@ import {
   Link, 
   Image as ImageIcon,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Play
 } from 'lucide-react';
+import { getLogoUrl } from '../../utils';
+import { UnifiedPlayer } from '../player/UnifiedPlayer';
 
 interface Playlist {
   id: number;
@@ -28,6 +31,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
   const [initialLoading, setInitialLoading] = useState(!!channelId);
   const [error, setError] = useState<string | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -49,7 +53,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
 
     // If editing, load channel data
     if (channelId) {
-      fetch(`/api/channels/${channelId}/info`) // I'll need to implement this endpoint
+      fetch(`/api/channels/${channelId}/info`)
         .then(res => res.json())
         .then(data => {
           if (data.status === 'ok') {
@@ -148,8 +152,44 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
               </div>
             )}
 
+            {/* LIVE PREVIEW SECTION */}
+            <AnimatePresence>
+              {showPreview && formData.stream_url && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mb-8 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] ml-1">Live Preview Inspection</label>
+                      <button 
+                        type="button"
+                        onClick={() => setShowPreview(false)}
+                        className="text-[9px] font-black text-slate-500 hover:text-white uppercase tracking-widest"
+                      >
+                        Close Preview
+                      </button>
+                    </div>
+                    <UnifiedPlayer 
+                      channel={{
+                        id: channelId || 0,
+                        name: formData.name || 'Draft Preview',
+                        stream_url: formData.stream_url,
+                        proxy_type: formData.proxy_type,
+                        play_links: {
+                          smart: `/api/channels/play/preview?url=${encodeURIComponent(formData.stream_url)}&proxy=${formData.proxy_type}&token=${localStorage.getItem('api_token')}`
+                        }
+                      }}
+                      layout="compact"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Basic Info */}
               <div className="space-y-6">
                  <div className="space-y-2">
                     <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">Stream Name</label>
@@ -168,16 +208,23 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
 
                  <div className="space-y-2">
                     <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">Logo Provider URL</label>
-                    <div className="relative">
-                       <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                       <input 
-                        type="text" 
-                        value={formData.logo_url}
-                        onChange={e => setFormData({...formData, logo_url: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                        placeholder="https://icon.server/logo.png"
-                       />
-                    </div>
+                     <div className="flex gap-4">
+                        <div className="relative flex-1">
+                           <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                           <input 
+                            type="text" 
+                            value={formData.logo_url}
+                            onChange={e => setFormData({...formData, logo_url: e.target.value})}
+                            className="w-full bg-slate-950/50 border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            placeholder="https://icon.server/logo.png"
+                           />
+                        </div>
+                        {formData.logo_url && (
+                          <div className="w-14 h-14 bg-white rounded-xl p-1 shrink-0 border border-white/10 overflow-hidden shadow-xl animate-in zoom-in duration-300">
+                             <img src={getLogoUrl(formData.logo_url)} className="w-full h-full object-contain" alt="" />
+                          </div>
+                        )}
+                     </div>
                  </div>
               </div>
 
@@ -211,7 +258,19 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
             </div>
 
             <div className="space-y-2">
-               <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">Primary Source (Direct or Scrape)</label>
+               <div className="flex items-center justify-between">
+                <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">Primary Source (Direct or Scrape)</label>
+                {formData.stream_url && !showPreview && (
+                  <button 
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    <Play size={12} fill="currentColor" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Test Link</span>
+                  </button>
+                )}
+              </div>
                <div className="relative">
                   <Link className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                   <textarea 

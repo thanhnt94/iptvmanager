@@ -11,11 +11,12 @@ import {
   Cpu,
   Loader2
 } from 'lucide-react';
+import { getLogoUrl } from '../utils';
 
 interface ActiveStream {
   key: string;
   channel_name: string;
-  channel_logo: string | null;
+  logo_url: string | null;
   user: string;
   ip: string;
   type: string;
@@ -99,8 +100,8 @@ export const Streams: React.FC = () => {
                 <div className="flex items-start justify-between">
                    <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-2xl bg-slate-950 flex items-center justify-center border border-white/5 shadow-inner">
-                         {stream.channel_logo ? (
-                           <img src={stream.channel_logo} className="w-full h-full object-contain p-2" alt="" />
+                         {stream.logo_url ? (
+                           <img src={getLogoUrl(stream.logo_url)} className="w-full h-full object-contain p-2" alt="" />
                          ) : (
                            <Tv className="text-slate-700" size={28} />
                          )}

@@ -23,6 +23,9 @@ import {
 import { ChannelForm } from '../components/forms/ChannelForm';
 import { PreviewModal } from '../components/channels/PreviewModal';
 import { useNavigate } from 'react-router-dom';
+import { getLogoUrl } from '../utils';
+import { useSearchParams } from 'react-router-dom';
+import { ArrowUpDown } from 'lucide-react';
 
 interface Channel {
   id: number;
@@ -63,19 +66,23 @@ interface FilterData {
 }
 
 export const Channels: React.FC = () => {
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [pagination, setPagination] = useState<Pagination | null>(null);
-  const [filters, setFilters] = useState<FilterData>({ groups: [], resolutions: [], formats: [] });
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [processingId, setProcessingId] = useState<number | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [previewChannel, setPreviewChannel] = useState<Channel | null>(null);
+   const [searchParams, setSearchParams] = useSearchParams();
+   const page = parseInt(searchParams.get('page') || '1');
+   const search = searchParams.get('search') || '';
+   const selectedGroup = searchParams.get('group') || '';
+   const selectedStatus = searchParams.get('status') || '';
+   const activeSort = searchParams.get('sort') || 'name';
+
+   const [channels, setChannels] = useState<Channel[]>([]);
+   const [pagination, setPagination] = useState<Pagination | null>(null);
+   const [filters, setFilters] = useState<FilterData>({ groups: [], resolutions: [], formats: [] });
+   const [loading, setLoading] = useState(true);
+   const [showFilters, setShowFilters] = useState(false);
+   const [processingId, setProcessingId] = useState<number | null>(null);
+   const [isFormOpen, setIsFormOpen] = useState(false);
+   const [editingId, setEditingId] = useState<number | null>(null);
+   const [previewChannel, setPreviewChannel] = useState<Channel | null>(null);
+   const [jumpPage, setJumpPage] = useState('');
   const navigate = useNavigate();
 
   const fetchChannels = useCallback(() => {
@@ -85,6 +92,7 @@ export const Channels: React.FC = () => {
       search,
       group: selectedGroup,
       status: selectedStatus,
+      sort: activeSort,
       per_page: '20'
     });
 
@@ -99,7 +107,7 @@ export const Channels: React.FC = () => {
         console.error("Channels fetch error:", err);
         setLoading(false);
       });
-  }, [page, search, selectedGroup, selectedStatus]);
+  }, [page, search, selectedGroup, selectedStatus, activeSort]);
 
   const fetchFilters = () => {
     fetch('/api/channels/filters')
@@ -149,15 +157,99 @@ export const Channels: React.FC = () => {
     }
   };
 
-  const cleanDead = async () => {
-    if (!confirm('Clean all unprotected offline channels?')) return;
-    try {
-      const res = await fetch('/api/channels/clean-dead', { method: 'POST' });
-      const data = await res.json();
-      alert(`Successfully removed ${data.deleted_count} stale entries.`);
-      fetchChannels();
-    } catch (err) { alert('Operation failed'); }
-  };
+   const updateParams = (updates: Record<string, string>) => {
+     const newParams = new URLSearchParams(searchParams);
+     Object.entries(updates).forEach(([k, v]) => {
+       if (v) newParams.set(k, v);
+       else newParams.delete(k);
+     });
+     if (!updates.page) newParams.set('page', '1'); // Reset to page 1 on filter/search change
+     setSearchParams(newParams);
+   };
+
+   const handleJumpPage = (e: React.FormEvent) => {
+     e.preventDefault();
+     const p = parseInt(jumpPage);
+     if (pagination && p > 0 && p <= pagination.pages) {
+       updateParams({ page: p.toString() });
+       setJumpPage('');
+     }
+   };
+
+   const cleanDead = async () => {
+     if (!confirm('Clean all unprotected offline channels?')) return;
+     try {
+       const res = await fetch('/api/channels/clean-dead', { method: 'POST' });
+       if (res.ok) {
+         const data = await res.json();
+         alert(`Successfully removed ${data.deleted_count} stale entries.`);
+         fetchChannels();
+       }
+     } catch (err) { alert('Operation failed'); }
+   };
+
+   const renderPagination = () => {
+     if (!pagination || pagination.pages <= 1) return null;
+     
+     const pages = [];
+     const maxVisible = 5;
+     let start = Math.max(1, page - 2);
+     let end = Math.min(pagination.pages, start + maxVisible - 1);
+     
+     if (end - start + 1 < maxVisible) {
+       start = Math.max(1, end - maxVisible + 1);
+     }
+
+     for (let i = start; i <= end; i++) {
+        pages.push(
+          <button
+            key={i}
+            onClick={() => updateParams({ page: i.toString() })}
+            className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${
+              page === i ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-500 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            {i}
+          </button>
+        );
+     }
+
+     return (
+       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-2">
+          <div className="flex items-center gap-4">
+             <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em]">
+               Total: <span className="text-white">{pagination.total}</span>
+             </p>
+             <form onSubmit={handleJumpPage} className="flex items-center gap-2">
+                <input 
+                  type="number" 
+                  placeholder="Go to..." 
+                  value={jumpPage}
+                  onChange={e => setJumpPage(e.target.value)}
+                  className="w-16 bg-slate-950/50 border border-white/5 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-indigo-500/50"
+                />
+             </form>
+          </div>
+          <div className="flex items-center gap-1 bg-slate-950/40 p-1 rounded-xl border border-white/5">
+             <button 
+               disabled={!pagination.has_prev}
+               onClick={() => updateParams({ page: (page - 1).toString() })}
+               className="p-2 text-slate-500 hover:text-white transition-all disabled:opacity-20"
+             ><ChevronLeft size={16} /></button>
+             
+             {start > 1 && <span className="text-slate-700 px-1">...</span>}
+             {pages}
+             {end < pagination.pages && <span className="text-slate-700 px-1">...</span>}
+
+             <button 
+               disabled={!pagination.has_next}
+               onClick={() => updateParams({ page: (page + 1).toString() })}
+               className="p-2 text-slate-500 hover:text-white transition-all disabled:opacity-20"
+             ><ChevronRight size={16} /></button>
+          </div>
+       </div>
+     );
+   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -199,16 +291,16 @@ export const Channels: React.FC = () => {
       {/* Control Bar */}
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 glass p-2 rounded-2xl flex items-center gap-2">
-           <div className="relative flex-1 group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search streams..." 
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-transparent border-none pl-12 pr-4 py-3 text-sm text-white focus:outline-none placeholder:text-slate-600"
-              />
-           </div>
+            <div className="relative flex-1 group">
+               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" size={18} />
+               <input 
+                 type="text" 
+                 placeholder="Search streams..." 
+                 value={search}
+                 onChange={e => updateParams({ search: e.target.value, page: '1' })}
+                 className="w-full bg-transparent border-none pl-12 pr-4 py-3 text-sm text-white focus:outline-none placeholder:text-slate-600"
+               />
+            </div>
            <button 
             onClick={() => setShowFilters(!showFilters)}
             className={`p-3 rounded-xl transition-all ${showFilters ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-500 hover:text-white'}`}
@@ -224,11 +316,23 @@ export const Channels: React.FC = () => {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="glass p-2 rounded-2xl flex flex-wrap gap-2"
+              className="glass p-2 rounded-2xl flex flex-wrap gap-2 items-center"
             >
+              <div className="flex items-center gap-2 px-3 border-r border-white/5 mr-2">
+                 <ArrowUpDown size={14} className="text-indigo-400" />
+                 <select 
+                   value={activeSort} 
+                   onChange={e => updateParams({ sort: e.target.value })}
+                   className="bg-transparent text-white text-[11px] font-black uppercase tracking-widest focus:outline-none"
+                 >
+                   <option value="name">Alphabetical</option>
+                   <option value="newest">Newest First</option>
+                   <option value="oldest">Oldest First</option>
+                 </select>
+              </div>
               <select 
                 value={selectedGroup} 
-                onChange={e => setSelectedGroup(e.target.value)}
+                onChange={e => updateParams({ group: e.target.value })}
                 className="bg-slate-950/50 text-white text-[11px] font-black uppercase tracking-widest border border-white/5 rounded-xl px-4 py-2"
               >
                 <option value="">All Groups</option>
@@ -236,7 +340,7 @@ export const Channels: React.FC = () => {
               </select>
               <select 
                 value={selectedStatus} 
-                onChange={e => setSelectedStatus(e.target.value)}
+                onChange={e => updateParams({ status: e.target.value })}
                 className="bg-slate-950/50 text-white text-[11px] font-black uppercase tracking-widest border border-white/5 rounded-xl px-4 py-2"
               >
                 <option value="">All Status</option>
@@ -247,6 +351,9 @@ export const Channels: React.FC = () => {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Top Pagination */}
+      {renderPagination()}
 
       {/* Channels List - DESKTOP TABLE */}
       <div className="hidden lg:block glass rounded-[2rem] overflow-hidden">
@@ -271,7 +378,7 @@ export const Channels: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border border-white/5 group-hover:border-indigo-500/30 transition-colors shrink-0">
-                          {ch.logo_url ? <img src={ch.logo_url} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={20} />}
+                          {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={20} />}
                         </div>
                         <div className="min-w-0">
                            <div className="flex items-center gap-2">
@@ -343,7 +450,7 @@ export const Channels: React.FC = () => {
             >
               <div className="flex items-center gap-4">
                  <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-white/5 flex items-center justify-center shrink-0">
-                   {ch.logo_url ? <img src={ch.logo_url} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={24} />}
+                   {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={24} />}
                  </div>
                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -389,27 +496,8 @@ export const Channels: React.FC = () => {
         )}
       </div>
 
-      {/* Pagination (Global) */}
-      {pagination && pagination.pages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
-           <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">
-             Total: <span className="text-white">{pagination.total}</span> entries
-           </p>
-           <div className="flex items-center gap-1 bg-slate-900/40 p-1 rounded-xl border border-white/5">
-              <button 
-                disabled={!pagination.has_prev}
-                onClick={() => setPage(p => p - 1)}
-                className="p-2 text-slate-500 hover:text-white transition-all disabled:opacity-20"
-              ><ChevronLeft size={18} /></button>
-              <div className="px-4"><span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Page {pagination.current_page}</span></div>
-              <button 
-                disabled={!pagination.has_next}
-                onClick={() => setPage(p => p + 1)}
-                className="p-2 text-slate-500 hover:text-white transition-all disabled:opacity-20"
-              ><ChevronRight size={18} /></button>
-           </div>
-        </div>
-      )}
+      {/* Pagination (Global Bottom) */}
+      {renderPagination()}
 
       <AnimatePresence>
         {isFormOpen && <ChannelForm channelId={editingId} onClose={() => setIsFormOpen(false)} onSuccess={fetchChannels} />}

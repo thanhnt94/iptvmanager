@@ -13,6 +13,7 @@ import {
   SearchX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getLogoUrl } from '../../utils';
 
 // Custom hook for debouncing
 function useDebounce<T>(value: T, delay: number): T {
@@ -32,7 +33,7 @@ interface Playlist {
 interface Channel {
   id: number;
   name: string;
-  logo: string | null;
+  logo_url: string | null;
   group: string;
   status: 'live' | 'die' | 'unknown';
   quality: string;
@@ -293,9 +294,9 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                 }`}
               >
                  <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center p-1.5 shrink-0 shadow-lg group-hover:scale-105 transition-transform overflow-hidden">
-                    {ch.logo ? (
+                    {ch.logo_url ? (
                       <img 
-                        src={ch.logo} 
+                        src={getLogoUrl(ch.logo_url)} 
                         className="w-full h-full object-contain" 
                         alt="" 
                         onError={(e) => {
@@ -309,7 +310,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                         }}
                       />
                     ) : null}
-                    <div className={`logo-fallback items-center justify-center w-full h-full ${ch.logo ? 'hidden' : 'flex'}`}>
+                    <div className={`logo-fallback items-center justify-center w-full h-full ${ch.logo_url ? 'hidden' : 'flex'}`}>
                        <Tv className="text-slate-800" size={20} />
                     </div>
                  </div>

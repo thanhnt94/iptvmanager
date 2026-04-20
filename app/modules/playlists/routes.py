@@ -96,7 +96,7 @@ def get_entries(playlist_id):
             ch_data = {
                 'id': ch.id,
                 'name': ch.name,
-                'logo': ch.logo_url,
+                'logo_url': ch.logo_url,
                 'group': ch.group_name,
                 'status': ch.status,
                 'quality': ch.quality,

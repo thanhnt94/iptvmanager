@@ -43,6 +43,7 @@ def list_channels():
     search = request.args.get('search', '')
     group = request.args.get('group', '')
     status = request.args.get('status', '')
+    sort = request.args.get('sort', 'name') # name, newest, oldest
     
     query = Channel.query
     if search:
@@ -52,7 +53,14 @@ def list_channels():
     if status:
         query = query.filter(Channel.status == status)
         
-    pagination = query.order_by(Channel.name).paginate(page=page, per_page=per_page)
+    if sort == 'newest':
+        query = query.order_by(Channel.created_at.desc())
+    elif sort == 'oldest':
+        query = query.order_by(Channel.created_at.asc())
+    else:
+        query = query.order_by(Channel.name)
+
+    pagination = query.paginate(page=page, per_page=per_page)
     
     channels = []
     token = current_user.api_token
@@ -75,7 +83,8 @@ def list_channels():
                 'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
                 'tracking': url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True),
                 'hls': url_for('channels.play_hls', channel_id=ch.id, token=token, _external=True),
-                'ts': url_for('channels.play_ts', channel_id=ch.id, token=token, _external=True)
+                'ts': url_for('channels.play_ts', channel_id=ch.id, token=token, _external=True),
+                'original': ch.stream_url
             }
         })
         
@@ -120,7 +129,8 @@ def get_info(id):
                 'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
                 'tracking': url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True),
                 'hls': url_for('channels.play_hls', channel_id=ch.id, token=token, _external=True),
-                'ts': url_for('channels.play_ts', channel_id=ch.id, token=token, _external=True)
+                'ts': url_for('channels.play_ts', channel_id=ch.id, token=token, _external=True),
+                'original': ch.stream_url
             }
         },
         'memberships': memberships
@@ -130,46 +140,71 @@ def get_info(id):
 @login_required
 def add_channel():
     data = request.json
-    ch = Channel(
-        name=data.get('name'),
-        stream_url=data.get('stream_url'),
-        logo_url=data.get('logo_url'),
-        group_name=data.get('group_name'),
-        epg_id=data.get('epg_id'),
-        proxy_type=data.get('proxy_type', 'none'),
-        is_original=data.get('is_original', False)
-    )
-    db.session.add(ch)
-    db.session.flush()
+    url = data.get('stream_url')
     
-    playlist_ids = data.get('selected_playlists', [])
-    for p_id in playlist_ids:
-        PlaylistService.add_channel_to_playlist(p_id, ch.id)
+    # Check if URL already exists
+    existing = Channel.query.filter_by(stream_url=url).first()
+    if existing:
+        return jsonify({'status': 'error', 'message': f'Channel with this URL already exists: {existing.name}'}), 400
+
+    try:
+        ch = Channel(
+            name=data.get('name'),
+            stream_url=url,
+            logo_url=data.get('logo_url'),
+            group_name=data.get('group_name'),
+            epg_id=data.get('epg_id'),
+            proxy_type=data.get('proxy_type', 'none'),
+            is_original=data.get('is_original', False)
+        )
+        db.session.add(ch)
+        db.session.flush()
         
-    db.session.commit()
-    return jsonify({'status': 'ok', 'id': ch.id})
+        playlist_ids = data.get('selected_playlists', [])
+        for p_id in playlist_ids:
+            PlaylistService.add_channel_to_playlist(p_id, ch.id)
+            
+        db.session.commit()
+        return jsonify({'status': 'ok', 'id': ch.id})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error adding channel: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @channels_bp.route('/<int:id>', methods=['PATCH', 'PUT'])
 @login_required
 def update_channel(id):
     ch = Channel.query.get_or_404(id)
     data = request.json
-    ch.name = data.get('name', ch.name)
-    ch.stream_url = data.get('stream_url', ch.stream_url)
-    ch.logo_url = data.get('logo_url', ch.logo_url)
-    ch.group_name = data.get('group_name', ch.group_name)
-    ch.epg_id = data.get('epg_id', ch.epg_id)
-    ch.proxy_type = data.get('proxy_type', ch.proxy_type)
-    ch.is_original = data.get('is_original', ch.is_original)
     
-    playlist_ids = data.get('selected_playlists', [])
-    from app.modules.playlists.models import PlaylistEntry
-    PlaylistEntry.query.filter_by(channel_id=id).delete()
-    for p_id in playlist_ids:
-        PlaylistService.add_channel_to_playlist(p_id, id)
+    new_url = data.get('stream_url', ch.stream_url)
+    if new_url != ch.stream_url:
+        # Check if new URL already exists elsewhere
+        existing = Channel.query.filter(Channel.stream_url == new_url, Channel.id != id).first()
+        if existing:
+            return jsonify({'status': 'error', 'message': f'Another channel already uses this URL: {existing.name}'}), 400
+
+    try:
+        ch.name = data.get('name', ch.name)
+        ch.stream_url = new_url
+        ch.logo_url = data.get('logo_url', ch.logo_url)
+        ch.group_name = data.get('group_name', ch.group_name)
+        ch.epg_id = data.get('epg_id', ch.epg_id)
+        ch.proxy_type = data.get('proxy_type', ch.proxy_type)
+        ch.is_original = data.get('is_original', ch.is_original)
         
-    db.session.commit()
-    return jsonify({'status': 'ok'})
+        playlist_ids = data.get('selected_playlists', [])
+        from app.modules.playlists.models import PlaylistEntry
+        PlaylistEntry.query.filter_by(channel_id=id).delete()
+        for p_id in playlist_ids:
+            PlaylistService.add_channel_to_playlist(p_id, id)
+            
+        db.session.commit()
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating channel {id}: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @channels_bp.route('/<int:id>', methods=['DELETE'])
 @login_required
@@ -200,7 +235,7 @@ def get_active_sessions():
         results.append({
             'key': s.get('key'),
             'channel_name': ch.name if ch else 'Unknown',
-            'channel_logo': ch.logo_url if ch else None,
+            'logo_url': ch.logo_url if ch else None,
             'user': s['user'],
             'ip': s['ip'],
             'type': s['type'],
@@ -233,7 +268,7 @@ def play_channel(channel_id):
     play_url = channel.stream_url
     
     # Auto-extraction logic for non-direct links
-    if not any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv']):
+    if not any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv', '.flv']):
         from app.modules.channels.services import ExtractorService
         res = ExtractorService.extract_direct_url(channel.stream_url)
         if res.get('success') and res.get('links'):
@@ -243,7 +278,32 @@ def play_channel(channel_id):
     if proxy == 'hls' or '.m3u8' in url_low:
         return redirect(url_for('channels.play_hls', channel_id=channel.id, token=token))
     elif proxy == 'ts' or '.ts' in url_low or '.flv' in url_low:
-        return redirect(url_for('channels.play_ts', channel_id=channel.id, token=token))
+        return redirect(url_for('channels.proxy_stream', url=play_url, channel_id=channel.id, token=token))
+        
+    return redirect(play_url)
+
+@channels_bp.route('/play/preview')
+def preview_channel():
+    url = request.args.get('url')
+    proxy = request.args.get('proxy', 'none')
+    token = request.args.get('token')
+    
+    if not url:
+        return abort(400)
+        
+    url_low = url.lower()
+    play_url = url
+    
+    # Auto-extraction logic for non-direct links
+    if not any(ext in url_low for ext in ['.m3u8', '.ts', '.mp4', '.mkv', '.flv']):
+        from app.modules.channels.services import ExtractorService
+        res = ExtractorService.extract_direct_url(url)
+        if res.get('success') and res.get('links'):
+            play_url = res['links'][0]['url']
+            url_low = play_url.lower()
+
+    if proxy == 'ts' or '.ts' in url_low or '.flv' in url_low:
+        return redirect(url_for('channels.proxy_stream', url=play_url, token=token))
         
     return redirect(play_url)
 
@@ -360,7 +420,14 @@ def track_redirect(channel_id):
     token = request.args.get('token')
     user = validate_proxy_access(token)
     if not user: abort(401)
-    ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'Redirect', bandwidth_kbps=4000)
+    ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'Tracking', bandwidth_kbps=4000)
+    
+    url_low = channel.stream_url.lower()
+    if '.m3u8' in url_low:
+        return redirect(url_for('channels.play_hls', channel_id=channel.id, token=token))
+    elif '.flv' in url_low or '.ts' in url_low:
+        return redirect(url_for('channels.proxy_stream', url=channel.stream_url, channel_id=channel.id, token=token))
+        
     return redirect(channel.stream_url)
 
 @channels_bp.route('/proxy/ts')
@@ -368,10 +435,12 @@ def proxy_stream():
     url = request.args.get('url')
     cid = request.args.get('channel_id')
     token = request.args.get('token')
-    user = validate_proxy_access(token)
-    if not user: abort(401)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+        'Referer': url.rsplit('/', 1)[0] + '/' if '/' in url else url
+    }
     
-    q, sid = StreamManager.get_source_stream(url)
+    q, sid = StreamManager.get_source_stream(url, headers=headers)
     def generate():
         try:
             while True:
@@ -381,7 +450,10 @@ def proxy_stream():
         finally:
             StreamManager.remove_client(sid, q)
             
-    return Response(stream_with_context(generate()), content_type='video/mp2t')
+    is_flv = '.flv' in url.lower().split('?')[0]
+    mimetype = 'video/x-flv' if is_flv else 'video/mp2t'
+    
+    return Response(stream_with_context(generate()), content_type=mimetype)
 
 @channels_bp.route('/player_ping', methods=['POST'])
 def player_ping():
@@ -398,3 +470,38 @@ def player_ping():
     ActiveSessionManager.update_session(cid, current_user.username if current_user.is_authenticated else 'Guest', request.remote_addr, 'Web Player', bandwidth_kbps=int(bitrate * 1024))
     db.session.commit()
     return jsonify({'status': 'ok'})
+
+@channels_bp.route('/logo-proxy')
+def logo_proxy():
+    url = request.args.get('url')
+    if not url:
+        return abort(400)
+    
+    try:
+        # Use common UA to bypass simple bot blocks
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            'Referer': url.rsplit('/', 1)[0] + '/' if '/' in url else url
+        }
+        # Allow 10s timeout, verify=False for slightly broken SSLs
+        resp = requests.get(url, headers=headers, timeout=10, verify=False, stream=True)
+        
+        if resp.status_code >= 400:
+            logger.warning(f"Logo Proxy failed for {url} with status {resp.status_code}")
+            return abort(resp.status_code)
+            
+        content = resp.raw.read()
+        return Response(
+            content,
+            content_type=resp.headers.get('Content-Type', 'image/jpeg'),
+            headers={
+                'Cache-Control': 'public, max-age=86400', # Cache for 1 day
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
+    except requests.exceptions.Timeout:
+        logger.warning(f"Logo Proxy timeout for {url}")
+        return abort(504)
+    except Exception as e:
+        logger.error(f"Logo Proxy internal error for {url}: {e}")
+        return abort(502)

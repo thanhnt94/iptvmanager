@@ -128,9 +128,7 @@ def create_app(config_class=Config):
 
     @app.route('/')
     def index():
-        if os.path.exists(os.path.join(app.static_folder, 'index.html')):
-            return send_from_directory(app.static_folder, 'index.html')
-        return "Frontend build not found. Run 'npm run build' in iptv-studio.", 404
+        return render_template('index.html')
 
     @app.errorhandler(404)
     def handle_404(e):
@@ -148,10 +146,8 @@ def create_app(config_class=Config):
         if request.path.startswith(('/play/', '/track/', '/health/')):
              return jsonify({'error': 'Resource handle mismatch'}), 404
 
-        # 3. Default: Serve index.html to allow React Router to handle the path
-        if os.path.exists(os.path.join(app.static_folder, 'index.html')):
-            return send_from_directory(app.static_folder, 'index.html')
-        return "Frontend build not found", 404
+        # 3. Default: Serve index.html via template to allow React Router to handle the path
+        return render_template('index.html')
 
     @app.errorhandler(Exception)
     def handle_exception(e):

@@ -1,6 +1,7 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import Hls from 'hls.js';
 import mpegts from 'mpegts.js';
+import flvjs from 'flv.js';
 
 interface VideoStats {
   fps: number;
@@ -11,6 +12,7 @@ interface VideoStats {
 interface VideoEngineProps {
   url: string | null;
   format?: string | null;
+  originalUrl?: string;
   type?: 'live' | 'vod';
   onPlaying?: () => void;
   onWaiting?: () => void;
@@ -35,6 +37,7 @@ export interface VideoEngineRef {
 export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
   url,
   format,
+  originalUrl,
   type = 'live',
   onPlaying,
   onWaiting,
@@ -49,6 +52,7 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const mpegtsRef = useRef<mpegts.Player | null>(null);
+  const flvRef = useRef<flvjs.Player | null>(null);
   const statsInterval = useRef<any>(null);
   const lastFrameCount = useRef<number>(0);
   const lastTime = useRef<number>(0);
@@ -66,6 +70,12 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
       mpegtsRef.current.detachMediaElement();
       mpegtsRef.current.destroy();
       mpegtsRef.current = null;
+    }
+    if (flvRef.current) {
+      flvRef.current.unload();
+      flvRef.current.detachMediaElement();
+      flvRef.current.destroy();
+      flvRef.current = null;
     }
   };
 
@@ -106,6 +116,8 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
            if (level?.audioCodec) audioInfo = level.audioCodec.split('.')[0].toUpperCase();
         } else if (mpegtsRef.current) {
            audioInfo = 'MPEG-TS';
+        } else if (flvRef.current) {
+           audioInfo = 'FLV (JS)';
         }
 
         onStatsUpdate?.({
@@ -139,8 +151,11 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
     startStatsMonitoring();
 
     const lowUrl = url.toLowerCase();
-    const isM3U8 = lowUrl.includes('.m3u8') || lowUrl.includes('proxy_hls_manifest') || format === 'hls';
-    const isTS = lowUrl.includes('.ts') || lowUrl.includes('type=ts') || lowUrl.includes('proxy_stream') || lowUrl.includes('forced=ts') || format === 'ts';
+    const lowOrigUrl = originalUrl?.toLowerCase() || '';
+    
+    const isM3U8 = lowUrl.includes('.m3u8') || lowUrl.includes('proxy_hls_manifest') || format === 'hls' || lowOrigUrl.includes('.m3u8');
+    const isTS = lowUrl.includes('.ts') || lowUrl.includes('type=ts') || lowUrl.includes('proxy_stream') || lowUrl.includes('forced=ts') || format === 'ts' || (lowOrigUrl.includes('.ts') && !lowUrl.includes('/play/'));
+    const isFLV = lowUrl.includes('.flv') || lowUrl.includes('forced=flv') || format === 'flv' || format === 'smart' || lowOrigUrl.includes('.flv') || lowOrigUrl.includes('.mp4');
 
     if (isM3U8) {
       if (Hls.isSupported()) {
@@ -174,6 +189,33 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
         video.src = url;
         video.play().catch(() => {});
       }
+    } else if (isFLV && flvjs.isSupported()) {
+      const player = flvjs.createPlayer({
+        type: 'flv',
+        isLive: type === 'live',
+        url: url
+      }, {
+        enableWorker: false,
+        enableStashBuffer: false,
+        stashInitialSize: 128,
+        autoCleanupSourceBuffer: true
+      });
+      player.attachMediaElement(video);
+      player.on(flvjs.Events.ERROR, (type, detail) => {
+        onError?.(`FLV Engine Error: ${type} - ${detail}`);
+      });
+      player.on(flvjs.Events.STATISTICS_INFO, (info) => {
+        if (info.speed === 0 && video.paused === false && (performance.now() - lastTime.current) > 10000) {
+           // Detected stuck stream (no data for 10s while playing)
+           // We don't trigger error immediately but we can log it
+        }
+      });
+      player.load();
+      const playPromise = player.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {});
+      }
+      flvRef.current = player;
     } else if (isTS) {
       if (mpegts.getFeatureList().mseLivePlayback) {
         const player = mpegts.createPlayer({
@@ -181,11 +223,14 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
           isLive: type === 'live',
           url: url
         }, {
-            enableWorker: true,
+            enableWorker: false,
             enableStashBuffer: false,
             stashInitialSize: 128
         });
         player.attachMediaElement(video);
+        player.on(mpegts.Events.ERROR, (type, detail) => {
+           onError?.(`MPEG-TS Engine Error: ${type} - ${detail}`);
+        });
         player.load();
         player.play();
         mpegtsRef.current = player;

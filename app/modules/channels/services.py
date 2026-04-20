@@ -38,10 +38,10 @@ class StreamManager:
         with cls._lock:
             # Detect if we need FFmpeg (Transcode/Remux)
             is_flv = '.flv' in url.lower().split('?')[0]
-            force_transcode = kwargs.get('transcode', False) or is_flv
+            force_transcode = kwargs.get('transcode', False)
             
             sid = url if use_sm else f"{url}_{time.time()}"
-            if force_transcode: sid = f"trans_{sid}"
+            if force_transcode: sid = f"trans_{sid.replace('trans_', '')}"
             
             # Create a new client queue
             # Increased size to 256 for better depth and fewer drops
@@ -76,10 +76,12 @@ class StreamManager:
         logger.info(f"StreamEngine: Starting optimized pipe for {url}")
         session = requests.Session()
         
-        # User Agent optimization for IPTV providers
+        # User Agent & Referer optimization for IPTV providers
         if not headers or 'User-Agent' not in headers:
             if not headers: headers = {}
             headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+            if 'Referer' not in headers:
+                headers['Referer'] = url.rsplit('/', 1)[0] + '/' if '/' in url else url
         
         # Ensure persistent connection
         headers['Connection'] = 'keep-alive'
@@ -163,10 +165,15 @@ class StreamManager:
 
         logger.info(f"StreamEngine: Starting FFmpeg remuxer ({ffmpeg_path}) for {url}")
         
-        ua = headers.get('User-Agent', 'Mozilla/5.0') if headers else 'Mozilla/5.0'
+        ua = headers.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36') if headers else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        referer = headers.get('Referer', url.rsplit('/', 1)[0] + '/' if '/' in url else url) if headers else (url.rsplit('/', 1)[0] + '/' if '/' in url else url)
+        
+        # FFmpeg headers need to be newline separated
+        ffmpeg_headers = f"User-Agent: {ua}\r\nReferer: {referer}\r\n"
+        
         cmd = [
             ffmpeg_path, '-y',
-            '-user_agent', ua,
+            '-headers', ffmpeg_headers,
             '-loglevel', 'error',
             '-i', url,
             '-map', '0',

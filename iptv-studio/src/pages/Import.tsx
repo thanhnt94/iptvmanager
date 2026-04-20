@@ -12,10 +12,11 @@ import {
   Settings
 } from 'lucide-react';
 import { PreviewModal } from '../components/channels/PreviewModal';
+import { getLogoUrl } from '../utils';
 
 interface Candidate {
   name: string;
-  logo_url: string;
+  logo_url: string | null;
   group_name: string;
   epg_id: string;
   stream_url: string;
@@ -264,7 +265,7 @@ export const Import: React.FC = () => {
                         <td className="px-8 py-4">
                           <div className="flex items-center gap-4">
                             <div className="w-10 h-10 rounded-xl bg-slate-950 border border-white/5 overflow-hidden flex items-center justify-center">
-                               {c.logo_url ? <img src={c.logo_url} className="w-full h-full object-contain p-1" alt="" /> : <Eye className="text-slate-800" size={16} />}
+                               {c.logo_url ? <img src={getLogoUrl(c.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Eye className="text-slate-800" size={16} />}
                             </div>
                             <span className="text-sm font-bold text-white tracking-tight">{c.name}</span>
                           </div>

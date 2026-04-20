@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Play, 
   Pause, 
@@ -10,15 +11,19 @@ import {
   Zap,
   ChevronUp,
   Heart,
-  Share2
+  Share2,
+  Copy,
+  Check,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getLogoUrl } from '../../utils';
 
 interface PlayerHUDProps {
   channel: {
     id: number;
     name: string;
-    logo: string | null;
+    logo_url: string | null;
     group: string;
     resolution: string;
     stream_format: string;
@@ -59,6 +64,8 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
 }) => {
   const [showHUD, setShowHUD] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [latency, setLatency] = useState(340);
   let timeout: any;
@@ -82,6 +89,12 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
         clearInterval(latencyInterval);
     };
   }, []);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   if (!channel) return null;
 
@@ -132,7 +145,10 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                        <button className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all">
                           <Heart size={16} />
                        </button>
-                       <button className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all">
+                       <button 
+                        onClick={() => setShowShare(true)}
+                        className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all active:scale-90"
+                       >
                           <Share2 size={16} />
                        </button>
                        <button onClick={onToggleFullscreen} className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/60">
@@ -166,9 +182,9 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                 <div className="flex items-center gap-3 lg:gap-[clamp(10px,4cqw,24px)] min-w-0 w-full lg:w-auto">
                    {/* White Logo Box - Scaled for Mobile/Desktop */}
                    <div className="rounded-lg lg:rounded-[clamp(10px,2.5cqw,16px)] bg-white p-1 lg:p-[clamp(3px,1.5cqw,8px)] shadow-2xl border border-white/10 flex items-center justify-center shrink-0 w-10 h-10 lg:w-[clamp(40px,10cqw,88px)] lg:h-[clamp(40px,10cqw,88px)] overflow-hidden">
-                      {channel.logo ? (
+                      {channel.logo_url ? (
                         <img 
-                          src={channel.logo} 
+                          src={getLogoUrl(channel.logo_url)} 
                           className="w-full h-full object-contain" 
                           alt="" 
                           onError={(e) => {
@@ -182,7 +198,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                           }}
                         />
                       ) : null}
-                      <div className={`hud-logo-fallback items-center justify-center w-full h-full ${channel.logo ? 'hidden' : 'flex'}`}>
+                      <div className={`hud-logo-fallback items-center justify-center w-full h-full ${channel.logo_url ? 'hidden' : 'flex'}`}>
                          <Activity className="text-indigo-400" style={{ width: '50%', height: '50%' }} />
                       </div>
                    </div>
@@ -260,9 +276,12 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                       <button className="bg-white/5 border border-white/5 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all">
                          <Heart size="35%" />
                       </button>
-                      <button className="bg-white/5 border border-white/5 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all">
-                         <Share2 size="35%" />
-                      </button>
+                       <button 
+                        onClick={() => setShowShare(true)}
+                        className="bg-white/5 border border-white/5 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                       >
+                          <Share2 size="35%" />
+                       </button>
                    </div>
                    <div className="flex items-center gap-1.5 lg:gap-2">
                       <button 
@@ -281,49 +300,136 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                 </div>
              </div>
 
-             {/* Source Selector Overlay - Nested for pointer-events consistency */}
-             <AnimatePresence>
-                {showSettings && (
-                   <motion.div 
-                     initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                     className="absolute bottom-full left-1/2 -translate-x-1/2 lg:left-[clamp(80px,15cqw,120px)] lg:translate-x-0 mb-[clamp(10px,2cqw,20px)] bg-slate-900/90 backdrop-blur-3xl rounded-2xl border border-white/10 p-[clamp(8px,1.5cqw,16px)] shadow-3xl z-50 min-w-[clamp(180px,20cqw,250px)] pointer-events-auto"
-                   >
-                     <div className="space-y-1">
-                        <span className="font-black text-white/20 uppercase tracking-[0.2em] px-3 block mb-2" style={{ fontSize: 'clamp(7px,0.8cqw,10px)' }}>Link Gateway</span>
-                        {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
-                          const labelMap: Record<string, string> = {
-                            'hls': 'HLS Cache',
-                            'ts': 'TLS Cache',
-                            'tracking': 'Tracking',
-                            'original': 'Original',
-                            'smart': 'SMart',
-                            'vlc': 'VLC Player',
-                            'potplayer': 'PotPlayer'
-                          };
-                          const displayLabel = labelMap[mode.toLowerCase()] || mode.toUpperCase();
+             {/* Source Selector Overlay - Portal persistent for exit animations */}
+             {createPortal(
+               <AnimatePresence>
+                  {showSettings && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                      className="fixed z-[500] bg-slate-950 rounded-2xl border border-white/10 p-[clamp(8px,1.5cqw,16px)] shadow-3xl pointer-events-auto"
+                      style={{ 
+                          bottom: 'clamp(80px, 15cqw, 120px)',
+                          left: 'clamp(20px, 4cqw, 40px)'
+                      }}
+                    >
+                      <div className="space-y-1">
+                          <span className="font-black text-white/20 uppercase tracking-[0.2em] px-3 block mb-2" style={{ fontSize: 'clamp(7px,0.8cqw,10px)' }}>Link Gateway</span>
+                          {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
+                            const labelMap: Record<string, string> = {
+                              'hls': 'HLS Cache',
+                              'ts': 'TLS Cache',
+                              'tracking': 'Tracking',
+                              'original': 'Original',
+                              'smart': 'SMart',
+                              'vlc': 'VLC Player',
+                              'potplayer': 'PotPlayer'
+                            };
+                            const displayLabel = labelMap[mode.toLowerCase()] || mode.toUpperCase();
 
-                          return (
-                            <button 
-                              key={mode}
-                              onClick={() => {
-                                onSelectLink(url as string, mode);
-                                setShowSettings(false);
-                              }}
-                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
-                                activeMode === mode ? 'bg-indigo-600 text-white' : 'hover:bg-white/5 text-white/40'
-                              }`}
-                            >
-                              <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(10px,1cqw,12px)' }}>{displayLabel}</span>
-                              {activeMode === mode && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-                            </button>
-                          );
-                        })}
-                     </div>
-                  </motion.div>
-                )}
-             </AnimatePresence>
+                            return (
+                              <button 
+                                key={mode}
+                                onClick={() => {
+                                  onSelectLink(url as string, mode);
+                                  setShowSettings(false);
+                                }}
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
+                                  activeMode === mode ? 'bg-indigo-600 text-white' : 'hover:bg-white/5 text-white/40'
+                                }`}
+                              >
+                                <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(10px,1cqw,12px)' }}>{displayLabel}</span>
+                                {activeMode === mode && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </motion.div>
+                  )}
+               </AnimatePresence>,
+               document.getElementById('portal-root') || document.body
+             )}
+
+             {/* Share Links Modal - Portal persistent for exit animations */}
+             {createPortal(
+               <AnimatePresence>
+                  {showShare && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-[500] p-4 lg:p-10 pointer-events-auto"
+                    >
+                        <motion.div 
+                          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                          animate={{ scale: 1, opacity: 1, y: 0 }}
+                          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                          className="bg-slate-900 w-full max-w-lg rounded-[2rem] border border-white/10 overflow-hidden shadow-2xl relative"
+                        >
+                          <header className="p-8 border-b border-white/5 flex items-center justify-between">
+                              <div>
+                                <h3 className="text-xl font-black text-white tracking-tight uppercase">Distribute Signal</h3>
+                                <p className="text-[10px] text-white/30 font-black uppercase tracking-widest mt-1">Select gateway and copy to clipboard</p>
+                              </div>
+                              <button 
+                                onClick={() => setShowShare(false)}
+                                className="p-3 bg-white/5 rounded-2xl text-slate-400 hover:text-white transition-all active:scale-90"
+                              >
+                                  <X size={20} />
+                              </button>
+                          </header>
+
+                          <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto scrollbar-hide">
+                              {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
+                                const labelMap: Record<string, string> = {
+                                  'smart': 'SMart Dynamic Gateway',
+                                  'tracking': 'Direct Landing Track',
+                                  'original': 'Original Source Link',
+                                  'hls': 'HLS Edge Cache',
+                                  'ts': 'TS Stream Proxy'
+                                };
+                                const label = labelMap[mode.toLowerCase()] || mode.toUpperCase();
+                                
+                                return (
+                                  <div 
+                                    key={mode}
+                                    className="p-4 rounded-3xl bg-white/[0.03] border border-white/5 group hover:bg-white/5 transition-all"
+                                  >
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{label}</span>
+                                        <button 
+                                          onClick={() => handleCopy(url as string, mode)}
+                                          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${
+                                            copiedKey === mode 
+                                            ? 'bg-emerald-500 text-slate-950 scale-95' 
+                                            : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'
+                                          }`}
+                                        >
+                                            {copiedKey === mode ? (
+                                                <><Check size={14} /> Copied</>
+                                            ) : (
+                                                <><Copy size={12} /> Copy link</>
+                                            )}
+                                        </button>
+                                      </div>
+                                      <div className="text-[11px] font-medium text-slate-500 truncate bg-black/20 p-3 rounded-xl border border-white/5 select-all">
+                                        {url as string}
+                                      </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+
+                          <div className="p-8 border-t border-white/5 bg-indigo-500/5 text-center">
+                              <p className="text-[10px] font-black text-indigo-400/60 uppercase tracking-[0.2em]">Ecosystem Distribution Terminal v2.0</p>
+                          </div>
+                        </motion.div>
+                    </motion.div>
+                  )}
+               </AnimatePresence>,
+               document.getElementById('portal-root') || document.body
+             )}
           </div>
         </motion.div>
       )}
