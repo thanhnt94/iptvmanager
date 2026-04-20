@@ -64,21 +64,23 @@ class IngestionService:
 
     @staticmethod
     def import_channels(channel_list, visibility='private'):
-        """Imports channels with deduplication logic."""
+        """Imports channels with optimized deduplication and bulk insertion."""
         from flask_login import current_user
         imported_count = 0
         skipped_count = 0
         
         is_public = (visibility == 'public')
         public_status = 'approved' if is_public else 'pending'
+
+        # Optimization: Fetch all existing stream_urls in one go to avoid N+1 queries
+        existing_urls = {u[0] for u in db.session.query(Channel.stream_url).all()}
         
         for data in channel_list:
             if not data.get('stream_url'):
                 continue
                 
-            # Check if stream_url already exists
-            existing = Channel.query.filter_by(stream_url=data['stream_url']).first()
-            if existing:
+            # Check if stream_url already exists in the local set
+            if data['stream_url'] in existing_urls:
                 skipped_count += 1
                 continue
                 
@@ -104,6 +106,8 @@ class IngestionService:
                 public_status=public_status
             )
             db.session.add(new_channel)
+            # Add to local set to avoid duplicates within the same batch
+            existing_urls.add(data['stream_url'])
             imported_count += 1
             
         db.session.commit()

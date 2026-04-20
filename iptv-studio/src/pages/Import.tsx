@@ -30,6 +30,8 @@ export const Import: React.FC = () => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [previewChannel, setPreviewChannel] = useState<any>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [totalToImport, setTotalToImport] = useState(0);
   const [visibility, setVisibility] = useState('private');
   const [result, setResult] = useState<{ imported: number, skipped: number } | null>(null);
 
@@ -88,19 +90,42 @@ export const Import: React.FC = () => {
     if (selected.length === 0) return;
 
     setImporting(true);
+    setImportProgress(0);
+    setTotalToImport(selected.length);
+    
+    let totalImported = 0;
+    let totalSkipped = 0;
+
     try {
-      const res = await fetch('/api/ingestion/commit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channels: selected, visibility })
-      });
-      const data = await res.json();
-      setResult(data);
+      // BATCH PROCESSING: 500 channels per request to avoid timeouts
+      const CHUNK_SIZE = 500;
+      for (let i = 0; i < selected.length; i += CHUNK_SIZE) {
+        const chunk = selected.slice(i, i + CHUNK_SIZE);
+        
+        const res = await fetch('/api/ingestion/commit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channels: chunk, visibility })
+        });
+        
+        if (!res.ok) throw new Error('Batch failed');
+        
+        const data = await res.json();
+        totalImported += data.imported;
+        totalSkipped += data.skipped;
+        
+        setImportProgress(Math.min(i + CHUNK_SIZE, selected.length));
+      }
+
+      setResult({ imported: totalImported, skipped: totalSkipped });
       setCandidates([]);
     } catch (err) {
-      alert('Import failed');
+      alert('Import failed during processing. Some channels might have been imported.');
+      console.error(err);
     } finally {
       setImporting(false);
+      setImportProgress(0);
+      setTotalToImport(0);
     }
   };
 
@@ -110,6 +135,44 @@ export const Import: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
+      {/* Heavy Processing Overlay */}
+      <AnimatePresence>
+        {(parsing || importing) && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-8"
+          >
+            <div className="relative">
+               <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full animate-pulse" />
+               <Loader2 className="animate-spin text-indigo-500 relative z-10" size={64} />
+            </div>
+            
+            <h3 className="text-2xl font-black text-white mt-8 uppercase tracking-tighter">
+              {parsing ? 'Parsing Streams...' : 'Committing Registry...'}
+            </h3>
+            
+            {importing && (
+              <div className="w-full max-w-md mt-6 space-y-3">
+                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-indigo-400">
+                    <span>Progress</span>
+                    <span>{importProgress} / {totalToImport}</span>
+                 </div>
+                 <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+                    <motion.div 
+                      className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(importProgress / totalToImport) * 100}%` }}
+                    />
+                 </div>
+                 <p className="text-[9px] text-white/30 text-center uppercase font-bold tracking-[0.3em]">Processing high-volume data packets</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header>
         <h2 className="text-3xl font-black tracking-tighter text-white">Advanced <span className="text-indigo-500">Ingestion</span></h2>
         <p className="text-slate-400 text-sm mt-1">Bulk sync streams from external M3U8 links or local files.</p>
