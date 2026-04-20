@@ -622,7 +622,7 @@ class ExtractorService:
         
         try:
             import subprocess
-            y_res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            y_res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if y_res.returncode == 0:
                 lines = y_res.stdout.strip().split('\n')
                 for line in lines:
@@ -639,7 +639,7 @@ class ExtractorService:
             import requests
             import re
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-            resp = requests.get(web_url, timeout=10, headers=headers)
+            resp = requests.get(web_url, timeout=5, headers=headers)
             if resp.status_code == 200:
                 html = resp.text
                 logger.debug(f"Scraper fetched {len(html)} bytes from {web_url}")

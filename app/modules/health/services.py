@@ -155,7 +155,7 @@ class HealthCheckService:
         ]
         
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 streams = data.get('streams', [])
