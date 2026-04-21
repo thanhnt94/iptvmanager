@@ -7,8 +7,9 @@ import { UnifiedPlayer } from '../components/player/UnifiedPlayer';
 import { ChannelForm } from '../components/forms/ChannelForm';
 
 export const Player: React.FC<{ user: { username: string, role: string } }> = ({ user }) => {
-  const [activeChannel, setActiveChannel] = useState<any>(null);
+   const [activeChannel, setActiveChannel] = useState<any>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col overflow-hidden z-[100] animate-in fade-in duration-700">
@@ -43,7 +44,6 @@ export const Player: React.FC<{ user: { username: string, role: string } }> = ({
                       key={activeChannel.id}
                       channel={activeChannel}
                       initialMode="SMART"
-                      onEdit={() => setIsEditOpen(true)}
                     />
                   </div>
                 )}
@@ -53,17 +53,20 @@ export const Player: React.FC<{ user: { username: string, role: string } }> = ({
            <PlayerSidebar 
             onSelectChannel={setActiveChannel} 
             activeChannelId={activeChannel?.id} 
+            onEditChannel={(id) => {
+                setEditingId(id);
+                setIsEditOpen(true);
+            }}
             className="order-2 lg:order-1 shrink-0"
           />
        </div>
 
        <AnimatePresence>
-          {isEditOpen && activeChannel && (
+          {isEditOpen && editingId && (
             <ChannelForm 
-              channelId={activeChannel.id} 
+              channelId={editingId} 
               onClose={() => setIsEditOpen(false)} 
               onSuccess={() => {
-                // Potential to refresh active channel name/info if needed
                 setIsEditOpen(false);
               }} 
             />

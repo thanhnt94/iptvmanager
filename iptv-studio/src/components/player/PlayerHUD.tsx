@@ -14,8 +14,7 @@ import {
   Share2,
   Copy,
   Check,
-  X,
-  Settings2
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLogoUrl } from '../../utils';
@@ -47,7 +46,6 @@ interface PlayerHUDProps {
   onSelectLink: (url: string, mode: string) => void;
   activeMode: string;
   stats: { fps: number; audio: string; resolution: string };
-  onEdit?: () => void;
 }
 
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({
@@ -62,8 +60,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   onOpenVLC,
   onSelectLink,
   activeMode,
-  stats,
-  onEdit
+  stats
 }) => {
   const [showHUD, setShowHUD] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -147,13 +144,6 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                        </button>
                        <button className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all">
                           <Heart size={16} />
-                       </button>
-                       <button 
-                         onClick={onEdit}
-                         title="Edit Channel"
-                         className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all"
-                       >
-                          <Settings2 size={16} />
                        </button>
                        <button 
                         onClick={() => setShowShare(true)}
@@ -293,13 +283,6 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                        </button>
                    </div>
                    <div className="flex items-center gap-1.5 lg:gap-2">
-                      <button 
-                        onClick={onEdit}
-                        title="Edit Channel"
-                        className="bg-white/10 border border-white/10 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/60 hover:text-white transition-all"
-                      >
-                         <Settings2 size="35%" />
-                      </button>
                       <button 
                         onClick={onOpenVLC}
                         title="VLC Boost"

@@ -9,14 +9,12 @@ interface UnifiedPlayerProps {
   channel: any;
   initialMode?: string;
   layout?: 'full' | 'compact';
-  onEdit?: () => void;
 }
 
 export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({ 
   channel, 
   initialMode = 'SMART', 
-  layout = 'full',
-  onEdit
+  layout = 'full'
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(layout === 'compact'); // Default muted for preview
@@ -201,7 +199,6 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
         onToggleFullscreen={handleToggleFullscreen}
         onOpenVLC={handleOpenVLC}
         onSelectLink={handleSelectLink}
-        onEdit={onEdit}
         activeMode={activeMode}
         stats={stats}
       />

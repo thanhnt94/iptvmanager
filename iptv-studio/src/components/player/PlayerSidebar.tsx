@@ -10,7 +10,8 @@ import {
   Loader2,
   Filter,
   Layers,
-  SearchX
+  SearchX,
+  Settings2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLogoUrl } from '../../utils';
@@ -46,12 +47,14 @@ interface PlayerSidebarProps {
   onSelectChannel: (channel: Channel) => void;
   activeChannelId: number | null;
   className?: string;
+  onEditChannel?: (id: number) => void;
 }
 
 export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({ 
   onSelectChannel, 
   activeChannelId,
-  className = ""
+  className = "",
+  onEditChannel
 }) => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState<number | string | null>(null);
@@ -330,9 +333,27 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                        <span className="text-[8px] font-bold text-white/20 uppercase tracking-[0.2em]">{ch.resolution || 'SD'}</span>
                     </div>
                  </div>
-                 {activeChannelId === ch.id && (
-                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-                 )}
+                 <div className="flex items-center gap-2">
+                    {onEditChannel && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditChannel(ch.id);
+                          }}
+                          className={`p-1.5 rounded-lg transition-all ${
+                            activeChannelId === ch.id 
+                            ? 'bg-white/10 text-white hover:bg-white/20' 
+                            : 'text-slate-500 hover:text-white hover:bg-white/5 shadow-sm'
+                          }`}
+                          title="Edit Channel"
+                        >
+                           <Settings2 size={12} />
+                        </button>
+                    )}
+                    {activeChannelId === ch.id && (
+                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
+                    )}
+                 </div>
               </motion.button>
             ))
           ) : !loading && (
