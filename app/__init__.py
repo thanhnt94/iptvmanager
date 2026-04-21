@@ -8,6 +8,20 @@ from app.core.database import db, migrate
 from app.modules.health.tasks import init_scheduler
 from flask_login import current_user, login_required
 import requests
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+    except Exception:
+        # Not all databases support these pragmas (e.g. Postgres)
+        pass
 
 def create_app(config_class=Config):
     # Set static_folder to the Vite build output

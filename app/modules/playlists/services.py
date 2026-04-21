@@ -18,18 +18,32 @@ class PlaylistService:
 
     @staticmethod
     def ensure_system_playlist():
-        system_playlist = PlaylistProfile.query.filter_by(slug='alliptv').first()
-        if not system_playlist:
+        # 1. All Channels Playlist
+        all_playlist = PlaylistProfile.query.filter_by(slug='alliptv').first()
+        if not all_playlist:
             token = secrets.token_hex(16)
-            system_playlist = PlaylistProfile(
+            all_playlist = PlaylistProfile(
                 name='All IPTV Channels',
                 slug='alliptv',
                 is_system=True,
                 security_token=token
             )
-            db.session.add(system_playlist)
-            db.session.commit()
-        return system_playlist
+            db.session.add(all_playlist)
+        
+        # 2. Protected Channels Playlist (New)
+        protected_playlist = PlaylistProfile.query.filter_by(slug='protected').first()
+        if not protected_playlist:
+            token = secrets.token_hex(16)
+            protected_playlist = PlaylistProfile(
+                name='Protected Channels',
+                slug='protected',
+                is_system=True,
+                security_token=token
+            )
+            db.session.add(protected_playlist)
+
+        db.session.commit()
+        return all_playlist
 
     @staticmethod
     def create_group(playlist_id, name):
@@ -90,10 +104,16 @@ class PlaylistService:
         # Determine which channels to include
         if profile.is_system:
             # System playlist handling
+            query = Channel.query
+            
+            # Special logic for Protected Channels playlist
+            if profile.slug == 'protected':
+                query = query.filter_by(is_original=True)
+                
             if hide_die:
-                channels = Channel.query.filter_by(status='live').all()
-            else:
-                channels = Channel.query.all()
+                query = query.filter_by(status='live')
+            
+            channels = query.all()
                 
             for ch in channels:
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch.name}'
@@ -186,8 +206,12 @@ class PlaylistService:
         epg_ids = set()
         
         if profile.is_system:
-            # System playlist ONLY includes LIVE channels
-            channels = Channel.query.filter_by(status='live').all()
+            # System playlist handling
+            query = Channel.query.filter_by(status='live')
+            if profile.slug == 'protected':
+                query = query.filter_by(is_original=True)
+                
+            channels = query.all()
             for ch in channels:
                 if ch.epg_id:
                     epg_ids.add(ch.epg_id)

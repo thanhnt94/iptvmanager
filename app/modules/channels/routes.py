@@ -221,6 +221,22 @@ def check_channel(id):
     result = HealthCheckService.check_stream(id)
     return jsonify(result)
 
+@channels_bp.route('/toggle-protection/<int:id>', methods=['POST'])
+@login_required
+def toggle_protection(id):
+    ch = Channel.query.get_or_404(id)
+    try:
+        ch.is_original = not getattr(ch, 'is_original', False)
+        db.session.commit()
+        return jsonify({
+            'status': 'ok', 
+            'is_original': ch.is_original,
+            'message': f"Channel {'protected' if ch.is_original else 'unprotected'}."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 # --- MONITORING APIs (Mounted at /api/streams) ---
 
 streams_bp = Blueprint('streams', __name__)
