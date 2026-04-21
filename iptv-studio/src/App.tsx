@@ -9,6 +9,7 @@ import { Streams } from './pages/Streams';
 import { EPG } from './pages/EPG';
 import { Player } from './pages/Player';
 import { Import } from './pages/Import';
+import { Diagnostics } from './pages/Diagnostics';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -53,7 +54,7 @@ const App: React.FC = () => {
                  <Route path="/epg" element={<EPG />} />
                  <Route path="/player" element={<Player user={user} />} />
                  <Route path="/import" element={<Import />} />
-                 <Route path="/diagnostics" element={<div className="p-8 text-white"><h2 className="text-4xl font-black tracking-tighter text-white">Advanced <span className="text-indigo-500">Diagnostics</span></h2><p className="text-slate-400 mt-2 text-sm italic">Migration Phase 6: System Analysis Tools</p></div>} />
+                 <Route path="/diagnostics" element={<Diagnostics />} />
                  
                  <Route path="*" element={<Navigate to="/" replace />} />
                </Routes>

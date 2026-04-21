@@ -3,6 +3,7 @@ import subprocess
 import shutil
 import json
 import time
+import concurrent.futures
 from datetime import datetime
 import logging
 from app.modules.channels.models import Channel
@@ -213,6 +214,9 @@ class HealthCheckService:
         'die_count': 0,
         'unknown_count': 0,
         'stop_requested': False,
+        'mode': 'all',
+        'group': 'all',
+        'playlist_id': None,
         'logs': [] # List of {time, name, status, error}
     }
 
@@ -237,12 +241,13 @@ class HealthCheckService:
             HealthCheckService._scan_state['logs'].pop()
 
     @staticmethod
-    def start_background_scan(app, mode='all', days=None, playlist_id=None):
+    def start_background_scan(app, mode='all', days=None, playlist_id=None, group=None, delay=None):
         """Starts the scanning process in a background thread."""
         if HealthCheckService._scan_state['is_running']:
             return
             
-        def run_scan(app_context, mode, days, playlist_id):
+        def run_scan(app, mode, days, playlist_id, group, manual_delay):
+            app_context = app.app_context()
             with app_context:
                 # Type conversions for JSON data
                 try:
@@ -250,82 +255,141 @@ class HealthCheckService:
                     if days: days = int(days)
                 except: pass
 
-                HealthCheckService._scan_state['is_running'] = True
-                HealthCheckService._scan_state['stop_requested'] = False
-                HealthCheckService._scan_state['current'] = 0
-                
-                # Pre-load initial counts
-                from sqlalchemy import func
-                counts = db.session.query(Channel.status, func.count(Channel.id)).group_by(Channel.status).all()
-                counts_dict = dict(counts)
-                HealthCheckService._scan_state['live_count'] = counts_dict.get('live', 0)
-                HealthCheckService._scan_state['die_count'] = counts_dict.get('die', 0)
-                HealthCheckService._scan_state['unknown_count'] = counts_dict.get('unknown', 0)
-                
-                query = Channel.query
-                
-                if playlist_id:
-                    from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
-                    profile = PlaylistProfile.query.get(playlist_id)
-                    if profile and profile.is_system:
-                        # System playlist 'alliptv' means scan ALL channels
-                        pass
-                    else:
-                        query = query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
-                
-                if mode == 'never':
-                    query = query.filter(Channel.last_checked_at == None)
-                elif mode == 'die':
-                    query = query.filter(Channel.status == 'die')
-                elif mode == 'outdated' and days:
-                    from datetime import timedelta
-                    threshold = datetime.utcnow() - timedelta(days=int(days))
-                    query = query.filter((Channel.last_checked_at == None) | (Channel.last_checked_at < threshold))
-                
-                channels = query.all()
-                HealthCheckService._scan_state['total'] = len(channels)
-                
-                if not channels:
+                try:
+                    print(f"DEBUG: HealthCheck scan starting. Mode: {mode}, Group: {group}")
+                    HealthCheckService._scan_state['stop_requested'] = False
+                    HealthCheckService._scan_state['mode'] = mode
+                    HealthCheckService._scan_state['group'] = group or 'all'
+                    HealthCheckService._scan_state['playlist_id'] = playlist_id
+                    HealthCheckService._scan_state['current'] = 0
+                    
+                    # Pre-load initial counts
+                    from sqlalchemy import func
+                    counts = db.session.query(Channel.status, func.count(Channel.id)).group_by(Channel.status).all()
+                    counts_dict = dict(counts)
+                    HealthCheckService._scan_state['live_count'] = counts_dict.get('live', 0)
+                    HealthCheckService._scan_state['die_count'] = counts_dict.get('die', 0)
+                    HealthCheckService._scan_state['unknown_count'] = counts_dict.get('unknown', 0)
+                    
+                    query = Channel.query
+                    
+                    if playlist_id:
+                        from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
+                        profile = PlaylistProfile.query.get(playlist_id)
+                        if profile and profile.is_system:
+                            # System playlist 'alliptv' means scan ALL channels
+                            pass
+                        else:
+                            query = query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
+                    
+                    if group and group != 'all':
+                        query = query.filter(Channel.group_name == group)
+    
+                    if mode == 'never':
+                        query = query.filter(Channel.last_checked_at == None)
+                    elif mode == 'die':
+                        query = query.filter(Channel.status == 'die')
+                    elif mode == 'outdated' and days:
+                        from datetime import timedelta
+                        threshold = datetime.utcnow() - timedelta(days=int(days))
+                        query = query.filter((Channel.last_checked_at == None) | (Channel.last_checked_at < threshold))
+                    
+                    channels = query.all()
+                    HealthCheckService._scan_state['total'] = len(channels)
+                    
+                    if not channels:
+                        HealthCheckService._scan_state['is_running'] = False
+                        return
+    
+                    # Use a single executor for the entire scan to be efficient
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        for channel in channels:
+                            if HealthCheckService._scan_state['stop_requested']:
+                                break
+                            
+                            try:
+                                # Update current channel info for UI
+                                HealthCheckService._scan_state['current_name'] = channel.name
+                                HealthCheckService._scan_state['current_id'] = channel.id
+                                
+                                print(f"DEBUG: Checking {channel.id}: {channel.name}...")
+                                old_status = channel.status
+                                
+                                # Wrapper to ensure app context inside the worker thread
+                                def check_with_context(app_obj, cid):
+                                    with app_obj.app_context():
+                                        return HealthCheckService.check_stream(cid)
+
+                                # Watchdog implementation
+                                future = executor.submit(check_with_context, app, channel.id)
+                                try:
+                                    # Hard 25s limit per channel check to prevent total thread hang
+                                    result = future.result(timeout=25) 
+                                    
+                                    # CRITICAL: Sync the return data to the main thread's object
+                                    # because the worker ran in a different session
+                                    if result:
+                                        channel.status = result.get('status', 'unknown')
+                                        channel.error_message = result.get('error_message')
+                                        # No need to commit here, we just need the local object updated for UI
+                                except concurrent.futures.TimeoutError:
+                                    print(f"DEBUG ERROR: Watchdog triggered! Channel {channel.id} is hanging. Force skipping.")
+                                    # After timeout, we must manually update the status because check_stream is still running in worker
+                                    channel.status = 'die'
+                                    channel.error_message = "Diagnostic Timeout (Stream link is too slow to respond)"
+                                    db.session.commit()
+                                except Exception as e:
+                                    print(f"DEBUG ERROR: Internal check error for {channel.id}: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+        
+                                new_status = channel.status
+                                
+                                # Log the result
+                                HealthCheckService._add_log(channel.name, new_status, channel.error_message)
+                                
+                                # Update counts if status changed
+                                if old_status != new_status:
+                                    # Direct update logic
+                                    if old_status == 'unknown': HealthCheckService._scan_state['unknown_count'] -= 1
+                                    elif old_status == 'live': HealthCheckService._scan_state['live_count'] -= 1
+                                    elif old_status == 'die': HealthCheckService._scan_state['die_count'] -= 1
+                                    
+                                    if new_status == 'unknown': HealthCheckService._scan_state['unknown_count'] += 1
+                                    elif new_status == 'live': HealthCheckService._scan_state['live_count'] += 1
+                                    elif new_status == 'die': HealthCheckService._scan_state['die_count'] += 1
+            
+                                HealthCheckService._scan_state['current'] += 1
+                                
+                                # Configurable delay
+                                if manual_delay is not None:
+                                    actual_delay = float(manual_delay)
+                                else:
+                                    from app.modules.settings.services import SettingService
+                                    actual_delay = int(SettingService.get('SCAN_DELAY_SECONDS', '1'))
+                                
+                                time.sleep(actual_delay)
+                            except Exception as channel_err:
+                                print(f"DEBUG ERROR: Fatal exception for {channel.name}: {channel_err}")
+                                import traceback
+                                traceback.print_exc()
+                                db.session.rollback()
+                                time.sleep(1)
+                    
                     HealthCheckService._scan_state['is_running'] = False
-                    return
+                    print(f"DEBUG: HealthCheck scan finished. Processed {HealthCheckService._scan_state['current']} channels.")
+                except Exception as e:
+                    print(f"DEBUG: HealthCheck CRITICAL ERROR: {e}")
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    HealthCheckService._scan_state['is_running'] = False
+                    db.session.remove()
+                    print("DEBUG: HealthCheck session removed.")
 
-                for channel in channels:
-                    if HealthCheckService._scan_state['stop_requested']:
-                        break
-                    
-                    # Update current channel info for UI
-                    HealthCheckService._scan_state['current_name'] = channel.name
-                    HealthCheckService._scan_state['current_id'] = channel.id
-                    
-                    old_status = channel.status
-                    HealthCheckService.check_stream(channel.id)
-                    new_status = channel.status
-                    
-                    # Log the result
-                    HealthCheckService._add_log(channel.name, new_status, channel.error_message)
-                    
-                    # Update counts if status changed
-                    if old_status != new_status:
-                        # Direct update logic
-                        if old_status == 'unknown': HealthCheckService._scan_state['unknown_count'] -= 1
-                        elif old_status == 'live': HealthCheckService._scan_state['live_count'] -= 1
-                        elif old_status == 'die': HealthCheckService._scan_state['die_count'] -= 1
-                        
-                        if new_status == 'unknown': HealthCheckService._scan_state['unknown_count'] += 1
-                        elif new_status == 'live': HealthCheckService._scan_state['live_count'] += 1
-                        elif new_status == 'die': HealthCheckService._scan_state['die_count'] += 1
-
-                    HealthCheckService._scan_state['current'] += 1
-                    
-                    # Configurable delay
-                    from app.modules.settings.services import SettingService
-                    delay = int(SettingService.get('SCAN_DELAY_SECONDS', '1'))
-                    time.sleep(delay)
-                
-                HealthCheckService._scan_state['is_running'] = False
-
+        HealthCheckService._scan_state['is_running'] = True
         import threading
-        thread = threading.Thread(target=run_scan, args=(app.app_context(), mode, days, playlist_id))
+        thread = threading.Thread(target=run_scan, args=(app, mode, days, playlist_id, group, delay))
         thread.daemon = True
         thread.start()
 

@@ -44,6 +44,7 @@ def create_app(config_class=Config):
     from app.modules.playlists.routes import playlists_bp
     from app.modules.auth.routes import auth_bp
     from app.modules.auth_center.routes import auth_center_bp
+    from app.modules.health.routes import health_bp
     
     # Mount everything under /api for SPA compatibility
     app.register_blueprint(ingestion_bp, url_prefix='/api/ingestion')
@@ -52,6 +53,7 @@ def create_app(config_class=Config):
     app.register_blueprint(playlists_bp, url_prefix='/api/playlists')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(auth_center_bp, url_prefix='/api/auth-center')
+    app.register_blueprint(health_bp, url_prefix='/api/health')
 
     # Initialize Login Manager
     from flask_login import LoginManager
@@ -128,7 +130,9 @@ def create_app(config_class=Config):
 
     @app.route('/')
     def index():
-        return render_template('index.html')
+        if os.path.exists(os.path.join(app.static_folder, 'index.html')):
+            return send_from_directory(app.static_folder, 'index.html')
+        return "Frontend build not found. Run 'npm run build' in iptv-studio.", 404
 
     @app.errorhandler(404)
     def handle_404(e):
@@ -146,8 +150,8 @@ def create_app(config_class=Config):
         if request.path.startswith(('/play/', '/track/', '/health/')):
              return jsonify({'error': 'Resource handle mismatch'}), 404
 
-        # 3. Default: Serve index.html via template to allow React Router to handle the path
-        return render_template('index.html')
+        # 3. Default: Serve index.html to allow React Router to handle the path
+        return send_from_directory(app.static_folder, 'index.html')
 
     @app.errorhandler(Exception)
     def handle_exception(e):
