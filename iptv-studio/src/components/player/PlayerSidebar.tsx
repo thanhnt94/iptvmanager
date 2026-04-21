@@ -186,7 +186,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   };
 
   return (
-    <div className={`w-full lg:w-80 flex-1 lg:h-full flex flex-col bg-slate-950/80 backdrop-blur-3xl border-t lg:border-t-0 lg:border-r border-white/5 overflow-hidden animate-in fade-in lg:slide-in-from-left duration-500 shadow-2xl z-20 ${className}`}>
+    <div className={`w-full lg:w-80 flex-1 lg:flex-none lg:h-full flex flex-col bg-slate-950/80 backdrop-blur-3xl border-t lg:border-t-0 lg:border-r border-white/5 overflow-hidden animate-in fade-in lg:slide-in-from-left duration-500 shadow-2xl z-20 ${className}`}>
       {/* Search & Select */}
       <div className="p-4 lg:p-6 space-y-3 lg:space-y-5 bg-white/[0.02] border-b border-white/5 shadow-inner">
          <div className="flex items-center justify-between">
