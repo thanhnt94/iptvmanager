@@ -14,7 +14,8 @@ import {
   Share2,
   Copy,
   Check,
-  X
+  X,
+  Settings2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLogoUrl } from '../../utils';
@@ -46,6 +47,7 @@ interface PlayerHUDProps {
   onSelectLink: (url: string, mode: string) => void;
   activeMode: string;
   stats: { fps: number; audio: string; resolution: string };
+  onEdit?: () => void;
 }
 
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({
@@ -60,7 +62,8 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   onOpenVLC,
   onSelectLink,
   activeMode,
-  stats
+  stats,
+  onEdit
 }) => {
   const [showHUD, setShowHUD] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -146,6 +149,13 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                           <Heart size={16} />
                        </button>
                        <button 
+                         onClick={onEdit}
+                         title="Edit Channel"
+                         className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all"
+                       >
+                          <Settings2 size={16} />
+                       </button>
+                       <button 
                         onClick={() => setShowShare(true)}
                         className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all active:scale-90"
                        >
@@ -212,7 +222,6 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                              <div className="shrink-0 bg-blue-600 rounded shadow-lg px-2 h-[18px] lg:px-[clamp(6px,1cqw,10px)] lg:h-[clamp(14px,1.5cqw,18px)] flex items-center justify-center">
                                  <span className="text-white font-black uppercase tracking-widest text-[8px] lg:text-[clamp(6px,0.8cqw,9px)] leading-none -mt-[0.5px]">XEMTV</span>
                              </div>
-                             {/* REDUNDANT RESOLUTION REMOVED FROM HERE */}
                           </div>
                        </div>
                        
@@ -285,7 +294,15 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                    </div>
                    <div className="flex items-center gap-1.5 lg:gap-2">
                       <button 
+                        onClick={onEdit}
+                        title="Edit Channel"
+                        className="bg-white/10 border border-white/10 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/60 hover:text-white transition-all"
+                      >
+                         <Settings2 size="35%" />
+                      </button>
+                      <button 
                         onClick={onOpenVLC}
+                        title="VLC Boost"
                         className="bg-orange-600 shadow-xl shadow-orange-600/20 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-all"
                       >
                          <ExternalLink size="35%" />
