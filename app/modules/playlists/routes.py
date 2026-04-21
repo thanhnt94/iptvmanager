@@ -16,13 +16,22 @@ def list_playlists():
     profiles = PlaylistProfile.query.all()
     res = []
     for p in profiles:
+        count = 0
+        if p.is_system:
+            if p.slug == 'protected':
+                count = Channel.query.filter_by(is_original=True).count()
+            else:
+                count = Channel.query.count()
+        else:
+            count = len(p.entries)
+            
         res.append({
             'id': p.id,
             'name': p.name,
             'slug': p.slug,
             'security_token': p.security_token,
             'is_system': p.is_system,
-            'channel_count': Channel.query.count() if p.is_system else len(p.entries),
+            'channel_count': count,
             'created_at': p.created_at.strftime('%Y-%m-%d')
         })
     return jsonify(res)
@@ -39,7 +48,15 @@ def get_groups(playlist_id):
 
     if playlist_id == 0 or is_system_playlist:
         # System-wide groups
-        groups = [g[0] for g in db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None).all()]
+        query = db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None)
+        
+        # If it's the protected playlist, only show groups that have protected channels
+        if playlist_id > 0:
+            p = PlaylistProfile.query.get(playlist_id)
+            if p and p.slug == 'protected':
+                query = query.filter(Channel.is_original == True)
+                
+        groups = [g[0] for g in query.all()]
     else:
         # Playlist-specific groups
         groups = [g[0] for g in db.session.query(Channel.group_name).join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id).distinct().filter(Channel.group_name != None).all()]
@@ -63,6 +80,11 @@ def get_entries(playlist_id):
 
     if playlist_id == 0 or str(playlist_id) == 'system_all' or is_system_playlist:
         query = Channel.query
+        # If it's a specific system playlist like 'protected', add the filter
+        if is_system_playlist:
+            p = PlaylistProfile.query.get(playlist_id)
+            if p and p.slug == 'protected':
+                query = query.filter(Channel.is_original == True)
     else:
         query = Channel.query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
 
