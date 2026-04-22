@@ -10,7 +10,9 @@ import {
   Image as ImageIcon,
   Loader2,
   AlertCircle,
-  Play
+  Play,
+  Globe,
+  Lock as LockIcon
 } from 'lucide-react';
 import { getLogoUrl } from '../../utils';
 import { UnifiedPlayer } from '../player/UnifiedPlayer';
@@ -41,14 +43,24 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
     epg_id: '',
     proxy_type: 'none',
     is_original: false,
+    is_public: false,
     selected_playlists: [] as number[]
   });
+  const [existingGroups, setExistingGroups] = useState<string[]>([]);
 
   useEffect(() => {
     // Load available playlists
     fetch('/api/playlists')
       .then(res => res.json())
       .then(data => setPlaylists(data))
+      .catch(err => console.error(err));
+
+    // Load existing groups for autocomplete
+    fetch('/api/channels/filters')
+      .then(res => res.json())
+      .then(data => {
+        if (data.groups) setExistingGroups(data.groups);
+      })
       .catch(err => console.error(err));
 
     // If editing, load channel data
@@ -66,6 +78,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
               epg_id: ch.epg_id || '',
               proxy_type: ch.proxy_type || 'none',
               is_original: !!ch.is_original,
+              is_public: !!ch.is_public,
               selected_playlists: data.memberships || []
             });
           }
@@ -231,14 +244,18 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
               <div className="space-y-6">
                  <div className="space-y-2">
                     <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">Target Group</label>
-                    <div className="relative">
+                     <div className="relative">
                        <input 
                         type="text" 
                         value={formData.group_name}
                         onChange={e => setFormData({...formData, group_name: e.target.value})}
+                        list="existing-groups"
                         className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         placeholder="e.g. Science, Sports"
                        />
+                       <datalist id="existing-groups">
+                         {existingGroups.map(g => <option key={g} value={g} />)}
+                       </datalist>
                     </div>
                  </div>
 
@@ -324,6 +341,30 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                     </div>
                     <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_original ? 'bg-indigo-500' : 'bg-slate-800'}`}>
                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_original ? 'left-5' : 'left-1'}`} />
+                    </div>
+                  </button>
+               </div>
+
+               <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-4">Public Accessibility</h4>
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, is_public: !formData.is_public})}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
+                      formData.is_public 
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                      : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                       {formData.is_public ? <Globe size={20} /> : <LockIcon size={20} />}
+                       <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-widest">Share to Community</p>
+                          <p className="text-[9px] font-medium opacity-60">Visible in dynamic shared playlist</p>
+                       </div>
+                    </div>
+                    <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_public ? 'bg-emerald-500' : 'bg-slate-800'}`}>
+                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_public ? 'left-5' : 'left-1'}`} />
                     </div>
                   </button>
                </div>

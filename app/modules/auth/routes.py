@@ -19,10 +19,20 @@ def me():
 
 @auth_bp.route('/config', methods=['GET'])
 def get_config():
+    # Detect if we should force local auth (e.g. from /admin portal)
+    force_local = request.args.get('force_local') == 'true'
+    
     from app.modules.settings.models import SystemSetting
     use_sso = SystemSetting.query.filter_by(key='USE_CENTRAL_AUTH').first()
+    
+    is_sso_active = use_sso.value.lower() == 'true' if use_sso else False
+    
+    # Override SSO if force_local is requested
+    if force_local:
+        is_sso_active = False
+
     return jsonify({
-        "use_sso": use_sso.value.lower() == 'true' if use_sso else False,
+        "use_sso": is_sso_active,
         "tenant_id": "iptv-manager",
         "app_name": "IPTV Manager"
     })
@@ -102,3 +112,13 @@ def delete_user(user_id):
 def toggle_access(user_id, playlist_id):
     AuthService.toggle_playlist_access(user_id, playlist_id)
     return jsonify({'status': 'ok'})
+
+@auth_bp.route('/users/<int:user_id>/role', methods=['POST'])
+@login_required
+@admin_required
+def update_user_role(user_id):
+    data = request.json
+    role = data.get('role')
+    if AuthService.update_user_role(user_id, role):
+        return jsonify({'status': 'ok'})
+    return jsonify({'status': 'error', 'message': 'Failed to update role'}), 400

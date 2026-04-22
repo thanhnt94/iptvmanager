@@ -22,7 +22,9 @@ import {
   Share2,
   X,
   Copy,
-  Check
+  Check,
+  Globe,
+  Lock as LockIcon
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
@@ -45,6 +47,7 @@ interface Channel {
   resolution: string;
   latency: number;
   is_original: boolean;
+  is_public: boolean;
   last_checked: string;
   play_url?: string;
   play_links?: {
@@ -91,6 +94,7 @@ export const Channels: React.FC = () => {
    const [jumpPage, setJumpPage] = useState('');
    const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const navigate = useNavigate();
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const fetchChannels = useCallback(() => {
     setLoading(true);
@@ -145,6 +149,18 @@ export const Channels: React.FC = () => {
       const res = await fetch(`/api/channels/toggle-protection/${id}`, { method: 'POST' });
       if (res.ok) {
         setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, is_original: !ch.is_original } : ch));
+      }
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const togglePublic = async (id: number) => {
+    setProcessingId(id);
+    try {
+      const res = await fetch(`/api/channels/toggle-public/${id}`, { method: 'POST' });
+      if (res.ok) {
+        setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, is_public: !ch.is_public } : ch));
       }
     } finally {
       setProcessingId(null);
@@ -280,18 +296,22 @@ export const Channels: React.FC = () => {
           <p className="text-slate-400 text-xs md:text-sm mt-1">Enterprise-grade distribution and health monitoring.</p>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 md:flex-wrap">
-           <button 
-            onClick={cleanDead}
-            className="h-12 px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest text-rose-400 hover:bg-rose-500/10 transition-all border border-rose-500/20 shrink-0"
-           >
-              <Trash2 size={16} /> <span className="hidden md:inline">Clean Dead</span>
-           </button>
-           <button 
-            onClick={() => navigate('/import')}
-            className="h-12 px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-3 text-[10px] md:text-xs font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/10 transition-all border border-indigo-500/20 shrink-0"
-           >
-              <CloudDownload size={16} /> <span className="hidden md:inline">Import Bulk</span>
-           </button>
+           {user.role !== 'free' && (
+             <>
+               <button 
+                onClick={cleanDead}
+                className="h-12 px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest text-rose-400 hover:bg-rose-500/10 transition-all border border-rose-500/20 shrink-0"
+               >
+                  <Trash2 size={16} /> <span className="hidden md:inline">Clean Dead</span>
+               </button>
+               <button 
+                onClick={() => navigate('/import')}
+                className="h-12 px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-3 text-[10px] md:text-xs font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/10 transition-all border border-indigo-500/20 shrink-0"
+               >
+                  <CloudDownload size={16} /> <span className="hidden md:inline">Import Bulk</span>
+               </button>
+             </>
+           )}
            <button 
             onClick={openAdd}
             className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20 shrink-0"
@@ -396,7 +416,10 @@ export const Channels: React.FC = () => {
                         <div className="min-w-0 flex-1">
                            <div className="flex items-center gap-2">
                              <h4 className="text-sm font-black text-white truncate leading-tight">{ch.name}</h4>
-                             {ch.is_original && <Shield className="text-indigo-400 shrink-0" size={12} />}
+                             <div className="flex gap-1 shrink-0">
+                                {ch.is_original && <Shield className="text-indigo-400" size={10} />}
+                                {ch.is_public ? <Globe className="text-emerald-400" size={10} /> : <LockIcon className="text-slate-600" size={10} />}
+                             </div>
                            </div>
                            <p className="text-[9px] text-slate-500 truncate mt-0.5 opacity-60 font-medium">{ch.stream_url}</p>
                         </div>
@@ -419,12 +442,13 @@ export const Channels: React.FC = () => {
                         <div className="flex items-center justify-end gap-1">
                           {[
                             { icon: <Eye size={16} />, onClick: () => setPreviewChannel(ch), title: 'Preview' },
-                            { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute' },
+                            { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute', hide: user.role === 'free' },
                             { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />, onClick: () => handleCheck(ch.id), title: 'Check' },
+                            { icon: ch.is_public ? <Globe size={16} /> : <LockIcon size={16} />, onClick: () => togglePublic(ch.id), title: 'Toggle Visibility', active: ch.is_public },
                             { icon: ch.is_original ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_original },
                             { icon: <Settings2 size={16} />, onClick: () => openEdit(ch.id), title: 'Edit' },
                             { icon: <Trash2 size={16} />, onClick: () => handleDelete(ch.id), title: 'Delete', danger: true }
-                          ].map((btn, idx) => (
+                          ].filter(b => !b.hide).map((btn, idx) => (
                             <button 
                               key={idx}
                               onClick={btn.onClick}

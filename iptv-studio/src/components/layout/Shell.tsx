@@ -5,14 +5,15 @@ import {
   Radio, 
   ListVideo, 
   Activity, 
-  Settings, 
   LogOut,
   PlayCircle,
+  ShieldCheck,
   Calendar,
   Monitor,
   CloudDownload,
   Menu,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -40,9 +41,15 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
     { icon: <Activity size={20} />, label: 'Diagnostics', path: '/diagnostics' },
   ];
 
+  if (user.role === 'admin' || user.role === 'vip') {
+    menuItems.push(
+      { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' }
+    );
+  }
+
   if (user.role === 'admin') {
     menuItems.push(
-      { icon: <Settings size={20} />, label: 'Settings', path: '/settings' }
+      { icon: <ShieldCheck size={20} />, label: 'Admin Portal', path: '/admin' }
     );
   }
 
@@ -119,7 +126,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
                 <p className="text-sm font-black text-white truncate leading-none mb-1">{user.username}</p>
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">{user.role}</p>
              </div>
-             <button onClick={() => window.location.href = '/auth/logout'} className="p-2.5 hover:bg-white/5 rounded-xl hover:text-rose-400 transition-colors">
+             <button onClick={() => window.location.href = '/logout'} className="p-2.5 hover:bg-white/5 rounded-xl hover:text-rose-400 transition-colors">
                <LogOut size={18} />
              </button>
            </div>

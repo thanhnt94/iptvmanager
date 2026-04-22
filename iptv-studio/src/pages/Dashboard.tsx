@@ -9,7 +9,8 @@ import {
   Tv, 
   Layers,
   ChevronRight,
-  Loader2
+  Loader2,
+  Users
 } from 'lucide-react';
 
 interface Stats {
@@ -20,6 +21,9 @@ interface Stats {
     unknown: number;
   };
   playlists: {
+    total: number;
+  };
+  users: {
     total: number;
   };
   active_streams: number;
@@ -67,6 +71,7 @@ export const Dashboard: React.FC = () => {
     { label: 'Total Channels', value: stats.channels.total, icon: <Tv size={24} />, color: 'blue' },
     { label: 'Active Streams', value: stats.active_streams, icon: <Activity size={24} />, color: 'emerald' },
     { label: 'Registry Profiles', value: stats.playlists.total, icon: <Layers size={24} />, color: 'indigo' },
+    { label: 'Registered Users', value: stats.users.total, icon: <Users size={24} />, color: 'orange' },
   ];
 
   const channelHealth = [
@@ -91,7 +96,7 @@ export const Dashboard: React.FC = () => {
       </header>
 
       {/* Primary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((card, i) => (
           <motion.div 
             initial={{ opacity: 0, y: 10 }}

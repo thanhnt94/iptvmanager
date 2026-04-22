@@ -9,7 +9,7 @@ import queue
 import threading
 from datetime import datetime, timedelta
 from app.modules.channels.models import Channel, EPGSource, EPGData, ChannelShare
-from app.modules.channels.services import ChannelService, EPGService, ActiveSessionManager, StreamManager, HLSEngine
+from app.modules.channels.services import ChannelService, EPGService, ActiveSessionManager, StreamManager, HLSEngine, ExtractorService
 from app.modules.playlists.services import PlaylistService
 from app.core.database import db
 
@@ -18,15 +18,26 @@ channels_bp = Blueprint('channels', __name__)
 logger = logging.getLogger('iptv')
 
 def validate_proxy_access(token=None):
+    from app.modules.auth.models import User
+    from app.modules.playlists.models import PlaylistProfile
+    
+    user_obj = None
     if current_user.is_authenticated:
-        return current_user.username
+        user_obj = current_user
+    elif token:
+        user_obj = User.query.filter_by(api_token=token).first()
+        
+    if user_obj:
+        # Only VIP and Admin can use the VPS Proxy (TS/HLS)
+        if user_obj.role in ['admin', 'vip']:
+            return user_obj.username
+        else:
+            return None # Deny proxy access for free users
+            
     if token:
-        from app.modules.auth.models import User
-        from app.modules.playlists.models import PlaylistProfile
-        user = User.query.filter_by(api_token=token).first()
-        if user: return user.username
         playlist = PlaylistProfile.query.filter_by(security_token=token).first()
         if playlist: return f"Playlist: {playlist.name}"
+        
     from app.modules.auth.models import TrustedIP
     ip = request.remote_addr
     trusted = TrustedIP.query.filter_by(ip_address=ip).first()
@@ -46,6 +57,10 @@ def list_channels():
     sort = request.args.get('sort', 'name') # name, newest, oldest
     
     query = Channel.query
+    # RBAC Filtering
+    if current_user.role == 'free':
+        query = query.filter_by(owner_id=current_user.id)
+        
     if search:
         query = query.filter(Channel.name.ilike(f'%{search}%'))
     if group:
@@ -78,6 +93,7 @@ def list_channels():
             'resolution': ch.resolution,
             'latency': ch.latency or 0,
             'is_original': ch.is_original,
+            'is_public': ch.is_public,
             'last_checked': ch.last_checked_at.isoformat() if hasattr(ch, 'last_checked_at') and ch.last_checked_at else None,
             'play_links': {
                 'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
@@ -125,6 +141,7 @@ def get_info(id):
             'logo_url': ch.logo_url, 'group_name': ch.group_name,
             'epg_id': ch.epg_id, 'proxy_type': ch.proxy_type or 'none',
             'is_original': ch.is_original,
+            'is_public': ch.is_public,
             'play_links': {
                 'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
                 'tracking': url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True),
@@ -155,7 +172,9 @@ def add_channel():
             group_name=data.get('group_name'),
             epg_id=data.get('epg_id'),
             proxy_type=data.get('proxy_type', 'none'),
-            is_original=data.get('is_original', False)
+            is_original=data.get('is_original', False),
+            is_public=data.get('is_public', False),
+            owner_id=current_user.id
         )
         db.session.add(ch)
         db.session.flush()
@@ -192,6 +211,7 @@ def update_channel(id):
         ch.epg_id = data.get('epg_id', ch.epg_id)
         ch.proxy_type = data.get('proxy_type', ch.proxy_type)
         ch.is_original = data.get('is_original', ch.is_original)
+        ch.is_public = data.get('is_public', ch.is_public)
         
         playlist_ids = data.get('selected_playlists', [])
         from app.modules.playlists.models import PlaylistEntry
@@ -237,6 +257,26 @@ def toggle_protection(id):
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@channels_bp.route('/toggle-public/<int:id>', methods=['POST'])
+@login_required
+def toggle_public(id):
+    ch = Channel.query.get_or_404(id)
+    # Protection: Free users can only toggle their own channels
+    if current_user.role == 'free' and ch.owner_id != current_user.id:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        
+    try:
+        ch.is_public = not getattr(ch, 'is_public', False)
+        db.session.commit()
+        return jsonify({
+            'status': 'ok', 
+            'is_public': ch.is_public,
+            'message': f"Channel is now {'public' if ch.is_public else 'private'}."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 # --- MONITORING APIs (Mounted at /api/streams) ---
 
 streams_bp = Blueprint('streams', __name__)
@@ -276,12 +316,28 @@ def play_channel(channel_id):
     channel = Channel.query.get_or_404(channel_id)
     channel.play_count = (channel.play_count or 0) + 1
     
-    from app.modules.health.services import HealthCheckService
-    HealthCheckService.trigger_passive_check(channel_id)
+    from app.modules.settings.services import SettingService
+    if SettingService.get('ENABLE_HEALTH_SYSTEM', True):
+        from app.modules.health.services import HealthCheckService
+        HealthCheckService.trigger_passive_check(channel_id)
     
     db.session.commit()
     
-    token = request.args.get('token') or (current_user.api_token if current_user.is_authenticated else None)
+    token = request.args.get('token')
+    user_role = 'free' # Default to free if unauth
+    
+    if current_user.is_authenticated:
+        user_role = current_user.role
+    elif token:
+        from app.modules.auth.models import User
+        u = User.query.filter_by(api_token=token).first()
+        if u: user_role = u.role
+        
+    # [3-TIER RBAC] Free users directly redirect to original source, bypassing VPS tracking/proxy
+    if user_role == 'free':
+        return redirect(channel.stream_url)
+
+    token = token or (current_user.api_token if current_user.is_authenticated else None)
     proxy = request.args.get('forced') or getattr(channel, 'proxy_type', 'none')
     
     url_low = channel.stream_url.lower()
@@ -445,6 +501,17 @@ def play_ts(channel_id):
 def track_redirect(channel_id):
     channel = Channel.query.get_or_404(channel_id)
     token = request.args.get('token')
+    user_role = 'free'
+    if current_user.is_authenticated:
+        user_role = current_user.role
+    elif token:
+        from app.modules.auth.models import User
+        u = User.query.filter_by(api_token=token).first()
+        if u: user_role = u.role
+
+    if user_role == 'free':
+        return redirect(channel.stream_url)
+
     user = validate_proxy_access(token)
     if not user: abort(401)
     ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'Tracking', bandwidth_kbps=4000)
@@ -497,8 +564,10 @@ def player_ping():
     ch.total_watch_seconds = (ch.total_watch_seconds or 0) + sec
     ch.total_bandwidth_mb = (ch.total_bandwidth_mb or 0) + (bitrate * sec) / 8
     
-    from app.modules.health.services import HealthCheckService
-    HealthCheckService.trigger_passive_check(cid)
+    from app.modules.settings.services import SettingService
+    if SettingService.get('ENABLE_HEALTH_SYSTEM', True):
+        from app.modules.health.services import HealthCheckService
+        HealthCheckService.trigger_passive_check(cid)
     
     ActiveSessionManager.update_session(cid, current_user.username if current_user.is_authenticated else 'Guest', request.remote_addr, 'Web Player', bandwidth_kbps=int(bitrate * 1024))
     db.session.commit()
@@ -538,3 +607,18 @@ def logo_proxy():
     except Exception as e:
         logger.error(f"Logo Proxy internal error for {url}: {e}")
         return abort(502)
+
+@channels_bp.route('/scan-web', methods=['POST'])
+@login_required
+def scan_web():
+    if current_user.role not in ['admin', 'vip']:
+        return jsonify({'error': 'Premium feature. VIP or Admin required.'}), 403
+        
+    data = request.json or {}
+    url = data.get('url')
+    if not url:
+        return jsonify({'error': 'URL is required'}), 400
+        
+    logger.info(f"User {current_user.username} initiating web scan for: {url}")
+    res = ExtractorService.extract_direct_url(url)
+    return jsonify(res)

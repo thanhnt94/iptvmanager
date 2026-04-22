@@ -19,12 +19,17 @@ class HealthCheckService:
         if not channel:
             return
             
-        # 1. Skip if checked very recently (within 30s) unless forced
+        from app.modules.settings.services import SettingService
+        if not SettingService.get('ENABLE_HEALTH_SYSTEM', True):
+            return {'status': channel.status, 'skipped': 'Master switch OFF'}
+
+        # 1. Skip if checked recently (TTL setting) unless forced
         if not force and channel.last_checked_at:
+            ttl_minutes = SettingService.get('HEARTBEAT_TTL_MINUTES', 30)
             delta = (datetime.utcnow() - channel.last_checked_at).total_seconds()
-            if delta < 30 and channel.status == 'live':
-                logger.debug(f"Skipping check for {channel.name}, checked {delta:.1f}s ago.")
-                return
+            if delta < (ttl_minutes * 60) and channel.status == 'live':
+                logger.debug(f"Skipping check for {channel.name}, checked {delta:.1f}s ago (TTL: {ttl_minutes}m).")
+                return {'status': channel.status, 'skipped': 'TTL active'}
             
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
@@ -60,8 +65,14 @@ class HealthCheckService:
                 elif latency < 1500: channel.quality = 'good'
                 else: channel.quality = 'poor'
             
-            # 3. Stream Specs via FFprobe
-            success = HealthCheckService._update_stream_specs(channel)
+            # 3. Stream Specs via FFprobe (Heavy)
+            enable_ffprobe = SettingService.get('ENABLE_FFPROBE_DETAIL', True)
+            success = False
+            if enable_ffprobe:
+                success = HealthCheckService._update_stream_specs(channel)
+            else:
+                logger.debug(f"Skipping FFprobe for {channel.name} (Deep Analysis OFF)")
+                success = ping_ok # If ping is ok, we consider it a success for "basic" live status
             
             if not success:
                 if not ping_ok:
@@ -396,6 +407,10 @@ class HealthCheckService:
     @staticmethod
     def trigger_passive_check(channel_id):
         """Triggers a background health check when a channel is accessed."""
+        from app.modules.settings.services import SettingService
+        if not SettingService.get('ENABLE_HEALTH_SYSTEM', True): return
+        if not SettingService.get('ENABLE_PASSIVE_CHECK', True): return
+
         from flask import current_app
         app = current_app._get_current_object()
         

@@ -11,6 +11,7 @@ class PlaylistProfile(db.Model):
     allowed_ips = db.Column(db.Text) # Stored as JSON or comma-separated
     is_active = db.Column(db.Boolean, default=True)
     is_system = db.Column(db.Boolean, default=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship to entries

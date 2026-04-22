@@ -9,7 +9,9 @@ import {
   Loader2,
   Database,
   Eye,
-  Settings
+  Settings,
+  Globe,
+  Lock
 } from 'lucide-react';
 import { PreviewModal } from '../components/channels/PreviewModal';
 import { getLogoUrl } from '../utils';
@@ -309,15 +311,15 @@ export const Import: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2">
                        <button 
                         onClick={() => setVisibility('private')}
-                        className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${visibility === 'private' ? 'bg-indigo-600/10 border-indigo-500/50 text-indigo-400' : 'bg-white/5 border-white/5 text-slate-500'}`}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${visibility === 'private' ? 'bg-indigo-600/10 border-indigo-500/50 text-indigo-400' : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'}`}
                        >
-                          Private Only
+                          <Lock size={14} /> Private
                        </button>
                        <button 
                         onClick={() => setVisibility('public')}
-                        className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${visibility === 'public' ? 'bg-emerald-600/10 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/5 text-slate-500'}`}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${visibility === 'public' ? 'bg-emerald-600/10 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'}`}
                        >
-                          Public Access
+                          <Globe size={14} /> Public
                        </button>
                     </div>
                  </div>

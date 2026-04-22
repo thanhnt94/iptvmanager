@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Shell } from './components/layout/Shell';
 import { LoginPage } from './pages/auth/Login';
+import { Shell } from './components/layout/Shell';
 import { Dashboard } from './pages/Dashboard';
 import { Playlists } from './pages/Playlists';
 import { Channels } from './pages/Channels';
@@ -10,6 +10,8 @@ import { EPG } from './pages/EPG';
 import { Player } from './pages/Player';
 import { Import } from './pages/Import';
 import { Diagnostics } from './pages/Diagnostics';
+import { AdminPortal } from './pages/AdminPortal';
+import { MediaScanner } from './pages/MediaScanner';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -17,16 +19,20 @@ const App: React.FC = () => {
   const fetchUser = () => {
     fetch('/api/auth/me')
       .then(res => {
-        if (!res.ok) throw new Error('Not logged in');
-        return res.json();
+        if (res.ok) return res.json();
+        throw new Error('Unauthenticated');
       })
-      .then(data => {
-        if (!data.error) setUser(data);
-        else setUser(null);
-      })
-      .catch(() => {
-        setUser(null);
-      });
+      .then(u => setUser(u))
+      .catch(() => setUser(null));
+  };
+
+  const handleLoginSuccess = (u: { username: string; role: string }) => {
+    setUser(u);
+    // Hard refresh if exiting admin portal back to home 
+    // to clear any local-auth specific session flags if needed.
+    if (window.location.pathname.startsWith('/admin')) {
+      window.location.href = '/';
+    }
   };
 
   useEffect(() => {
@@ -39,28 +45,47 @@ const App: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/login" element={
-          user ? <Navigate to="/" replace /> : <LoginPage onLoginSuccess={(u) => setUser(u)} />
+          user ? <Navigate to="/" replace /> : <LoginPage onLoginSuccess={handleLoginSuccess} forceLocal={window.location.pathname.startsWith('/admin')} />
         } />
         
         {/* Protected Routes */}
         <Route path="*" element={
           user ? (
              <Shell user={user}>
-               <Routes>
-                 <Route path="/" element={<Dashboard />} />
-                 <Route path="/playlists" element={<Playlists />} />
-                 <Route path="/channels" element={<Channels />} />
-                 <Route path="/streams" element={<Streams />} />
-                 <Route path="/epg" element={<EPG />} />
-                 <Route path="/player" element={<Player user={user} />} />
-                 <Route path="/import" element={<Import />} />
-                 <Route path="/diagnostics" element={<Diagnostics />} />
-                 
-                 <Route path="*" element={<Navigate to="/" replace />} />
-               </Routes>
-             </Shell>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/playlists" element={<Playlists />} />
+                  <Route path="/channels" element={<Channels />} />
+                  <Route path="/streams" element={<Streams />} />
+                  <Route path="/epg" element={<EPG />} />
+                  <Route path="/player" element={<Player user={user} />} />
+                  <Route path="/import" element={<Import />} />
+                  <Route path="/diagnostics" element={<Diagnostics />} />
+                  
+                  {/* Premium Scanner (VIP/Admin) */}
+                  <Route 
+                    path="/scanner" 
+                    element={(user.role === 'admin' || user.role === 'vip') ? <MediaScanner /> : <Navigate to="/" replace />} 
+                  />
+                  
+                  {/* Admin Only Routes */}
+                  <Route 
+                    path="/settings" 
+                    element={user.role === 'admin' ? <AdminPortal /> : <Navigate to="/" replace />} 
+                  />
+                  <Route 
+                    path="/admin" 
+                    element={user.role === 'admin' ? <AdminPortal /> : <Navigate to="/" replace />} 
+                  />
+                  
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Shell>
           ) : (
-            <Navigate to="/login" replace />
+            // Failsafe Local Login for /admin
+            window.location.pathname.startsWith('/admin')
+              ? <LoginPage onLoginSuccess={handleLoginSuccess} forceLocal={true} />
+              : <Navigate to="/login" replace />
           )
         } />
       </Routes>

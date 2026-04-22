@@ -13,15 +13,31 @@ playlists_bp = Blueprint('playlists', __name__)
 @playlists_bp.route('/', methods=['GET'])
 @login_required
 def list_playlists():
-    profiles = PlaylistProfile.query.all()
+    PlaylistService.ensure_user_default_playlists(current_user)
+    
+    query = PlaylistProfile.query
+    if current_user.role == 'free':
+        # Free users see their own playlists (including personalized system ones)
+        query = query.filter_by(owner_id=current_user.id)
+    else:
+        # VIP/Admin see ALL playlists (their own, plus global system, etc.)
+        # But let's prioritize showing only relevant ones: global system + their own + shared
+        pass
+
+    profiles = query.all()
     res = []
     for p in profiles:
         count = 0
         if p.is_system:
-            if p.slug == 'protected':
-                count = Channel.query.filter_by(is_original=True).count()
-            else:
-                count = Channel.query.count()
+            query = Channel.query
+            if p.slug == 'public':
+                query = query.filter_by(is_public=True)
+            elif p.owner_id:
+                query = query.filter_by(owner_id=p.owner_id)
+                if "protected" in p.slug:
+                    query = query.filter_by(is_original=True)
+            
+            count = query.count()
         else:
             count = len(p.entries)
             
@@ -48,15 +64,26 @@ def get_groups(playlist_id):
 
     if playlist_id == 0 or is_system_playlist:
         # System-wide groups
-        query = db.session.query(Channel.group_name).distinct().filter(Channel.group_name != None)
+        p = PlaylistProfile.query.get(playlist_id) if playlist_id > 0 else None
+        slug = p.slug if p else 'alliptv'
         
-        # If it's the protected playlist, only show groups that have protected channels
-        if playlist_id > 0:
-            p = PlaylistProfile.query.get(playlist_id)
-            if p and p.slug == 'protected':
-                query = query.filter(Channel.is_original == True)
-                
-        groups = [g[0] for g in query.all()]
+        query = Channel.query
+        if slug == 'protected':
+            query = query.filter_by(is_original=True)
+            
+        # ISOLATION
+        if slug in ['alliptv', 'protected']:
+            if current_user.role != 'admin':
+                query = query.filter_by(owner_id=current_user.id)
+        elif slug == 'public':
+            if current_user.role == 'free':
+                # Access denied for free users on public system playlist
+                groups = []
+            else:
+                query = query.filter_by(is_public=True)
+        
+        if 'groups' not in locals():
+            groups = [g[0] for g in query.with_entities(Channel.group_name).distinct().filter(Channel.group_name != None).all()]
     else:
         # Playlist-specific groups
         groups = [g[0] for g in db.session.query(Channel.group_name).join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id).distinct().filter(Channel.group_name != None).all()]
@@ -79,13 +106,26 @@ def get_entries(playlist_id):
             is_system_playlist = True
 
     if playlist_id == 0 or str(playlist_id) == 'system_all' or is_system_playlist:
+        p = PlaylistProfile.query.get(playlist_id) if playlist_id > 0 else None
+        
         query = Channel.query
-        # If it's a specific system playlist like 'protected', add the filter
-        if is_system_playlist:
-            p = PlaylistProfile.query.get(playlist_id)
-            if p and p.slug == 'protected':
-                query = query.filter(Channel.is_original == True)
+        
+        if not p: # system_all fallback
+            query = query.filter_by(owner_id=current_user.id)
+        elif p.owner_id:
+            query = query.filter_by(owner_id=p.owner_id)
+            if "protected" in p.slug:
+                query = query.filter_by(is_original=True)
+        elif p.slug == 'public':
+            if current_user.role == 'free':
+                abort(403)
+            query = query.filter_by(is_public=True)
     else:
+        # Check accessibility for non-system playlists
+        p = PlaylistProfile.query.get_or_404(playlist_id)
+        if current_user.role == 'free' and p.owner_id != current_user.id:
+            abort(403)
+            
         query = Channel.query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
 
     if hide_die:
@@ -169,13 +209,59 @@ def publish_m3u8(slug):
     profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
     
     if profile.security_token and token != profile.security_token:
-        abort(403)
+        # Check if token is user's api_token (for semantic compatibility)
+        from app.modules.auth.models import User
+        u = User.query.filter_by(api_token=token).first()
+        if not u or (profile.owner_id and profile.owner_id != u.id and u.role != 'admin'):
+            abort(403)
         
     xml_url = url_for('playlists.publish_xml', slug=slug, token=token, _external=True)
     m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
     response = Response(m3u_content, mimetype='application/x-mpegurl')
     response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
     return response
+
+@playlists_bp.route('/publish/user/<username>/<ptype>.<ext>')
+def publish_user_special(username, ptype, ext):
+    from app.modules.auth.models import User
+    user = User.query.filter_by(username=username).first_or_404()
+    token = request.args.get('token')
+    
+    # RBAC: viewer must be owner or admin
+    viewer = User.query.filter_by(api_token=token).first()
+    if not viewer or (viewer.id != user.id and viewer.role != 'admin'):
+        abort(403)
+        
+    slug = f"user-{user.id}-{ptype}"
+    profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
+    
+    if ext == 'xml':
+        return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
+    else:
+        hide_die = request.args.get('hide_die', 'false').lower() == 'true'
+        mode = request.args.get('mode')
+        xml_url = url_for('playlists.publish_user_special', username=username, ptype=ptype, ext='xml', token=token, _external=True)
+        m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
+        return Response(m3u_content, mimetype='application/x-mpegurl')
+
+@playlists_bp.route('/publish/common/public.<ext>')
+def publish_common_public(ext):
+    token = request.args.get('token')
+    from app.modules.auth.models import User
+    viewer = User.query.filter_by(api_token=token).first()
+    if not viewer or viewer.role == 'free':
+        abort(403)
+        
+    profile = PlaylistProfile.query.filter_by(slug='public').first_or_404()
+    
+    if ext == 'xml':
+        return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
+    else:
+        hide_die = request.args.get('hide_die', 'false').lower() == 'true'
+        mode = request.args.get('mode')
+        xml_url = url_for('playlists.publish_common_public', ext='xml', token=token, _external=True)
+        m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
+        return Response(m3u_content, mimetype='application/x-mpegurl')
 
 @playlists_bp.route('/<int:playlist_id>', methods=['DELETE'])
 @login_required
@@ -190,14 +276,16 @@ def publish_xml(slug):
     profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
     token = request.args.get('token')
     
-    if token:
-        from app.modules.auth.models import User, UserPlaylist
-        user = User.query.filter_by(api_token=token).first()
-        if user:
-            if user.role == 'admin':
-                return Response(PlaylistService.generate_xml(profile.id), mimetype='text/xml')
-            access = UserPlaylist.query.filter_by(user_id=user.id, playlist_id=profile.id).first()
-            if access:
-                return Response(PlaylistService.generate_xml(profile.id), mimetype='text/xml')
-    
-    abort(403)
+    from app.modules.auth.models import User
+    viewer = User.query.filter_by(api_token=token).first() if token else None
+
+    # Access Control
+    if profile.is_system:
+        if profile.slug == 'public' and (not viewer or viewer.role == 'free'):
+            abort(403)
+        if profile.owner_id and (not viewer or (viewer.id != profile.owner_id and viewer.role != 'admin')):
+            abort(403)
+    elif profile.security_token and token != profile.security_token:
+        abort(403)
+
+    return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')

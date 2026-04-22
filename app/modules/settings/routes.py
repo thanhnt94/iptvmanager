@@ -4,13 +4,7 @@ from .services import SettingService
 
 settings_bp = Blueprint('settings', __name__)
 
-@settings_bp.route('/config')
-@login_required
-def config_settings():
-    if current_user.role != 'admin':
-        flash('Access denied.')
-        return redirect(url_for('index'))
-    
+def _init_default_settings():
     # Ensure defaults exist (Only if they don't exist at all)
     if SettingService.get('ENABLE_PROXY_STATS') is None:
         SettingService.set('ENABLE_PROXY_STATS', 'true', type='bool', description='Enable server-side proxying for TS/HLS stats.')
@@ -24,6 +18,16 @@ def config_settings():
         SettingService.set('AUTO_SCAN_INTERVAL', '6', type='int', description='Interval in hours between full scans.')
     if SettingService.get('SCAN_DELAY_SECONDS') is None:
         SettingService.set('SCAN_DELAY_SECONDS', '2', type='int', description='Delay in seconds between scanning each channel.')
+    
+    # Heartbeat & Health Optimizations
+    if SettingService.get('ENABLE_HEALTH_SYSTEM') is None:
+        SettingService.set('ENABLE_HEALTH_SYSTEM', 'true', type='bool', description='System Diagnostics Master Switch. If OFF, NO checks will run.')
+    if SettingService.get('ENABLE_PASSIVE_CHECK') is None:
+        SettingService.set('ENABLE_PASSIVE_CHECK', 'true', type='bool', description='Perform health check when a channel is accessed via link.')
+    if SettingService.get('ENABLE_FFPROBE_DETAIL') is None:
+        SettingService.set('ENABLE_FFPROBE_DETAIL', 'true', type='bool', description='Run heavy FFprobe analysis (CPU Intensive). If OFF, only basic status is verified.')
+    if SettingService.get('HEARTBEAT_TTL_MINUTES') is None:
+        SettingService.set('HEARTBEAT_TTL_MINUTES', '30', type='int', description='Time in minutes to skip re-checking a LIVE channel.')
     
     # Proxy Engine Settings
     if SettingService.get('ENABLE_TS_PROXY') is None:
@@ -39,10 +43,7 @@ def config_settings():
     if SettingService.get('HLS_MAX_SEGMENTS') is None:
         SettingService.set('HLS_MAX_SEGMENTS', '50', type='int', description='Max HLS segments per channel in RAM.')
 
-    from app.modules.playlists.models import PlaylistProfile
-    playlists = PlaylistProfile.query.all()
-    
-    return render_template('settings/admin.html', settings=SettingService.get_all(), playlists=playlists)
+    # End of initialization logic
 
 @settings_bp.route('/admin/save', methods=['POST'])
 @login_required
@@ -56,11 +57,16 @@ def save_settings():
     SettingService.set('ENABLE_PROXY_STATS', 'true' if 'ENABLE_PROXY_STATS' in data else 'false', type='bool')
     SettingService.set('ENABLE_STREAM_MANAGER', 'true' if 'ENABLE_STREAM_MANAGER' in data else 'false', type='bool')
     SettingService.set('ENABLE_AUTO_SCAN', 'true' if 'ENABLE_AUTO_SCAN' in data else 'false', type='bool')
+    SettingService.set('ENABLE_HEALTH_SYSTEM', 'true' if 'ENABLE_HEALTH_SYSTEM' in data else 'false', type='bool')
+    SettingService.set('ENABLE_PASSIVE_CHECK', 'true' if 'ENABLE_PASSIVE_CHECK' in data else 'false', type='bool')
+    SettingService.set('ENABLE_FFPROBE_DETAIL', 'true' if 'ENABLE_FFPROBE_DETAIL' in data else 'false', type='bool')
     
     if 'AUTO_SCAN_INTERVAL' in data:
         SettingService.set('AUTO_SCAN_INTERVAL', data['AUTO_SCAN_INTERVAL'], type='int')
     if 'SCAN_DELAY_SECONDS' in data:
         SettingService.set('SCAN_DELAY_SECONDS', data['SCAN_DELAY_SECONDS'], type='int')
+    if 'HEARTBEAT_TTL_MINUTES' in data:
+        SettingService.set('HEARTBEAT_TTL_MINUTES', data['HEARTBEAT_TTL_MINUTES'], type='int')
     
     # Advanced Tuning
     if 'TS_BUFFER_SIZE' in data:
@@ -120,7 +126,7 @@ def test_sso_connection():
     else:
         return jsonify({"status": "error", "message": "Could not reach CentralAuth. Check URL and Network."})
 
-@settings_bp.route('/api/toggle', methods=['POST'])
+@settings_bp.route('/toggle', methods=['POST'])
 @login_required
 def toggle_setting_api():
     if current_user.role != 'admin': return jsonify({"status": "error"}), 403
@@ -129,6 +135,36 @@ def toggle_setting_api():
     value = data.get('value')
     if key and value is not None:
         SettingService.set(key, 'true' if value else 'false', type='bool')
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "error"}), 400
+
+@settings_bp.route('/all', methods=['GET'])
+@login_required
+def get_all_settings_json():
+    if current_user.role != 'admin': return jsonify({"status": "error"}), 403
+    
+    # Trigger initialization of defaults
+    _init_default_settings() 
+    
+    settings = SettingService.get_all()
+    return jsonify([{
+        'key': s.key,
+        'value': s.value,
+        'description': s.description,
+        'type': s.type
+    } for s in settings])
+
+@settings_bp.route('/save_val', methods=['POST'])
+@login_required
+def save_setting_val():
+    if current_user.role != 'admin': return jsonify({"status": "error"}), 403
+    data = request.get_json()
+    key = data.get('key')
+    value = data.get('value')
+    s_type = data.get('type', 'string')
+    
+    if key and value is not None:
+        SettingService.set(key, value, type=s_type)
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 

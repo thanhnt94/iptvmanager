@@ -59,6 +59,8 @@ def create_app(config_class=Config):
     from app.modules.auth.routes import auth_bp
     from app.modules.auth_center.routes import auth_center_bp
     from app.modules.health.routes import health_bp
+    from app.modules.settings.routes import settings_bp
+    from app.modules.channels.epg_routes import epg_bp
     
     # Mount everything under /api for SPA compatibility
     app.register_blueprint(ingestion_bp, url_prefix='/api/ingestion')
@@ -68,6 +70,8 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(auth_center_bp, url_prefix='/api/auth-center')
     app.register_blueprint(health_bp, url_prefix='/api/health')
+    app.register_blueprint(settings_bp, url_prefix='/api/settings')
+    app.register_blueprint(epg_bp, url_prefix='/api/epg')
 
     # Initialize Login Manager
     from flask_login import LoginManager
@@ -110,6 +114,23 @@ def create_app(config_class=Config):
     def api_health():
         return jsonify({"status": "online", "service": "iptv-manager", "timestamp": datetime.now().isoformat()})
 
+    @app.route('/admin')
+    def global_admin_portal():
+        """Top-level /admin direct access."""
+        if current_user.role != 'admin':
+            return abort(403)
+        # Serve the SPA index at this path to let React handle it correctly
+        if os.path.exists(os.path.join(app.static_folder, 'index.html')):
+            return send_from_directory(app.static_folder, 'index.html')
+        return redirect('/settings')
+
+    @app.route('/logout')
+    def global_logout():
+        """Perform logout and return home."""
+        from flask_login import logout_user
+        logout_user()
+        return redirect('/')
+
     @app.route('/api/player/playlists')
     @app.route('/api/player/channels/<int:playlist_id>')
     @login_required
@@ -124,6 +145,7 @@ def create_app(config_class=Config):
     def api_dashboard_stats():
         from app.modules.channels.models import Channel
         from app.modules.playlists.models import PlaylistProfile
+        from app.modules.auth.models import User
         from app.modules.channels.services import ActiveSessionManager
         from app.modules.health.services import HealthCheckService
         
@@ -135,6 +157,7 @@ def create_app(config_class=Config):
                 'unknown': Channel.query.filter((Channel.status == None) | (Channel.status == 'unknown')).count()
             },
             'playlists': {'total': PlaylistProfile.query.count()},
+            'users': {'total': User.query.count()},
             'active_streams': len(ActiveSessionManager.get_active_sessions()),
             'server': ActiveSessionManager.get_server_stats(),
             'scan': HealthCheckService.get_status()
@@ -213,7 +236,13 @@ def create_app(config_class=Config):
             # 3. Seed System Playlists
             from app.modules.playlists.services import PlaylistService
             app.logger.info("Verifying system playlists...")
-            PlaylistService.ensure_system_playlist()
+            # Ensure global system playlists exist
+            PlaylistService.ensure_global_system_playlists()
+            
+            # Ensure all existing users have their default personalized playlists
+            from app.modules.auth.models import User
+            for user in User.query.all():
+                PlaylistService.ensure_user_default_playlists(user)
 
             # 4. Auto-detect FFmpeg/FFprobe
             from app.modules.settings.services import SettingService

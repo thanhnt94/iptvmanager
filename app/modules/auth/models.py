@@ -18,7 +18,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256))
     full_name = db.Column(db.String(100))
     avatar_url = db.Column(db.String(255))
-    role = db.Column(db.String(20), default='user') # 'admin' or 'user'
+    role = db.Column(db.String(20), default='free') # 'admin', 'vip', or 'free'
     is_active = db.Column(db.Boolean, default=True)
     api_token = db.Column(db.String(64), unique=True, nullable=False, index=True)
     central_auth_id = db.Column(db.String(36), unique=True, index=True, nullable=True) # UUID from CentralAuth

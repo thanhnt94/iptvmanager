@@ -4,9 +4,10 @@ import { Shield, User, Key, ArrowRight, AlertTriangle, Info, Check } from 'lucid
 
 interface LoginProps {
   onLoginSuccess: (user: { username: string; role: string }) => void;
+  forceLocal?: boolean;
 }
 
-export const LoginPage: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginProps> = ({ onLoginSuccess, forceLocal }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -16,13 +17,13 @@ export const LoginPage: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   useEffect(() => {
     // Fetch Auth Configuration (SSO status, etc.)
-    const isEmergency = new URLSearchParams(window.location.search).get('emergency') === 'true';
-    fetch(`/api/auth/config?emergency=${isEmergency}`)
+    const isEmergency = new URLSearchParams(window.location.search).get('emergency') === 'true' || forceLocal;
+    fetch(`/api/auth/config?force_local=${isEmergency}`)
       .then(res => res.json())
       .then(data => {
         setConfig(data);
         // Automatic SSO Redirect if enabled, reachable, and NOT in emergency mode
-        if (data.use_sso && data.sso_reachable && !data.emergency_mode) {
+        if (data.use_sso && data.sso_reachable && !isEmergency) {
            window.location.href = '/auth-center/login';
         }
       })

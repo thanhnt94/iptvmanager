@@ -17,33 +17,55 @@ class PlaylistService:
         return profile
 
     @staticmethod
-    def ensure_system_playlist():
-        # 1. All Channels Playlist
-        all_playlist = PlaylistProfile.query.filter_by(slug='alliptv').first()
-        if not all_playlist:
+    def ensure_global_system_playlists():
+        """Ensures truly global system playlists (like Community Shared)."""
+        # Community Shared Playlist
+        public_playlist = PlaylistProfile.query.filter_by(slug='public').first()
+        if not public_playlist:
             token = secrets.token_hex(16)
-            all_playlist = PlaylistProfile(
-                name='All IPTV Channels',
-                slug='alliptv',
+            public_playlist = PlaylistProfile(
+                name='Hệ thống: Cộng đồng (Shared)',
+                slug='public',
                 is_system=True,
                 security_token=token
+            )
+            db.session.add(public_playlist)
+        db.session.commit()
+        return public_playlist
+
+    @staticmethod
+    def ensure_user_default_playlists(user):
+        """Creates the 'All' and 'Protected' personal system playlists for a user."""
+        from app.modules.auth.models import User
+        if not user: return
+
+        # 1. All Channels (Personal)
+        all_slug = f"user-{user.id}-all"
+        all_playlist = PlaylistProfile.query.filter_by(slug=all_slug).first()
+        if not all_playlist:
+            all_playlist = PlaylistProfile(
+                name='Tất cả kênh (Cá nhân)',
+                slug=all_slug,
+                is_system=True,
+                owner_id=user.id,
+                security_token=secrets.token_hex(16)
             )
             db.session.add(all_playlist)
-        
-        # 2. Protected Channels Playlist (New)
-        protected_playlist = PlaylistProfile.query.filter_by(slug='protected').first()
+
+        # 2. Protected Channels (Personal)
+        protected_slug = f"user-{user.id}-protected"
+        protected_playlist = PlaylistProfile.query.filter_by(slug=protected_slug).first()
         if not protected_playlist:
-            token = secrets.token_hex(16)
             protected_playlist = PlaylistProfile(
-                name='Protected Channels',
-                slug='protected',
+                name='Kênh Protected (Cá nhân)',
+                slug=protected_slug,
                 is_system=True,
-                security_token=token
+                owner_id=user.id,
+                security_token=secrets.token_hex(16)
             )
             db.session.add(protected_playlist)
-
+        
         db.session.commit()
-        return all_playlist
 
     @staticmethod
     def create_group(playlist_id, name):
@@ -106,9 +128,15 @@ class PlaylistService:
             # System playlist handling
             query = Channel.query
             
-            # Special logic for Protected Channels playlist
-            if profile.slug == 'protected':
-                query = query.filter_by(is_original=True)
+            # 1. Handle PERSONALized system playlists (All, Protected)
+            if profile.owner_id:
+                query = query.filter_by(owner_id=profile.owner_id)
+                if "protected" in profile.slug:
+                    query = query.filter_by(is_original=True)
+            
+            # 2. Handle GLOBAL system playlists (Public/Community)
+            elif profile.slug == 'public':
+                query = query.filter_by(is_public=True)
                 
             if hide_die:
                 query = query.filter_by(status='live')
@@ -208,8 +236,15 @@ class PlaylistService:
         if profile.is_system:
             # System playlist handling
             query = Channel.query.filter_by(status='live')
-            if profile.slug == 'protected':
-                query = query.filter_by(is_original=True)
+            
+            # 1. PERSONALized isolation
+            if profile.owner_id:
+                query = query.filter_by(owner_id=profile.owner_id)
+                if "protected" in profile.slug:
+                    query = query.filter_by(is_original=True)
+            # 2. GLOBAL isolation
+            elif profile.slug == 'public':
+                query = query.filter_by(is_public=True)
                 
             channels = query.all()
             for ch in channels:

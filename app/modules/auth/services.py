@@ -16,16 +16,20 @@ class AuthService:
     @staticmethod
     def ensure_admin_user():
         """Creates or updates the default admin/admin user."""
+        from app.modules.playlists.services import PlaylistService
         admin = User.query.filter_by(username='admin').first()
         if not admin:
             admin = User(username='admin', role='admin')
             admin.set_password('admin')
             db.session.add(admin)
+            db.session.commit() # Commit to get ID
         else:
             # Upgrade existing admin if role not set
             if admin.role != 'admin':
                 admin.role = 'admin'
-        db.session.commit()
+                db.session.commit()
+        
+        PlaylistService.ensure_user_default_playlists(admin)
         return admin
 
     @staticmethod
@@ -34,6 +38,7 @@ class AuthService:
 
     @staticmethod
     def create_user(username, email, password, role='user'):
+        from app.modules.playlists.services import PlaylistService
         if not email:
             return None, "Email is required"
         if User.query.filter_by(username=username).first():
@@ -45,6 +50,10 @@ class AuthService:
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
+        
+        # New: Auto-generate default playlists
+        PlaylistService.ensure_user_default_playlists(user)
+        
         return user, None
 
     @staticmethod
@@ -68,6 +77,15 @@ class AuthService:
             db.session.add(access)
         db.session.commit()
         return True
+    @staticmethod
+    def update_user_role(user_id, role):
+        user = User.query.get(user_id)
+        if user and user.username != 'admin':
+            if role in ['admin', 'vip', 'free']:
+                user.role = role
+                db.session.commit()
+                return True
+        return False
 
     @staticmethod
     def get_user_by_id(user_id):
