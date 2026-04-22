@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Link, Copy, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Search, Link, Copy, CheckCircle2, AlertTriangle, Loader2, Shield } from 'lucide-react';
 
 interface ScanResult {
   url: string;
@@ -9,10 +9,12 @@ interface ScanResult {
 
 export const MediaScanner: React.FC = () => {
   const [url, setUrl] = useState('');
+  const [deep, setDeep] = useState(false);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ScanResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [loadingStep, setLoadingStep] = useState('');
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,12 +23,19 @@ export const MediaScanner: React.FC = () => {
     setLoading(true);
     setError(null);
     setResults([]);
+    setLoadingStep(deep ? 'Initializing Ultra Engine...' : 'Analyzing Source...');
 
     try {
+      if (deep) {
+        setTimeout(() => setLoadingStep('Applying Stealth Buffers...'), 3000);
+        setTimeout(() => setLoadingStep('Sniffing Network Traffic...'), 8000);
+        setTimeout(() => setLoadingStep('Extracting Media Payloads...'), 15000);
+      }
+
       const response = await fetch('/api/channels/scan-web', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, deep })
       });
 
       const data = await response.json();
@@ -41,6 +50,7 @@ export const MediaScanner: React.FC = () => {
       setError(err.message);
     } finally {
       setLoading(false);
+      setLoadingStep('');
     }
   };
 
@@ -61,7 +71,7 @@ export const MediaScanner: React.FC = () => {
         </p>
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl">
+      <div className="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl space-y-6">
         <form onSubmit={handleScan} className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1 group">
             <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-slate-500 group-focus-within:text-indigo-500 transition-colors">
@@ -81,9 +91,33 @@ export const MediaScanner: React.FC = () => {
             className="px-8 py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-3 whitespace-nowrap"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
-            {loading ? 'Scanning...' : 'Detect Media'}
+            {loading ? 'Processing...' : 'Detect Media'}
           </button>
         </form>
+
+        <div className="flex items-center justify-between px-2 pt-4 border-t border-white/5">
+           <div className="flex items-center gap-4">
+              <button 
+                type="button"
+                onClick={() => setDeep(!deep)}
+                className={`flex items-center gap-3 px-5 py-2.5 rounded-xl border transition-all ${
+                  deep ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-white/5 border-white/5 text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                 <Shield size={16} className={deep ? 'animate-pulse' : ''} />
+                 <div className="text-left">
+                    <p className="text-[10px] font-black uppercase tracking-widest">Ultra Scan Mode</p>
+                    <p className="text-[8px] font-bold opacity-60 uppercase tracking-tighter">Network Interception & Stealth</p>
+                 </div>
+                 <div className={`w-8 h-4 rounded-full relative transition-colors ml-2 ${deep ? 'bg-indigo-500' : 'bg-slate-700'}`}>
+                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${deep ? 'left-4.5' : 'left-0.5'}`} />
+                 </div>
+              </button>
+           </div>
+           <div className="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] italic">
+             Powered by Playwright & yt-dlp
+           </div>
+        </div>
       </div>
 
       {error && (
@@ -140,7 +174,7 @@ export const MediaScanner: React.FC = () => {
       {loading && results.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-500">
           <Loader2 className="animate-spin text-indigo-500" size={48} />
-          <p className="font-black uppercase tracking-[0.3em] text-xs">Phân tích chuyên sâu...</p>
+          <p className="font-black uppercase tracking-[0.3em] text-[10px] text-indigo-400 animate-pulse">{loadingStep || 'Phân tích hệ thống...'}</p>
         </div>
       )}
     </div>

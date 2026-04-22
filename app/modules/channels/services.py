@@ -603,11 +603,75 @@ class HLSEngine:
 
 class ExtractorService:
     @staticmethod
-    def extract_direct_url(web_url):
-        """Uses both yt-dlp and regex scraping to find all media links from a webpage."""
-        logger.info(f"Starting extraction for URL: {web_url}")
+    def extract_direct_url(web_url, deep_scan=False):
+        """Uses yt-dlp, cloudscraper, and optionally Playwright to find media links."""
+        logger.info(f"Starting {'DEEP ' if deep_scan else ''}extraction for URL: {web_url}")
         results = []
         seen_urls = set()
+
+        # 1. Playwright Ultra Scan (JS Rendering + Network Sniffing)
+        if deep_scan:
+            try:
+                from playwright.sync_api import sync_playwright
+                from playwright_stealth import Stealth
+                
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    context = browser.new_context(
+                        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                    )
+                    page = context.new_page()
+                    
+                    # Apply Stealth Mode correctly for version 2.x
+                    stealth = Stealth()
+                    stealth.apply_stealth_sync(page)
+                    
+                    # Store found URLs from network traffic
+                    network_found = []
+                    
+                    def handle_request(request):
+                        try:
+                            req_url = request.url
+                            # Check for common stream extensions or patterns
+                            if any(ext in req_url.lower() for ext in ['.m3u8', '.mpd', 'master.m3u8', 'index.m3u8', 'playlist.m3u8']):
+                                if req_url not in seen_urls:
+                                    logger.info(f"Ultra Scan (Network) caught: {req_url}")
+                                    network_found.append(req_url)
+                        except:
+                            pass
+
+                    # Attach the "sniffer"
+                    page.on("request", handle_request)
+                    
+                    logger.info(f"Ultra Scan: Navigating to {web_url}")
+                    # Navigate and wait for some network activity to settle
+                    try:
+                        page.goto(web_url, wait_until='networkidle', timeout=45000)
+                        # Extra wait for dynamic players that start après-load
+                        page.wait_for_timeout(5000) 
+                    except Exception as ge:
+                        logger.warning(f"Ultra Scan timeout/navigation issue (still checking results): {str(ge)}")
+
+                    # Also scan the rendered HTML as fallback
+                    html = page.content()
+                    browser.close()
+                    
+                    # Process network findings
+                    for u in network_found:
+                        if u not in seen_urls:
+                            results.append({'url': u, 'source': 'Ultra Scan (Network)', 'type': 'Auto'})
+                            seen_urls.add(u)
+                            
+                    # Process HTML findings
+                    found_in_html = ExtractorService._scan_html_for_links(html)
+                    for u in found_in_html:
+                        if u not in seen_urls:
+                            results.append({'url': u, 'source': 'Ultra Scan (DOM)', 'type': 'Manual'})
+                            seen_urls.add(u)
+            except Exception as e:
+                logger.error(f"Ultra Scan (Playwright) error: {str(e)}", exc_info=True)
+
+        # 2. yt-dlp approach
 
         # 1. yt-dlp approach
         cmd = [
@@ -634,38 +698,53 @@ class ExtractorService:
         except Exception as e:
             logger.error(f"yt-dlp extraction error for {web_url}: {str(e)}", exc_info=True)
 
-        # 2. Deep Regex Scraper (very effective for finding multiple streams/ads)
+        # 3. CloudScraper (Bypasses Cloudflare better than requests)
         try:
-            import requests
+            import cloudscraper
             import re
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-            resp = requests.get(web_url, timeout=5, headers=headers)
+            scraper = cloudscraper.create_scraper(
+                browser={
+                    'browser': 'chrome',
+                    'platform': 'windows',
+                    'mobile': False
+                }
+            )
+            resp = scraper.get(web_url, timeout=10)
             if resp.status_code == 200:
                 html = resp.text
-                logger.debug(f"Scraper fetched {len(html)} bytes from {web_url}")
-                # Find all potential m3u8/mp4/ts links
-                patterns = [
-                    r'https?://[^\s\'"<>]+?\.m3u8[^\s\'"<>]*',
-                    r'https?://[^\s\'"<>]+?\.mp4[^\s\'"<>]*',
-                    r'https?://[^\s\'"<>]+?\.ts[^\s\'"<>]*'
-                ]
-                for p in patterns:
-                    found = re.findall(p, html)
-                    for u in found:
-                        u = u.replace('\\/', '/') # Unescape forward slashes if in JSON
-                        if u not in seen_urls:
-                            source = 'Scraper'
-                            if any(x in u.lower() for x in ['ad', 'tvc', 'promo']):
-                                source = 'Scraper (Ad?)'
-                            logger.info(f"Regex found match: {u} (Source: {source})")
-                            results.append({'url': u, 'source': source, 'type': 'Manual'})
-                            seen_urls.add(u)
+                logger.debug(f"CloudScraper fetched {len(html)} bytes")
+                found = ExtractorService._scan_html_for_links(html)
+                for u in found:
+                    if u not in seen_urls:
+                        source = 'Scraper'
+                        if any(x in u.lower() for x in ['ad', 'tvc', 'promo']):
+                            source = 'Scraper (Ad?)'
+                        results.append({'url': u, 'source': source, 'type': 'Manual'})
+                        seen_urls.add(u)
         except Exception as e:
-            logger.error(f"Deep Regex Scraper error for {web_url}: {str(e)}", exc_info=True)
+            logger.error(f"CloudScraper extraction error for {web_url}: {str(e)}", exc_info=True)
 
         if results:
             return {'success': True, 'links': results}
         return {'success': False, 'error': 'No media streams found on this page.'}
+
+    @staticmethod
+    def _scan_html_for_links(html):
+        """Helper to find m3u8, mp4, ts links in HTML string."""
+        import re
+        patterns = [
+            r'https?://[^\s\'"<>]+?\.m3u8[^\s\'"<>]*',
+            r'https?://[^\s\'"<>]+?\.mp4[^\s\'"<>]*',
+            r'https?://[^\s\'"<>]+?\.ts[^\s\'"<>]*',
+            r'https?://[^\s\'"<>]+?\.mpd[^\s\'"<>]*' # Added MPD for DASH
+        ]
+        found_links = []
+        for p in patterns:
+            matches = re.findall(p, html)
+            for u in matches:
+                u = u.replace('\\/', '/') # Unescape JSON slashes
+                found_links.append(u)
+        return found_links
 
 
 class EPGService:

@@ -616,9 +616,11 @@ def scan_web():
         
     data = request.json or {}
     url = data.get('url')
+    deep = data.get('deep', False)
+    
     if not url:
         return jsonify({'error': 'URL is required'}), 400
         
-    logger.info(f"User {current_user.username} initiating web scan for: {url}")
-    res = ExtractorService.extract_direct_url(url)
+    logger.info(f"User {current_user.username} initiating {'DEEP ' if deep else ''}web scan for: {url}")
+    res = ExtractorService.extract_direct_url(url, deep_scan=deep)
     return jsonify(res)

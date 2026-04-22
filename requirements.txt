@@ -20,3 +20,6 @@ yt-dlp
 Flask-Session
 PyJWT
 numpy<2.0.0
+cloudscraper
+playwright
+playwright-stealth
