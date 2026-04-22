@@ -616,11 +616,31 @@ class ExtractorService:
                 from playwright_stealth import Stealth
                 
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True)
+                    # Optimized Browser Launch for VPS (low RAM)
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=[
+                            '--no-sandbox', 
+                            '--disable-setuid-sandbox', 
+                            '--disable-dev-shm-usage',
+                            '--disable-accelerated-2d-canvas',
+                            '--disable-gpu',
+                            '--js-flags="--max-old-space-size=256"' # Limit JS memory
+                        ]
+                    )
                     context = browser.new_context(
                         user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
                     )
                     page = context.new_page()
+                    
+                    # 1.1 RESOURCE BLOCKING: Skip heavy assets to save RAM/Time
+                    def block_aggressively(route):
+                        if route.request.resource_type in ["image", "stylesheet", "font", "media"]:
+                            # We only need script and fetch/xhr for sniffing
+                            return route.abort()
+                        return route.continue_()
+
+                    page.route("**/*", block_aggressively)
                     
                     # Apply Stealth Mode correctly for version 2.x
                     stealth = Stealth()
@@ -628,6 +648,9 @@ class ExtractorService:
                     
                     # Store found URLs from network traffic
                     network_found = []
+                    
+                    # 1.2 SNIFFER + EARLY EXIT LOGIC
+                    found_event = [] # Using a list as a pointer for the closure
                     
                     def handle_request(request):
                         try:
@@ -637,6 +660,7 @@ class ExtractorService:
                                 if req_url not in seen_urls:
                                     logger.info(f"Ultra Scan (Network) caught: {req_url}")
                                     network_found.append(req_url)
+                                    found_event.append(True) # Signal we found something
                         except:
                             pass
 
@@ -644,15 +668,23 @@ class ExtractorService:
                     page.on("request", handle_request)
                     
                     logger.info(f"Ultra Scan: Navigating to {web_url}")
-                    # Navigate and wait for some network activity to settle
+                    # 1.3 TIMEOUT ALIGNMENT: 30s is standard Gunicorn limit
                     try:
-                        page.goto(web_url, wait_until='networkidle', timeout=45000)
-                        # Extra wait for dynamic players that start après-load
-                        page.wait_for_timeout(5000) 
+                        # Wait for network idle or early exit find
+                        # Use a manual wait loop to support early exit
+                        page.goto(web_url, wait_until='domcontentloaded', timeout=30000)
+                        
+                        # Active waiting for 5s OR early finding
+                        for _ in range(25): # 25 * 200ms = 5s
+                            if found_event: 
+                                logger.info("Ultra Scan: Early exit triggered (Stream found)")
+                                break
+                            page.wait_for_timeout(200)
+                            
                     except Exception as ge:
-                        logger.warning(f"Ultra Scan timeout/navigation issue (still checking results): {str(ge)}")
+                        logger.warning(f"Ultra Scan navigation finished/timed out: {str(ge)}")
 
-                    # Also scan the rendered HTML as fallback
+                    # Final DOM scan fallback
                     html = page.content()
                     browser.close()
                     

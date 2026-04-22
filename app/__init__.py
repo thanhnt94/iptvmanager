@@ -6,6 +6,7 @@ from datetime import datetime
 from app.core.config import Config
 from app.core.database import db, migrate
 from app.modules.health.tasks import init_scheduler
+from app.modules.health.models import ScannerStatus
 from flask_login import current_user, login_required
 import requests
 from sqlalchemy import event
