@@ -73,9 +73,72 @@ interface FilterData {
   formats: string[];
 }
 
+interface CustomSelectProps {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  icon: React.ReactNode;
+  placeholder?: string;
+  minWidth?: string;
+}
+
+const CustomSelect: React.FC<CustomSelectProps> = ({ value, onChange, options, icon, minWidth = '160px' }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedLabel = options.find(o => o.value === value)?.label || 'Select...';
+
+  return (
+    <div className="relative" style={{ minWidth }}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between gap-3 bg-slate-950/50 border border-white/5 rounded-xl px-4 py-2.5 text-white transition-all hover:bg-slate-900/80 group"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="text-indigo-400 group-hover:scale-110 transition-transform">{icon}</div>
+          <span className="text-[10px] font-black uppercase tracking-widest truncate">{selectedLabel}</span>
+        </div>
+        <ChevronRight size={14} className={`text-slate-600 transition-transform duration-300 ${isOpen ? 'rotate-90' : ''}`} />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <motion.div 
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="absolute top-full left-0 right-0 mt-2 z-[100] glass border border-white/10 rounded-2xl overflow-hidden shadow-3xl py-1"
+            >
+              <div className="max-h-60 overflow-y-auto scrollbar-hide">
+                {options.map((opt) => (
+                  <button 
+                    key={opt.value}
+                    onClick={() => {
+                      onChange(opt.value);
+                      setIsOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-l-2 ${
+                      value === opt.value 
+                      ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' 
+                      : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export const Channels: React.FC = () => {
    const [searchParams, setSearchParams] = useSearchParams();
    const page = parseInt(searchParams.get('page') || '1');
+// ... (rest of states)
    const search = searchParams.get('search') || '';
    const selectedGroup = searchParams.get('group') || '';
    const selectedStatus = searchParams.get('status') || '';
@@ -85,7 +148,6 @@ export const Channels: React.FC = () => {
    const [pagination, setPagination] = useState<Pagination | null>(null);
    const [filters, setFilters] = useState<FilterData>({ groups: [], resolutions: [], formats: [] });
    const [loading, setLoading] = useState(true);
-   const [showFilters, setShowFilters] = useState(false);
    const [processingId, setProcessingId] = useState<number | null>(null);
    const [isFormOpen, setIsFormOpen] = useState(false);
    const [editingId, setEditingId] = useState<number | null>(null);
@@ -321,8 +383,8 @@ export const Channels: React.FC = () => {
         </div>
       </header>
 
-      {/* Control Bar */}
-      <div className="flex flex-col lg:flex-row gap-4">
+      {/* Control Bar - Optimized for accessibility */}
+      <div className="flex flex-col xl:flex-row gap-4 relative z-50">
         <div className="flex-1 glass p-2 rounded-2xl flex items-center gap-2">
             <div className="relative flex-1 group">
                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" size={18} />
@@ -331,58 +393,60 @@ export const Channels: React.FC = () => {
                  placeholder="Search streams..." 
                  value={search}
                  onChange={e => updateParams({ search: e.target.value, page: '1' })}
-                 className="w-full bg-transparent border-none pl-12 pr-4 py-3 text-sm text-white focus:outline-none placeholder:text-slate-600"
+                 className="w-full bg-transparent border-none pl-12 pr-10 py-3 text-sm text-white focus:outline-none placeholder:text-slate-600"
                />
+               {search && (
+                 <button 
+                  onClick={() => updateParams({ search: '', page: '1' })}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-white transition-colors"
+                 >
+                   <X size={14} />
+                 </button>
+               )}
             </div>
-           <button 
-            onClick={() => setShowFilters(!showFilters)}
-            className={`p-3 rounded-xl transition-all ${showFilters ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-500 hover:text-white'}`}
-           >
-              <Filter size={18} />
-           </button>
-           <button onClick={fetchChannels} className="p-3 text-slate-500 hover:text-white transition-all"><RefreshCw size={18} /></button>
+            
+            <button onClick={fetchChannels} className="p-3 text-slate-500 hover:text-white transition-all"><RefreshCw size={18} /></button>
         </div>
 
-        <AnimatePresence>
-          {showFilters && (
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="glass p-2 rounded-2xl flex flex-wrap gap-2 items-center"
-            >
-              <div className="flex items-center gap-2 px-3 border-r border-white/5 mr-2">
-                 <ArrowUpDown size={14} className="text-indigo-400" />
-                 <select 
-                   value={activeSort} 
-                   onChange={e => updateParams({ sort: e.target.value })}
-                   className="bg-transparent text-white text-[11px] font-black uppercase tracking-widest focus:outline-none"
-                 >
-                   <option value="name">Alphabetical</option>
-                   <option value="newest">Newest First</option>
-                   <option value="oldest">Oldest First</option>
-                 </select>
-              </div>
-              <select 
-                value={selectedGroup} 
-                onChange={e => updateParams({ group: e.target.value })}
-                className="bg-slate-950/50 text-white text-[11px] font-black uppercase tracking-widest border border-white/5 rounded-xl px-4 py-2"
-              >
-                <option value="">All Groups</option>
-                {filters.groups.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-              <select 
-                value={selectedStatus} 
-                onChange={e => updateParams({ status: e.target.value })}
-                className="bg-slate-950/50 text-white text-[11px] font-black uppercase tracking-widest border border-white/5 rounded-xl px-4 py-2"
-              >
-                <option value="">All Status</option>
-                <option value="live">Live Now</option>
-                <option value="die">Offline</option>
-              </select>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="glass p-2 rounded-2xl flex flex-wrap lg:flex-nowrap gap-2 items-center">
+            {/* Group Filter */}
+            <CustomSelect 
+              value={selectedGroup}
+              onChange={(v) => updateParams({ group: v })}
+              icon={<Filter size={14} />}
+              options={[
+                { value: '', label: 'All Groups' },
+                ...filters.groups.map(g => ({ value: g, label: g }))
+              ]}
+              minWidth="180px"
+            />
+
+            {/* Sort Selector */}
+            <CustomSelect 
+              value={activeSort}
+              onChange={(v) => updateParams({ sort: v })}
+              icon={<ArrowUpDown size={14} />}
+              options={[
+                { value: 'name', label: 'Alphabetical' },
+                { value: 'newest', label: 'Newest First' },
+                { value: 'oldest', label: 'Oldest First' }
+              ]}
+              minWidth="160px"
+            />
+
+            {/* Status Filter */}
+            <CustomSelect 
+              value={selectedStatus}
+              onChange={(v) => updateParams({ status: v })}
+              icon={<Activity size={14} />}
+              options={[
+                { value: '', label: 'All Status' },
+                { value: 'live', label: 'Live Now' },
+                { value: 'die', label: 'Offline' }
+              ]}
+              minWidth="150px"
+            />
+        </div>
       </div>
 
       {/* Top Pagination */}

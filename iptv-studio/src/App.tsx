@@ -12,6 +12,8 @@ import { Import } from './pages/Import';
 import { Diagnostics } from './pages/Diagnostics';
 import { AdminPortal } from './pages/AdminPortal';
 import { MediaScanner } from './pages/MediaScanner';
+import { GroupManager } from './pages/GroupManager';
+import { PlaylistEditor } from './pages/PlaylistEditor';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -55,6 +57,7 @@ const App: React.FC = () => {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/playlists" element={<Playlists />} />
+                  <Route path="/playlists/:id" element={<PlaylistEditor />} />
                   <Route path="/channels" element={<Channels />} />
                   <Route path="/streams" element={<Streams />} />
                   <Route path="/epg" element={<EPG />} />
@@ -62,10 +65,14 @@ const App: React.FC = () => {
                   <Route path="/import" element={<Import />} />
                   <Route path="/diagnostics" element={<Diagnostics />} />
                   
-                  {/* Premium Scanner (VIP/Admin) */}
                   <Route 
                     path="/scanner" 
                     element={(user.role === 'admin' || user.role === 'vip') ? <MediaScanner /> : <Navigate to="/" replace />} 
+                  />
+
+                  <Route 
+                    path="/groups" 
+                    element={user.role === 'admin' ? <GroupManager /> : <Navigate to="/" replace />} 
                   />
                   
                   {/* Admin Only Routes */}

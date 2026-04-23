@@ -115,6 +115,105 @@ def list_channels():
         }
     })
 
+@channels_bp.route('/groups/manage', methods=['GET'])
+@login_required
+def manage_groups():
+    from sqlalchemy import func
+    # Get all unique group names and counts
+    groups = db.session.query(Channel.group_name, func.count(Channel.id))\
+        .group_by(Channel.group_name)\
+        .filter(Channel.group_name != None)\
+        .order_by(func.count(Channel.id).desc())\
+        .all()
+    
+    return jsonify([{
+        'name': g[0],
+        'count': g[1]
+    } for g in groups])
+
+@channels_bp.route('/groups/rename', methods=['POST'])
+@login_required
+def rename_group_global():
+    if current_user.role != 'admin':
+        abort(403)
+        
+    data = request.json or {}
+    old_name = data.get('old_name')
+    new_name = data.get('new_name')
+    
+    if not old_name or not new_name:
+        return jsonify({'status': 'error', 'message': 'Both old and new names required'}), 400
+        
+    updated = Channel.query.filter_by(group_name=old_name).update({Channel.group_name: new_name})
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok',
+        'message': f'Renamed group from {old_name} to {new_name}. {updated} channels updated.'
+    })
+
+@channels_bp.route('/groups/delete', methods=['POST'])
+@login_required
+def delete_group_global():
+    if current_user.role != 'admin':
+        abort(403)
+        
+    data = request.json or {}
+    name = data.get('name')
+    
+    if not name:
+        return jsonify({'status': 'error', 'message': 'Group name required'}), 400
+        
+    updated = Channel.query.filter_by(group_name=name).update({Channel.group_name: None})
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok',
+        'message': f'Group {name} removed. {updated} channels are now ungrouped.'
+    })
+
+@channels_bp.route('/groups/delete-batch', methods=['POST'])
+@login_required
+def delete_groups_batch():
+    if current_user.role != 'admin':
+        abort(403)
+        
+    data = request.json or {}
+    names = data.get('names', [])
+    
+    if not names:
+        return jsonify({'status': 'error', 'message': 'Group names required'}), 400
+        
+    updated = Channel.query.filter(Channel.group_name.in_(names)).update({Channel.group_name: None}, synchronize_session=False)
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok',
+        'message': f'{len(names)} groups removed. {updated} channels are now ungrouped.'
+    })
+
+@channels_bp.route('/groups/merge', methods=['POST'])
+@login_required
+def merge_groups():
+    if current_user.role != 'admin':
+        abort(403)
+        
+    data = request.json or {}
+    source_names = data.get('source_names', [])
+    target_name = data.get('target_name')
+    
+    if not source_names or not target_name:
+        return jsonify({'status': 'error', 'message': 'Source names and target name required'}), 400
+        
+    # Move all channels from source groups to target group
+    updated = Channel.query.filter(Channel.group_name.in_(source_names)).update({Channel.group_name: target_name}, synchronize_session=False)
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok',
+        'message': f'{len(source_names)} groups merged into "{target_name}". {updated} channels updated.'
+    })
+
 @channels_bp.route('/filters', methods=['GET'])
 @login_required
 def get_filters():

@@ -7,7 +7,7 @@
 body {
   background-color: #020617;
   color: #f8fafc;
-  font-family: 'Outfit', 'Inter', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;

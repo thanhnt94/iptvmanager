@@ -120,7 +120,7 @@ class PlaylistService:
             
         header = "#EXTM3U"
         if epg_url:
-            header += f' x-tvg-url="{epg_url}"'
+            header += f' x-tvg-url="{epg_url}" url-tvg="{epg_url}"'
         m3u_lines = [header]
         
         # Determine which channels to include
@@ -269,14 +269,43 @@ class PlaylistService:
 
         # 2. Add <programme> entries (last 24h to next 7 days)
         if epg_ids:
+            from app.modules.channels.models import EPGSource
             now = datetime.utcnow()
             start_limit = now - timedelta(days=1)
+            
+            # Subquery or Join to get priorities
+            # 1. Manual entries (owner_id is not null) => Priority 1000
+            # 2. Source entries => Source priority
+            
+            # To handle this efficiently, we fetch all and rank in python
             programs = EPGData.query.filter(
                 EPGData.epg_id.in_(epg_ids),
-                EPGData.stop >= start_limit
-            ).order_by(EPGData.start).all()
+                EPGData.stop >= start_limit,
+                db.or_(EPGData.owner_id == profile.owner_id, EPGData.owner_id == None)
+            ).all()
 
+            # Map source IDs to priorities
+            sources = {s.id: s.priority for s in EPGSource.query.all()}
+            
+            # (epg_id, start_time) -> winning_program
+            best_programs = {}
+            
             for p in programs:
+                priority = -1
+                if p.owner_id == profile.owner_id:
+                    priority = 10000  # Their manual always wins
+                elif p.source_id in sources:
+                    priority = sources[p.source_id]
+                
+                key = (p.epg_id, p.start)
+                # Keep the one with higher priority
+                if key not in best_programs or priority > best_programs[key][0]:
+                    best_programs[key] = (priority, p)
+
+            # Sort best programs by start time for XML output
+            sorted_best = sorted([val[1] for val in best_programs.values()], key=lambda x: x.start)
+
+            for p in sorted_best:
                 p_node = ET.SubElement(root, 'programme', {
                     'start': p.start.strftime('%Y%m%d%H%M%S +0000'),
                     'stop': p.stop.strftime('%Y%m%d%H%M%S +0000'),

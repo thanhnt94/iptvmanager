@@ -228,9 +228,14 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                   className="w-full bg-slate-900/60 border border-white/5 rounded-xl pl-8 pr-2 py-2 text-[10px] text-white font-black focus:outline-none focus:ring-1 focus:ring-indigo-500/20 appearance-none hover:bg-slate-900 transition-all cursor-pointer truncate"
                 >
                    <option value="">ALL</option>
-                   {categories.map(cat => (
-                     <option key={cat} value={cat}>{cat.toUpperCase()}</option>
-                   ))}
+                   {categories.map((cat: any) => {
+                     const catName = typeof cat === 'string' ? cat : (cat?.name || 'Ungrouped');
+                     return (
+                       <option key={typeof cat === 'string' ? cat : cat?.id} value={catName}>
+                         {String(catName).toUpperCase()}
+                       </option>
+                     );
+                   })}
                 </select>
                 <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-white/20 rotate-90" size={12} />
               </div>

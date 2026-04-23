@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Plus, 
@@ -17,7 +18,8 @@ import {
   Zap,
   Trash2,
   Activity,
-  Globe
+  Globe,
+  FolderTree
 } from 'lucide-react';
 
 interface Playlist {
@@ -28,9 +30,11 @@ interface Playlist {
   channel_count: number;
   security_token: string;
   created_at: string;
+  owner_username: string;
 }
 
 export const Playlists: React.FC = () => {
+  const navigate = useNavigate();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -39,6 +43,12 @@ export const Playlists: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<number | string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [hideDieFilter, setHideDieFilter] = useState(true);
+  
+  // Create Modal State
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newSlug, setNewSlug] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     fetch('/api/playlists')
@@ -57,8 +67,14 @@ export const Playlists: React.FC = () => {
 
   const copyToClipboard = (playlist: Playlist, hideDie: boolean, mode: string) => {
     const baseUrl = window.location.origin;
-    const modeParam = mode !== 'default' ? `&mode=${mode}` : '';
-    const url = `${baseUrl}/api/playlists/publish/${playlist.slug}.m3u8?token=${playlist.security_token}&hide_die=${hideDie}${modeParam}`;
+    const status = hideDie ? 'live' : 'all';
+    const finalMode = mode === 'default' ? 'smart' : mode;
+    let url = `${baseUrl}/p/${playlist.owner_username}/${playlist.slug}/${finalMode}/${status}`;
+    
+    // For public/system playlists, we still need the token to identify the viewer
+    if (playlist.is_system || playlist.slug === 'public') {
+      url += `?token=${playlist.security_token}`;
+    }
     
     navigator.clipboard.writeText(url).then(() => {
       setCopiedId(`${playlist.id}-${mode}`);
@@ -98,7 +114,14 @@ export const Playlists: React.FC = () => {
           <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-white">Registry <span className="text-indigo-500">Profiles</span></h2>
           <p className="text-slate-400 text-xs md:text-sm mt-1">Manage and distribute your curated IPTV namespaces.</p>
         </div>
-        <button className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20 w-full md:w-auto">
+        <button 
+          onClick={() => {
+            setNewName('');
+            setNewSlug('');
+            setIsCreateModalOpen(true);
+          }}
+          className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20 w-full md:w-auto"
+        >
            <Plus size={18} /> New Profile
         </button>
       </header>
@@ -115,19 +138,27 @@ export const Playlists: React.FC = () => {
             className="w-full bg-slate-950/50 border border-white/5 rounded-xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-600"
           />
         </div>
-        <div className="flex items-center gap-1 bg-slate-950/50 p-1 rounded-xl border border-white/5">
+        <div className="flex items-center gap-2">
            <button 
-            onClick={() => setViewMode('grid')}
-            className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-indigo-500/10 text-indigo-400 shadow-lg' : 'text-slate-500 hover:text-white'}`}
+             onClick={() => navigate('/groups')}
+             className="bg-slate-950/50 hover:bg-indigo-500/10 text-indigo-400 border border-white/5 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all"
            >
-              <LayoutGrid size={18} />
+              <FolderTree size={14} /> Group Manager
            </button>
-           <button 
-            onClick={() => setViewMode('list')}
-            className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-indigo-500/10 text-indigo-400 shadow-lg' : 'text-slate-500 hover:text-white'}`}
-           >
-              <List size={18} />
-           </button>
+           <div className="flex items-center gap-1 bg-slate-950/50 p-1 rounded-xl border border-white/5">
+              <button 
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-indigo-500/10 text-indigo-400 shadow-lg' : 'text-slate-500 hover:text-white'}`}
+              >
+                  <LayoutGrid size={18} />
+              </button>
+              <button 
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-indigo-500/10 text-indigo-400 shadow-lg' : 'text-slate-500 hover:text-white'}`}
+              >
+                  <List size={18} />
+              </button>
+           </div>
         </div>
       </div>
 
@@ -263,6 +294,13 @@ export const Playlists: React.FC = () => {
                               </motion.div>
                            )}
                        </div>
+                       
+                       <button 
+                          onClick={() => navigate(`/playlists/${item.id}`)}
+                          className="px-4 py-2 bg-slate-950/50 hover:bg-white/5 text-slate-400 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/5"
+                        >
+                           Manage
+                        </button>
 
                        <div className="relative">
                           <button 
@@ -393,9 +431,12 @@ export const Playlists: React.FC = () => {
                             </motion.div>
                          )}
                      </div>
-                     <button className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl transition-all active:scale-95">
-                        Manage
-                     </button>
+                      <button 
+                        onClick={() => navigate(`/playlists/${item.id}`)}
+                        className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl transition-all active:scale-95"
+                      >
+                         Manage
+                      </button>
                      <div className="relative">
                         <button 
                           onClick={() => setActiveMenu(activeMenu === item.id ? null : item.id)}
@@ -441,6 +482,108 @@ export const Playlists: React.FC = () => {
            <Layers className="text-slate-800 mx-auto mb-4" size={48} />
            <h3 className="text-xl font-bold text-slate-400">No profiles found</h3>
            <p className="text-slate-600 text-sm mt-1">Try refining your search or create a new registry profile.</p>
+        </div>
+      )}
+
+      {/* Create Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setIsCreateModalOpen(false)}
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" 
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-lg bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+          >
+             <div className="absolute top-0 right-0 p-8">
+                <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
+                   <Plus className="rotate-45" size={24} />
+                </button>
+             </div>
+
+             <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center">
+                   <Plus size={24} />
+                </div>
+                <div>
+                   <h3 className="text-xl font-black text-white tracking-tight">New Registry <span className="text-indigo-400">Profile</span></h3>
+                   <p className="text-slate-500 text-xs">Create a new curated namespace for distribution.</p>
+                </div>
+             </div>
+
+             <div className="space-y-6">
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Profile Name</label>
+                   <input 
+                      type="text"
+                      placeholder="e.g. Premium Sports Pack"
+                      value={newName}
+                      onChange={e => {
+                        setNewName(e.target.value);
+                        // Auto-gen slug if empty or matching previous auto-gen
+                        const suggestion = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                        setNewSlug(suggestion);
+                      }}
+                      className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium"
+                   />
+                </div>
+
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Slug (URL Path)</label>
+                   <div className="relative group">
+                      <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 font-medium text-sm">/</span>
+                      <input 
+                        type="text"
+                        placeholder="sports-pack"
+                        value={newSlug}
+                        onChange={e => setNewSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                        className="w-full bg-slate-950/50 border border-white/5 rounded-2xl pl-10 pr-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium text-sm"
+                      />
+                   </div>
+                </div>
+
+                <div className="pt-4 flex flex-col md:flex-row gap-3">
+                   <button 
+                      onClick={() => setIsCreateModalOpen(false)}
+                      className="flex-1 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                   >
+                      Cancel
+                   </button>
+                   <button 
+                      disabled={!newName || !newSlug || creating}
+                      onClick={async () => {
+                        setCreating(true);
+                        try {
+                          const res = await fetch('/api/playlists', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: newName, slug: newSlug })
+                          });
+                          const data = await res.json();
+                          if (data.status === 'ok') {
+                            setPlaylists([data.playlist, ...playlists]);
+                            setIsCreateModalOpen(false);
+                          } else {
+                            alert(data.message || 'Error creating playlist');
+                          }
+                        } catch (err) {
+                           alert('Network error');
+                        } finally {
+                          setCreating(false);
+                        }
+                      }}
+                      className="flex-[2] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2"
+                   >
+                      {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                      Create Profile
+                   </button>
+                </div>
+             </div>
+          </motion.div>
         </div>
       )}
     </div>

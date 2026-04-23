@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, AlertCircle, Zap } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, Link2, Globe, Activity, Wifi } from 'lucide-react';
 import { VideoEngine } from './VideoEngine';
 import type { VideoEngineRef } from './VideoEngine';
 import { PlayerHUD } from './PlayerHUD';
@@ -13,7 +13,7 @@ interface UnifiedPlayerProps {
 
 export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({ 
   channel, 
-  initialMode = 'SMART', 
+  initialMode = 'TRACKING', 
   layout = 'full'
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -30,16 +30,16 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
 
   useEffect(() => {
     if (channel) {
-      const mode = initialMode.toLowerCase();
+      const mode = activeMode.toLowerCase();
       const url = channel.play_links?.[mode] || channel.play_url;
       setCurrentUrl(url);
-      setActiveMode(initialMode);
       setStatus('loading');
       setError(null);
     }
-  }, [channel, initialMode]);
+  }, [channel, activeMode]);
 
   const handleSelectLink = (url: string, mode: string) => {
+    if (mode === activeMode) return;
     setCurrentUrl(url);
     setActiveMode(mode);
     setStatus('loading');
@@ -59,6 +59,14 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   const handleOpenVLC = () => {
     if (!channel) return;
     window.location.assign(`/api/channels/play/${channel.id}?token=${localStorage.getItem('api_token') || ''}&forced=vlc`);
+  };
+
+  const modeConfig: Record<string, { label: string, icon: any }> = {
+    'hls': { label: 'HLS', icon: <Wifi size={10} /> },
+    'ts': { label: 'TS', icon: <Activity size={10} /> },
+    'tracking': { label: 'Track', icon: <Link2 size={10} /> },
+    'original': { label: 'Origin', icon: <Globe size={10} /> },
+    'smart': { label: 'SMart', icon: <Zap size={10} /> }
   };
 
   return (
@@ -96,18 +104,13 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             <Loader2 className="animate-spin text-indigo-500 mb-4" size={layout === 'full' ? 48 : 32} />
             <span className="text-[10px] font-black text-white uppercase tracking-[0.5em] animate-pulse">Establishing Signal...</span>
             
-            {/* Quick Link Selector - Enabled during loading as requested */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-8 px-6">
-              {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
-                const labelMap: Record<string, string> = {
-                  'hls': 'HLS',
-                  'ts': 'TS',
-                  'tracking': 'Track',
-                  'original': 'Origin',
-                  'smart': 'SMart'
-                };
-                const label = labelMap[mode.toLowerCase()];
-                if (!label || mode.toLowerCase() === activeMode.toLowerCase()) return null;
+            {/* Quick Link Selector - Redesigned to show all modes */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-8 px-6 max-w-xl">
+              {['tracking', 'smart', 'hls', 'ts', 'original'].map((mode) => {
+                const url = channel.play_links?.[mode];
+                if (!url) return null;
+                const config = modeConfig[mode];
+                const isActive = mode.toLowerCase() === activeMode.toLowerCase();
 
                 return (
                   <button 
@@ -116,10 +119,14 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
                       e.stopPropagation();
                       handleSelectLink(url as string, mode);
                     }}
-                    className="px-3 py-2 bg-white/10 border border-white/10 text-white/60 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white hover:border-indigo-500 transition-all flex items-center gap-2"
+                    className={`px-4 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 border ${
+                      isActive 
+                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-600/30 scale-110 z-10' 
+                        : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white'
+                    }`}
                   >
-                    <Zap size={10} />
-                    {label}
+                    {config.icon}
+                    {config.label}
                   </button>
                 );
               })}
@@ -146,25 +153,24 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
                 Retry
               </button>
 
-              {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
-                const labelMap: Record<string, string> = {
-                  'hls': 'HLS',
-                  'ts': 'TS',
-                  'tracking': 'Track',
-                  'original': 'Origin',
-                  'smart': 'SMart'
-                };
-                const label = labelMap[mode.toLowerCase()];
-                if (!label || mode.toLowerCase() === activeMode.toLowerCase()) return null;
+              {['tracking', 'smart', 'hls', 'ts', 'original'].map((mode) => {
+                const url = channel.play_links?.[mode];
+                if (!url) return null;
+                const config = modeConfig[mode];
+                const isActive = mode.toLowerCase() === activeMode.toLowerCase();
 
                 return (
                   <button 
                     key={mode}
                     onClick={() => handleSelectLink(url as string, mode)}
-                    className="px-4 md:px-6 py-2 md:py-3 bg-rose-500/20 border border-rose-500/40 text-rose-300 rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all flex items-center gap-2"
+                    className={`px-4 md:px-6 py-2 md:py-3 rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 border ${
+                      isActive
+                        ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-600/30'
+                        : 'bg-rose-500/20 border-rose-500/40 text-rose-300 hover:bg-rose-500/40 hover:text-white'
+                    }`}
                   >
-                    <Zap size={10} />
-                    {label}
+                    {config.icon}
+                    {config.label}
                   </button>
                 );
               })}
@@ -176,7 +182,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
       <PlayerHUD 
         channel={{
           ...channel,
-          group: channel.group_name || 'General',
+          group: channel.group || channel.group_name || 'Ungrouped',
           resolution: channel.resolution || '1080P'
         }}
         isPlaying={isPlaying}

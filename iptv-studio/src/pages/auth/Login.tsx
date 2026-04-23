@@ -106,8 +106,8 @@ export const LoginPage: React.FC<LoginProps> = ({ onLoginSuccess, forceLocal }) 
                 <Shield className="text-white" size={32} />
               </div>
             )}
-            <h2 className="text-4xl font-black text-white tracking-tighter mb-3">IPTV<span className="text-blue-500">Studio</span></h2>
-            <p className="text-slate-400 text-sm font-medium">Verify your credentials to manage the cluster</p>
+            <h2 className="text-7xl font-black tracking-tighter uppercase bg-[linear-gradient(to_right,rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.2)_1px,transparent_1px)] bg-[size:4px_4px] [background-color:#4f46e5] bg-clip-text text-transparent mb-6 drop-shadow-2xl">IPTV</h2>
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em]">Integrated Management Environment</p>
           </header>
 
           <form onSubmit={handleSubmit} className="space-y-6 relative z-10">

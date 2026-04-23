@@ -10,6 +10,35 @@ playlists_bp = Blueprint('playlists', __name__)
 
 # API & Manifest Core Only - HTML Routes Purged
 
+@playlists_bp.route('/', methods=['POST'])
+@login_required
+def create_playlist():
+    data = request.json or {}
+    name = data.get('name')
+    slug = data.get('slug')
+    
+    if not name or not slug:
+        return jsonify({'status': 'error', 'message': 'Name and Slug are required'}), 400
+        
+    # Check if slug exists FOR THIS USER
+    if PlaylistProfile.query.filter_by(slug=slug, owner_id=current_user.id).first():
+        return jsonify({'status': 'error', 'message': 'Slug already exists for your account'}), 400
+        
+    profile = PlaylistService.create_profile(name, slug)
+    profile.owner_id = current_user.id
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok', 
+        'playlist': {
+            'id': profile.id,
+            'name': profile.name,
+            'slug': profile.slug,
+            'security_token': profile.security_token,
+            'created_at': profile.created_at.strftime('%Y-%m-%d')
+        }
+    })
+
 @playlists_bp.route('/', methods=['GET'])
 @login_required
 def list_playlists():
@@ -26,7 +55,11 @@ def list_playlists():
 
     profiles = query.all()
     res = []
+    from app.modules.auth.models import User
     for p in profiles:
+        owner = User.query.get(p.owner_id) if p.owner_id else None
+        owner_name = owner.username if owner else 'system'
+        
         count = 0
         if p.is_system:
             query = Channel.query
@@ -41,6 +74,9 @@ def list_playlists():
         else:
             count = len(p.entries)
             
+        owner = User.query.get(p.owner_id) if p.owner_id else None
+        owner_name = owner.username if owner else 'system'
+        
         res.append({
             'id': p.id,
             'name': p.name,
@@ -48,47 +84,70 @@ def list_playlists():
             'security_token': p.security_token,
             'is_system': p.is_system,
             'channel_count': count,
-            'created_at': p.created_at.strftime('%Y-%m-%d')
+            'created_at': p.created_at.strftime('%Y-%m-%d'),
+            'owner_username': owner_name
         })
     return jsonify(res)
 
 @playlists_bp.route('/groups/<int:playlist_id>', methods=['GET'])
 @login_required
 def get_groups(playlist_id):
-    """Returns a list of unique group names (categories) for a specific playlist."""
-    is_system_playlist = False
+    """Returns a list of groups for a specific playlist with IDs."""
+    is_system = False
+    p = None
     if playlist_id > 0:
-        p = PlaylistProfile.query.get(playlist_id)
-        if p and p.is_system:
-            is_system_playlist = True
+        p = PlaylistProfile.query.get_or_404(playlist_id)
+        if p.is_system: is_system = True
+    elif playlist_id == 0 or str(playlist_id) == 'system_all':
+        is_system = True
 
-    if playlist_id == 0 or is_system_playlist:
-        # System-wide groups
-        p = PlaylistProfile.query.get(playlist_id) if playlist_id > 0 else None
-        slug = p.slug if p else 'alliptv'
-        
+    if is_system:
+        # For system playlists, groups come from unique channel group names
         query = Channel.query
-        if slug == 'protected':
-            query = query.filter_by(is_original=True)
+        if not p: # system_all
+            query = query.filter_by(owner_id=current_user.id)
+        elif p.owner_id:
+            query = query.filter_by(owner_id=p.owner_id)
+            if "protected" in p.slug: query = query.filter_by(is_original=True)
+        elif p.slug == 'public':
+            query = query.filter_by(is_public=True)
             
-        # ISOLATION
-        if slug in ['alliptv', 'protected']:
-            if current_user.role != 'admin':
-                query = query.filter_by(owner_id=current_user.id)
-        elif slug == 'public':
-            if current_user.role == 'free':
-                # Access denied for free users on public system playlist
-                groups = []
-            else:
-                query = query.filter_by(is_public=True)
-        
-        if 'groups' not in locals():
-            groups = [g[0] for g in query.with_entities(Channel.group_name).distinct().filter(Channel.group_name != None).all()]
+        group_names = db.session.query(Channel.group_name).filter(query.whereclause).distinct().all()
+        groups = [{'id': i+1, 'name': g[0] or 'Ungrouped'} for i, g in enumerate(group_names)]
     else:
-        # Playlist-specific groups
-        groups = [g[0] for g in db.session.query(Channel.group_name).join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id).distinct().filter(Channel.group_name != None).all()]
+        # For custom playlists, use the PlaylistGroup table
+        groups = [{'id': g.id, 'name': g.name} for g in p.groups]
+        
+    return jsonify({'groups': groups})
+
+@playlists_bp.route('/groups', methods=['POST'])
+@login_required
+def create_playlist_group():
+    data = request.json or {}
+    playlist_id = data.get('playlist_id')
+    name = data.get('name')
     
-    return jsonify({'categories': sorted(groups)})
+    if not playlist_id or not name:
+        return jsonify({'status': 'error', 'message': 'Playlist ID and name required'}), 400
+        
+    p = PlaylistProfile.query.get_or_404(playlist_id)
+    if current_user.role == 'free' and p.owner_id != current_user.id:
+        abort(403)
+        
+    group = PlaylistService.create_group(playlist_id, name)
+    return jsonify({'status': 'ok', 'group_id': group.id})
+
+@playlists_bp.route('/entries/<int:entry_id>', methods=['DELETE'])
+@login_required
+def delete_entry(entry_id):
+    entry = PlaylistEntry.query.get_or_404(entry_id)
+    # RBAC
+    if current_user.role == 'free' and entry.playlist.owner_id != current_user.id:
+        abort(403)
+        
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
 @playlists_bp.route('/entries/<int:playlist_id>', methods=['GET'])
 @login_required
@@ -106,10 +165,8 @@ def get_entries(playlist_id):
             is_system_playlist = True
 
     if playlist_id == 0 or str(playlist_id) == 'system_all' or is_system_playlist:
-        p = PlaylistProfile.query.get(playlist_id) if playlist_id > 0 else None
-        
+        p = PlaylistProfile.query.get(playlist_id) if (playlist_id > 0 and playlist_id != 'system_all') else None
         query = Channel.query
-        
         if not p: # system_all fallback
             query = query.filter_by(owner_id=current_user.id)
         elif p.owner_id:
@@ -120,46 +177,57 @@ def get_entries(playlist_id):
             if current_user.role == 'free':
                 abort(403)
             query = query.filter_by(is_public=True)
+            
+        if hide_die: query = query.filter(Channel.status != 'die')
+        if search: query = query.filter(Channel.name.ilike(f'%{search}%'))
+        if group: query = query.filter(Channel.group_name == group)
+        
+        pagination = query.order_by(Channel.name.asc()).paginate(page=page, per_page=per_page)
+        items = [(ch, None) for ch in pagination.items]
     else:
         # Check accessibility for non-system playlists
         p = PlaylistProfile.query.get_or_404(playlist_id)
         if current_user.role == 'free' and p.owner_id != current_user.id:
             abort(403)
             
-        query = Channel.query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
+        query = db.session.query(Channel, PlaylistEntry).join(PlaylistEntry, PlaylistEntry.channel_id == Channel.id)
+        query = query.filter(PlaylistEntry.playlist_id == playlist_id)
 
-    if hide_die:
-        # User requested to exclude offline/die channels
-        query = query.filter(Channel.status != 'die')
+        if hide_die: query = query.filter(Channel.status != 'die')
+        if search: query = query.filter(Channel.name.ilike(f'%{search}%'))
+        if group: query = query.filter(Channel.group_name == group)
 
-    if search:
-        query = query.filter(Channel.name.ilike(f'%{search}%'))
-    if group:
-        query = query.filter(Channel.group_name == group)
-
-    pagination = query.order_by(Channel.name).paginate(page=page, per_page=per_page)
+        pagination = query.order_by(PlaylistEntry.order_index.asc()).paginate(page=page, per_page=per_page)
+        items = pagination.items
     
     # Safety check for token
     try:
+        from app.modules.auth.models import User
         token = current_user.api_token
     except Exception:
         token = 'guest_token'
         
     channels = []
-    for ch in pagination.items:
+    for ch, entry in items:
         try:
             # Check if this is an FLV stream
             is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
-            
-            # Default smart link logic: Use tracking for FLV, else standard play
             smart_url = url_for('channels.track_redirect', channel_id=ch.id, token=token, _external=True) if is_flv \
                         else url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True)
             
+            # Group name logic: Playlist-specific group name or channel default
+            display_group = ch.group_name
+            entry_id = ch.id
+            if entry:
+                display_group = entry.group.name if entry.group else entry.custom_group or ch.group_name
+                entry_id = entry.id
+            
             ch_data = {
-                'id': ch.id,
+                'id': entry_id,
+                'channel_id': ch.id,
                 'name': ch.name,
                 'logo_url': ch.logo_url,
-                'group': ch.group_name,
+                'group': display_group,
                 'status': ch.status,
                 'quality': ch.quality,
                 'resolution': ch.resolution,
@@ -175,8 +243,7 @@ def get_entries(playlist_id):
             }
             channels.append(ch_data)
         except Exception as e:
-            # Skip invalid entries instead of crashing the whole list
-            current_app.logger.error(f"Error processing channel {ch.id}: {str(e)}")
+            current_app.logger.error(f"Error processing item: {str(e)}")
             continue
 
     return jsonify({
@@ -196,30 +263,65 @@ def reorder(playlist_id):
 def update_entry_group(entry_id):
     data = request.json or {}
     group_id = data.get('group_id')
-    if group_id == "": group_id = None
+    if group_id == "" or group_id == 0: group_id = None
     PlaylistService.update_entry_group(entry_id, group_id)
     return jsonify({'status': 'ok'})
 
 # Dynamic Manifest Endpoints
-@playlists_bp.route('/publish/<slug>.m3u8')
-def publish_m3u8(slug):
-    token = request.args.get('token')
-    hide_die = request.args.get('hide_die', 'false').lower() == 'true'
-    mode = request.args.get('mode') # Force link mode (smart, direct, tracking)
-    profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
+@playlists_bp.route('/p/<username>/<slug>', defaults={'mode': 'smart', 'status': 'live'})
+@playlists_bp.route('/p/<username>/<slug>/<mode>', defaults={'status': 'live'})
+@playlists_bp.route('/p/<username>/<slug>/<mode>/<status>')
+def publish_friendly(username, slug, mode, status):
+    from app.modules.auth.models import User
+    user = User.query.filter_by(username=username).first_or_404()
+    profile = PlaylistProfile.query.filter_by(slug=slug, owner_id=user.id).first_or_404()
     
-    if profile.security_token and token != profile.security_token:
-        # Check if token is user's api_token (for semantic compatibility)
-        from app.modules.auth.models import User
-        u = User.query.filter_by(api_token=token).first()
-        if not u or (profile.owner_id and profile.owner_id != u.id and u.role != 'admin'):
-            abort(403)
-        
-    xml_url = url_for('playlists.publish_xml', slug=slug, token=token, _external=True)
+    # Parameters from path
+    hide_die = (status == 'live')
+    # mode is already 'mode'
+    
+    # Token is now optional (username + secret slug acts as the key)
+    token = request.args.get('token') or profile.security_token
+    
+    xml_url = url_for('playlists.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
     m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
     response = Response(m3u_content, mimetype='application/x-mpegurl')
     response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
     return response
+
+@playlists_bp.route('/publish/<username>/<slug>.<ext>')
+def publish_personalized(username, slug, ext):
+    from app.modules.auth.models import User
+    user = User.query.filter_by(username=username).first_or_404()
+    profile = PlaylistProfile.query.filter_by(slug=slug, owner_id=user.id).first_or_404()
+    
+    token = request.args.get('token')
+    hide_die = request.args.get('hide_die', 'false').lower() == 'true'
+    mode = request.args.get('mode')
+    
+    if profile.security_token and token != profile.security_token:
+        # Check if token is user's api_token
+        u = User.query.filter_by(api_token=token).first()
+        if not u or (profile.owner_id and profile.owner_id != u.id and u.role != 'admin'):
+            abort(403)
+            
+    if ext == 'xml':
+        return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
+    else:
+        xml_url = url_for('playlists.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
+        m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
+        response = Response(m3u_content, mimetype='application/x-mpegurl')
+        response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
+        return response
+
+@playlists_bp.route('/publish/<slug>.m3u8')
+def publish_m3u8_legacy(slug):
+    # Keep legacy for some time or redirect
+    profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
+    from app.modules.auth.models import User
+    owner = User.query.get(profile.owner_id) if profile.owner_id else None
+    username = owner.username if owner else 'system'
+    return redirect(url_for('playlists.publish_personalized', username=username, slug=slug, ext='m3u8', **request.args))
 
 @playlists_bp.route('/publish/user/<username>/<ptype>.<ext>')
 def publish_user_special(username, ptype, ext):

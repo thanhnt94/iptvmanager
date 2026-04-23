@@ -47,6 +47,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
     selected_playlists: [] as number[]
   });
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
+  const [epgHints, setEpgHints] = useState<string[]>([]);
 
   useEffect(() => {
     // Load available playlists
@@ -61,6 +62,12 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
       .then(data => {
         if (data.groups) setExistingGroups(data.groups);
       })
+      .catch(err => console.error(err));
+
+    // Load EPG Hints
+    fetch('/api/epg/hints')
+      .then(res => res.json())
+      .then(data => setEpgHints(Array.isArray(data) ? data : []))
       .catch(err => console.error(err));
 
     // If editing, load channel data
@@ -259,18 +266,22 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                     </div>
                  </div>
 
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">EPG Identifier</label>
-                    <div className="relative">
-                       <input 
-                        type="text" 
-                        value={formData.epg_id}
-                        onChange={e => setFormData({...formData, epg_id: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                        placeholder="discovery.us"
-                       />
-                    </div>
-                 </div>
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] ml-1">EPG Identifier</label>
+                     <div className="relative">
+                        <input 
+                         type="text" 
+                         value={formData.epg_id}
+                         onChange={e => setFormData({...formData, epg_id: e.target.value})}
+                         list="epg-hints"
+                         className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                         placeholder="discovery.us"
+                        />
+                        <datalist id="epg-hints">
+                           {epgHints.map(hint => <option key={hint} value={hint} />)}
+                        </datalist>
+                     </div>
+                  </div>
               </div>
             </div>
 

@@ -49,6 +49,7 @@ class EPGSource(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     url = db.Column(db.String(512), nullable=False)
+    priority = db.Column(db.Integer, default=0) # Higher = More preferred
     last_sync_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -64,6 +65,8 @@ class EPGData(db.Model):
     desc = db.Column(db.Text)
     start = db.Column(db.DateTime, nullable=False, index=True)
     stop = db.Column(db.DateTime, nullable=False, index=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    source_id = db.Column(db.Integer, db.ForeignKey('epg_sources.id', ondelete='CASCADE'))
     
     def __repr__(self):
         return f'<EPGData {self.title} @ {self.start}>'

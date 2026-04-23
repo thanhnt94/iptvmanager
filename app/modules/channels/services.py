@@ -786,10 +786,10 @@ class EPGService:
         return EPGSource.query.all()
 
     @staticmethod
-    def add_source(name, url):
+    def add_source(name, url, priority=0):
         from app.modules.channels.models import EPGSource
         from app.core.database import db
-        source = EPGSource(name=name, url=url)
+        source = EPGSource(name=name, url=url, priority=priority)
         db.session.add(source)
         db.session.commit()
         return source
@@ -828,6 +828,126 @@ class EPGService:
             # For large files, consider iterparse, but for now this is simpler
             root = ET.fromstring(resp.content)
             
+            # 1. Clear old data for these epg_ids to avoid duplicates (optional, or just update)
+            # For simplicity, we'll just add new ones and maybe prune later
+            
+            count = 0
+            for prog in root.findall('programme'):
+                epg_id = prog.get('channel')
+                start_str = prog.get('start')
+                stop_str = prog.get('stop')
+                title_node = prog.find('title')
+                desc_node = prog.find('desc')
+                
+                if not epg_id or not start_str or not stop_str or title_node is None:
+                    continue
+                
+                # Parse times: 20240320120000 +0000
+                try:
+                    start_dt = datetime.strptime(start_str.split(' ')[0], '%Y%m%d%H%M%S')
+                    stop_dt = datetime.strptime(stop_str.split(' ')[0], '%Y%m%d%H%M%S')
+                    
+                    # Check for existing to avoid exact duplicates
+                    existing = EPGData.query.filter_by(
+                        epg_id=epg_id, start=start_dt, stop=stop_dt
+                    ).first()
+                    
+                    if not existing:
+                        new_prog = EPGData(
+                            epg_id=epg_id,
+                            title=title_node.text,
+                            desc=desc_node.text if desc_node is not None else None,
+                            start=start_dt,
+                            stop=stop_dt,
+                            source_id=source.id
+                        )
+                        db.session.add(new_prog)
+                        count += 1
+                except Exception as ex:
+                    logger.warning(f"Failed to parse EPG program: {ex}")
+                    continue
+            
+            source.last_sync_at = datetime.utcnow()
+            db.session.commit()
+            return {'success': True, 'added': count, 'last_sync': source.last_sync_at}
+        except Exception as e:
+            logger.error(f"EPG Sync error: {e}")
+            return {'success': False, 'error': str(e)}
+
+    @staticmethod
+    def add_manual_program(epg_id, title, start_dt, stop_dt, desc=None, owner_id=None):
+        from app.modules.channels.models import EPGData
+        from app.core.database import db
+        prog = EPGData(
+            epg_id=epg_id,
+            title=title,
+            desc=desc,
+            start=start_dt,
+            stop=stop_dt,
+            owner_id=owner_id
+        )
+        db.session.add(prog)
+        db.session.commit()
+        return prog
+
+    @staticmethod
+    def import_xmltv(xml_content, owner_id=None):
+        from app.modules.channels.models import EPGData
+        from app.core.database import db
+        from datetime import datetime
+        import xml.etree.ElementTree as ET
+        
+        try:
+            root = ET.fromstring(xml_content)
+            count = 0
+            for prog in root.findall('programme'):
+                epg_id = prog.get('channel')
+                start_str = prog.get('start')
+                stop_str = prog.get('stop')
+                title_node = prog.find('title')
+                desc_node = prog.find('desc')
+                
+                if not epg_id or not start_str or not stop_str or title_node is None:
+                    continue
+                
+                try:
+                    start_dt = datetime.strptime(start_str.split(' ')[0], '%Y%m%d%H%M%S')
+                    stop_dt = datetime.strptime(stop_str.split(' ')[0], '%Y%m%d%H%M%S')
+                    
+                    new_prog = EPGData(
+                        epg_id=epg_id,
+                        title=title_node.text,
+                        desc=desc_node.text if desc_node is not None else None,
+                        start=start_dt,
+                        stop=stop_dt,
+                        owner_id=owner_id
+                    )
+                    db.session.add(new_prog)
+                    count += 1
+                except: continue
+                
+            db.session.commit()
+            return {'success': True, 'added': count}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    @staticmethod
+    def import_xmltv_from_url(url, owner_id=None):
+        import requests
+        try:
+            # Add browser headers to bypass some basic protections
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Referer': url.rsplit('/', 1)[0] + '/'
+            }
+            # verify=False helps with TLS alerts/internal errors on some misconfigured hosts
+            resp = requests.get(url, timeout=60, headers=headers, verify=False)
+            if resp.status_code != 200:
+                return {'success': False, 'error': f'HTTP {resp.status_code}'}
+            return EPGService.import_xmltv(resp.content, owner_id)
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
             # Optimization: collect all channel IDs in this file
             file_channel_ids = set()
             for ch in root.findall('channel'):

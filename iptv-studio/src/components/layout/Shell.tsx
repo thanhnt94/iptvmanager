@@ -13,7 +13,8 @@ import {
   CloudDownload,
   Menu,
   X,
-  Search
+  Search,
+  FolderTree
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -49,6 +50,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
 
   if (user.role === 'admin') {
     menuItems.push(
+      { icon: <FolderTree size={20} />, label: 'Group Manager', path: '/groups' },
       { icon: <ShieldCheck size={20} />, label: 'Admin Portal', path: '/admin' }
     );
   }
@@ -61,7 +63,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
             <Radio className="text-white" size={18} />
           </div>
-          <h1 className="text-lg font-black text-white tracking-tighter uppercase italic">IPTV<span className="text-indigo-500">Manager</span></h1>
+          <h1 className="text-3xl font-black tracking-tighter uppercase bg-[linear-gradient(to_right,rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.2)_1px,transparent_1px)] bg-[size:3px_3px] [background-color:#6366f1] bg-clip-text text-transparent drop-shadow-md">IPTV</h1>
         </div>
         <button 
           onClick={() => setIsSidebarOpen(true)}
@@ -90,8 +92,8 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
                <Radio className="text-white" size={24} />
             </div>
             <div>
-               <h1 className="text-xl font-black text-white tracking-tighter uppercase italic leading-none">IPTV<span className="text-indigo-500">Manager</span></h1>
-               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 mt-1">Advanced Control</p>
+               <h1 className="text-4xl font-black tracking-tighter uppercase bg-[linear-gradient(to_right,rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.2)_1px,transparent_1px)] bg-[size:3px_3px] [background-color:#4f46e5] bg-clip-text text-transparent leading-none">IPTV</h1>
+               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-500/40 mt-1.5 ml-1">Manage</p>
             </div>
           </div>
            <button 

@@ -210,7 +210,9 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                           </h1>
                           <div className="flex items-center gap-1">
                              <div className="shrink-0 bg-blue-600 rounded shadow-lg px-2 h-[18px] lg:px-[clamp(6px,1cqw,10px)] lg:h-[clamp(14px,1.5cqw,18px)] flex items-center justify-center">
-                                 <span className="text-white font-black uppercase tracking-widest text-[8px] lg:text-[clamp(6px,0.8cqw,9px)] leading-none -mt-[0.5px]">XEMTV</span>
+                                 <span className="text-white font-black uppercase tracking-widest text-[8px] lg:text-[clamp(6px,0.8cqw,9px)] leading-none -mt-[0.5px]">
+                                    {channel.group?.toUpperCase() || 'UNG'}
+                                 </span>
                              </div>
                           </div>
                        </div>

@@ -1,0 +1,324 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { motion, Reorder } from 'framer-motion';
+import { 
+  ArrowLeft, 
+  GripVertical, 
+  FolderEdit, 
+  Trash2, 
+  Save, 
+  Loader2, 
+  Plus,
+  Tv,
+  Layout
+} from 'lucide-react';
+
+interface PlaylistInfo {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+interface Entry {
+  id: number;
+  channel_id: number;
+  name: string;
+  group_name: string;
+  logo_url: string;
+  status: string;
+}
+
+export const PlaylistEditor: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [playlist, setPlaylist] = useState<PlaylistInfo | null>(null);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [groups, setGroups] = useState<{id: number, name: string}[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  
+  // Group Edit State
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+
+  useEffect(() => {
+    if (id) {
+      fetchPlaylistData();
+    }
+  }, [id]);
+
+  const fetchPlaylistData = async () => {
+    setLoading(true);
+    try {
+      const [pRes, eRes, gRes] = await Promise.all([
+        fetch(`/api/playlists`).then(res => res.json()),
+        fetch(`/api/playlists/entries/${id}?limit=500`).then(res => res.json()),
+        fetch(`/api/playlists/groups/${id}`).then(res => res.json())
+      ]);
+      
+      const pInfo = pRes.find((p: any) => p.id.toString() === id);
+      setPlaylist(pInfo);
+      
+      const mapped = eRes.channels.map((ch: any) => ({
+        id: ch.id, 
+        channel_id: ch.channel_id,
+        name: ch.name,
+        group_name: ch.group || 'Ungrouped',
+        logo_url: ch.logo_url,
+        status: ch.status
+      }));
+      setEntries(mapped);
+      if (gRes && gRes.groups) {
+        setGroups(gRes.groups);
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveOrder = async () => {
+    setSaving(true);
+    try {
+      const entryIds = entries.map(e => e.id);
+      await fetch(`/api/playlists/reorder/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry_ids: entryIds })
+      });
+      alert("Order saved successfully!");
+    } catch (err) {
+      alert("Error saving order");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateGroup = async (groupId: number | null, customName?: string) => {
+    if (!editingEntry) return;
+    
+    setProcessing(true);
+    try {
+      let finalGroupId = groupId;
+      
+      // If user wants a new group, we create it
+      if (!finalGroupId && customName) {
+        const res = await fetch(`/api/playlists/groups`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playlist_id: id, name: customName })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') finalGroupId = data.group_id;
+      }
+
+      await fetch(`/api/playlists/update-entry-group/${editingEntry.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_id: finalGroupId })
+      });
+      
+      fetchPlaylistData(); // Refresh UI
+      setIsGroupModalOpen(false);
+      setEditingEntry(null);
+    } catch (err) {
+       alert("Error updating group");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeleteEntry = async (entryId: number) => {
+    if (!confirm("Remove this channel from playlist?")) return;
+    try {
+      await fetch(`/api/playlists/entries/${entryId}`, { method: 'DELETE' });
+      setEntries(prev => prev.filter(e => e.id !== entryId));
+    } catch (err) {
+      alert("Error removing entry");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center p-20">
+        <Loader2 className="animate-spin text-indigo-500" size={40} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+           <button 
+            onClick={() => navigate('/playlists')}
+            className="w-12 h-12 rounded-2xl bg-slate-900 border border-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+           >
+              <ArrowLeft size={20} />
+           </button>
+           <div>
+              <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-white uppercase flex items-center gap-3">
+                Edit <span className="text-indigo-500">{playlist?.name}</span>
+              </h2>
+              <p className="text-slate-400 text-xs md:text-sm mt-1">/{playlist?.slug} • {entries.length} items in sequence</p>
+           </div>
+        </div>
+        <div className="flex items-center gap-3">
+           <button 
+             onClick={handleSaveOrder}
+             disabled={saving}
+             className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-8 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+           >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={18} />}
+              Save Sequence
+           </button>
+        </div>
+      </header>
+
+      {/* Editor Surface */}
+      <div className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6 backdrop-blur-xl">
+         <div className="flex items-center justify-between px-6 mb-6">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Resource Sequence</span>
+            <div className="flex items-center gap-4">
+               <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Interactive Draggable</span>
+               </div>
+            </div>
+         </div>
+
+         <Reorder.Group 
+            axis="y" 
+            values={entries} 
+            onReorder={setEntries}
+            className="space-y-2"
+         >
+            {entries.map((item) => (
+               <Reorder.Item 
+                 key={item.id} 
+                 value={item}
+                 className="group"
+               >
+                  <div className="bg-slate-950/40 border border-white/5 hover:border-indigo-500/30 rounded-2xl p-4 flex items-center justify-between transition-all cursor-grab active:cursor-grabbing">
+                     <div className="flex items-center gap-4">
+                        <div className="text-slate-600 group-hover:text-indigo-500 transition-colors">
+                           <GripVertical size={20} />
+                        </div>
+                        <div className="w-12 h-12 bg-slate-900 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center border border-white/5">
+                           {item.logo_url ? (
+                              <img src={item.logo_url} alt="" className="w-full h-full object-contain p-2" />
+                           ) : (
+                              <Tv className="text-slate-700" size={24} />
+                           )}
+                        </div>
+                        <div>
+                           <h4 className="text-white font-black text-sm tracking-tight">{item.name}</h4>
+                           <div className="flex items-center gap-3 mt-1">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                 <Layout size={10} className="text-indigo-500/50" />
+                                 {item.group_name}
+                              </span>
+                              <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'live' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="flex items-center gap-2">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingEntry(item); setIsGroupModalOpen(true); }}
+                          className="p-2.5 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                        >
+                           <FolderEdit size={16} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteEntry(item.id); }}
+                          className="p-2.5 bg-slate-900 hover:bg-rose-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                        >
+                           <Trash2 size={16} />
+                        </button>
+                     </div>
+                  </div>
+               </Reorder.Item>
+            ))}
+         </Reorder.Group>
+
+         {entries.length === 0 && (
+            <div className="p-20 text-center">
+               <Tv className="text-slate-800 mx-auto mb-4" size={48} />
+               <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest">Empty Registry</h3>
+               <p className="text-slate-600 text-sm mt-1">Add channels to this profile from the Channels page.</p>
+            </div>
+         )}
+      </div>
+
+      {/* Group Assignment Modal */}
+      {isGroupModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsGroupModalOpen(false)} />
+           <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-[2rem] p-8 shadow-2xl"
+           >
+              <h3 className="text-xl font-black text-white mb-2 uppercase">Custom Grouping</h3>
+              <p className="text-slate-500 text-xs mb-8">Override group assignment for <span className="text-white font-bold">{editingEntry?.name}</span></p>
+              
+              <div className="space-y-6">
+                 <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Existing Groups</label>
+                    <div className="grid grid-cols-2 gap-2">
+                       <button 
+                         onClick={() => handleUpdateGroup(null)}
+                         className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${!editingEntry?.group_name || editingEntry.group_name === 'Ungrouped' ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
+                       >
+                          None / Main
+                       </button>
+                       {groups.map(g => (
+                          <button 
+                             key={g.id}
+                             onClick={() => handleUpdateGroup(g.id)}
+                             className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${editingEntry?.group_name === g.name ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
+                          >
+                             {g.name}
+                          </button>
+                       ))}
+                    </div>
+                 </div>
+
+                 <div className="relative py-4">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+                    <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest"><span className="bg-slate-900 px-4 text-slate-600">Or New Group</span></div>
+                 </div>
+
+                 <div className="space-y-2">
+                    <input 
+                       type="text" 
+                       placeholder="Enter new group name..."
+                       value={newGroupName}
+                       onChange={e => setNewGroupName(e.target.value)}
+                       className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                    />
+                    <button 
+                      disabled={!newGroupName || processing}
+                      onClick={() => handleUpdateGroup(null, newGroupName)}
+                      className="w-full bg-white/5 hover:bg-white/10 text-indigo-400 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                    >
+                       {processing ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                       Create & Assign
+                    </button>
+                 </div>
+              </div>
+
+              <div className="mt-8 flex justify-end">
+                 <button onClick={() => setIsGroupModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Close</button>
+              </div>
+           </motion.div>
+        </div>
+      )}
+    </div>
+  );
+};
+;
