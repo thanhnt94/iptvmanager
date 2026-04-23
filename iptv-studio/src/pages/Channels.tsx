@@ -24,7 +24,8 @@ import {
   Copy,
   Check,
   Globe,
-  Lock as LockIcon
+  Lock as LockIcon,
+  CalendarCheck
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
@@ -43,6 +44,7 @@ interface Channel {
   status: 'live' | 'die' | 'unknown';
   stream_format: string;
   stream_type: string;
+  epg_id?: string | null;
   quality: string;
   resolution: string;
   latency: number;
@@ -480,7 +482,8 @@ export const Channels: React.FC = () => {
                         <div className="min-w-0 flex-1">
                            <div className="flex items-center gap-2">
                              <h4 className="text-sm font-black text-white truncate leading-tight">{ch.name}</h4>
-                             <div className="flex gap-1 shrink-0">
+                             <div className="flex gap-1 shrink-0 items-center">
+                                {ch.epg_id && <CalendarCheck className="text-indigo-400" size={10} />}
                                 {ch.is_original && <Shield className="text-indigo-400" size={10} />}
                                 {ch.is_public ? <Globe className="text-emerald-400" size={10} /> : <LockIcon className="text-slate-600" size={10} />}
                              </div>
@@ -558,6 +561,7 @@ export const Channels: React.FC = () => {
                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h4 className="font-black text-white truncate">{ch.name}</h4>
+                      {ch.epg_id && <CalendarCheck className="text-indigo-400 shrink-0" size={14} />}
                       {ch.is_original && <Shield className="text-indigo-400 shrink-0" size={14} />}
                     </div>
                     <div className="flex items-center gap-2 mt-1">

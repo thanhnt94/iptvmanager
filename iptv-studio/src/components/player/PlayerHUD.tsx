@@ -6,7 +6,6 @@ import {
   Volume2, 
   VolumeX, 
   Maximize, 
-  ExternalLink, 
   Activity,
   Zap,
   ChevronUp,
@@ -14,12 +13,14 @@ import {
   Share2,
   Copy,
   Check,
-  X
+  X,
+  CalendarCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLogoUrl } from '../../utils';
 
 interface PlayerHUDProps {
+  layout?: 'full' | 'compact';
   channel: {
     id: number;
     name: string;
@@ -27,6 +28,7 @@ interface PlayerHUDProps {
     group: string;
     resolution: string;
     stream_format: string;
+    epg_id?: string | null;
     play_links?: {
       smart: string;
       direct: string;
@@ -42,7 +44,6 @@ interface PlayerHUDProps {
   onToggleMute: () => void;
   onVolumeChange: (v: number) => void;
   onToggleFullscreen: () => void;
-  onOpenVLC: () => void;
   onSelectLink: (url: string, mode: string) => void;
   activeMode: string;
   stats: { fps: number; audio: string; resolution: string };
@@ -57,10 +58,10 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   onToggleMute,
   onVolumeChange,
   onToggleFullscreen,
-  onOpenVLC,
   onSelectLink,
   activeMode,
-  stats
+  stats,
+  layout = 'full'
 }) => {
   const [showHUD, setShowHUD] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -105,6 +106,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          data-layout={layout}
           className="absolute inset-0 pointer-events-none flex flex-col justify-between"
         >
           {/* Top Bar - Pro OSD & Action Central */}
@@ -134,28 +136,6 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                 </div>
 
                 <div className="flex items-center gap-[clamp(8px,1.5cqw,24px)]">
-                   {/* Mobile Action Controls - Essential & Pro */}
-                   <div className="lg:hidden flex items-center gap-1 mr-1">
-                       <button 
-                         onClick={() => setShowSettings(!showSettings)}
-                         className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${showSettings ? 'bg-indigo-600 text-white' : 'bg-white/10 text-white/40 border border-white/5'}`}
-                       >
-                          <Zap size={16} className={showSettings ? 'animate-pulse' : ''} />
-                       </button>
-                       <button className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all">
-                          <Heart size={16} />
-                       </button>
-                       <button 
-                        onClick={() => setShowShare(true)}
-                        className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all active:scale-90"
-                       >
-                          <Share2 size={16} />
-                       </button>
-                       <button onClick={onToggleFullscreen} className="w-9 h-9 rounded-xl bg-white/10 border border-white/5 flex items-center justify-center text-white/60">
-                          <Maximize size={16} />
-                       </button>
-                   </div>
-
                    <div className="hidden sm:flex bg-emerald-500/10 border border-emerald-500/20 px-[clamp(8px,2cqw,12px)] py-[clamp(3px,0.6cqw,5px)] rounded-full items-center gap-[clamp(4px,1cqw,8px)]">
                       <div className="rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" style={{ width: 'clamp(4px,0.8cqw,6px)', height: 'clamp(4px,0.8cqw,6px)' }} />
                       <span className="font-black text-emerald-400 uppercase tracking-[0.2em]" style={{ fontSize: 'clamp(8px,1cqw,10px)' }}>Live Encrypted</span>
@@ -176,12 +156,12 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
 
           <div className="flex-1" />
 
-          {/* Bottom HUD - Pro High-Contrast Area - RESTORED BUT SLIM ON MOBILE */}
-          <div className="bg-slate-950/80 lg:bg-slate-950/95 backdrop-blur-2xl lg:backdrop-blur-3xl border-t border-white/5 p-3 lg:p-[clamp(8px,2cqw,24px)] lg:pb-[clamp(16px,4cqw,40px)] pointer-events-auto shrink-0 relative">
-             <div className="flex items-center lg:items-end justify-between gap-3 lg:gap-[clamp(12px,4cqw,24px)] max-w-7xl mx-auto">
-                <div className="flex items-center gap-3 lg:gap-[clamp(10px,4cqw,24px)] min-w-0 w-full lg:w-auto">
-                   {/* White Logo Box - Scaled for Mobile/Desktop */}
-                   <div className="rounded-lg lg:rounded-[clamp(10px,2.5cqw,16px)] bg-white p-1 lg:p-[clamp(3px,1.5cqw,8px)] shadow-2xl border border-white/10 flex items-center justify-center shrink-0 w-10 h-10 lg:w-[clamp(40px,10cqw,88px)] lg:h-[clamp(40px,10cqw,88px)] overflow-hidden">
+          {/* Bottom HUD - Unified High-Contrast Area */}
+          <div className="bg-slate-950/95 backdrop-blur-3xl border-t border-white/5 p-[2cqw] pb-[3cqw] pointer-events-auto shrink-0 relative">
+             <div className="flex items-center justify-between gap-[3cqw] max-w-7xl mx-auto">
+                <div className="flex items-center gap-[3cqw] min-w-0 w-full lg:w-auto">
+                   {/* Unified Logo Box - Constant Aspect */}
+                   <div className="rounded-[1.5cqw] bg-white p-[0.8cqw] shadow-2xl border border-white/10 flex items-center justify-center shrink-0 w-[10cqw] h-[10cqw] overflow-hidden">
                       {channel.logo_url ? (
                         <img 
                           src={getLogoUrl(channel.logo_url)} 
@@ -203,34 +183,23 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                       </div>
                    </div>
 
-                   <div className="space-y-0.5 lg:space-y-[clamp(3px,1.2cqw,12px)] min-w-0 flex-1">
-                       <div className="flex items-center gap-2 lg:gap-[clamp(6px,1.5cqw,12px)] min-w-0">
-                          <h1 className="font-black text-white tracking-tighter uppercase truncate max-w-[150px] lg:max-w-[clamp(150px,40cqw,600px)] text-sm lg:text-[clamp(14px,3.5cqw,32px)]">
+                   <div className="space-y-[1cqw] min-w-0 flex-1">
+                       <div className="flex items-center gap-[1.2cqw] min-w-0">
+                          <h1 className="font-black text-white tracking-tighter uppercase truncate max-w-[clamp(150px,40cqw,600px)] text-[3.5cqw]">
                             {channel.name}
                           </h1>
                           <div className="flex items-center gap-1">
-                             <div className="shrink-0 bg-blue-600 rounded shadow-lg px-2 h-[18px] lg:px-[clamp(6px,1cqw,10px)] lg:h-[clamp(14px,1.5cqw,18px)] flex items-center justify-center">
-                                 <span className="text-white font-black uppercase tracking-widest text-[8px] lg:text-[clamp(6px,0.8cqw,9px)] leading-none -mt-[0.5px]">
+                             <div className="shrink-0 bg-blue-600 rounded shadow-lg px-[clamp(6px,1cqw,10px)] h-[clamp(14px,1.5cqw,18px)] flex items-center justify-center">
+                                 <span className="text-white font-black uppercase tracking-widest text-[clamp(6px,0.8cqw,9px)] leading-none -mt-[0.5px]">
                                     {channel.group?.toUpperCase() || 'UNG'}
                                  </span>
                              </div>
                           </div>
                        </div>
                        
-                       {/* High Density Pro Status Bar - ENHANCED WITH FPS & AUDIO */}
+                       {/* High Density Pro Status Bar - Unified Container Query Layout */}
                        <div className="flex items-center gap-x-3 lg:gap-x-[clamp(6px,2cqw,12px)] gap-y-1 flex-wrap">
                           <div className="flex items-center gap-[clamp(5px,1.5cqw,12px)] bg-white/5 border border-white/10 px-[clamp(6px,2cqw,16px)] py-[clamp(2px,0.8cqw,6px)] rounded-xl">
-                             <button 
-                               onClick={() => setShowSettings(!showSettings)}
-                               className="flex items-center gap-1 text-indigo-400 group hover:text-white transition-colors"
-                             >
-                                <Zap size="clamp(9px,1.2cqw,12px)" className="animate-pulse" />
-                                <span className="font-black uppercase tracking-widest text-white/30" style={{ fontSize: 'clamp(6px,0.8cqw,9px)' }}>SRC</span>
-                                <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,1cqw,11px)' }}>{activeMode}</span>
-                                <ChevronUp size="clamp(7px,1cqw,12px)" className={`transition-transform duration-300 ${showSettings ? '' : 'rotate-180'}`} />
-                             </button>
-                             <div className="w-px bg-white/10 h-[clamp(6px,1.5cqw,12px)]" />
-                             
                              <div className="flex items-center gap-2 lg:gap-3">
                                 <span className="font-black text-amber-400 uppercase tracking-widest whitespace-nowrap" style={{ fontSize: 'clamp(7px,1cqw,11px)' }}>
                                    {latency.toFixed(1)}ms
@@ -247,111 +216,103 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                                 <span className="hidden md:inline font-black text-sky-400 uppercase tracking-widest" style={{ fontSize: 'clamp(7px,1cqw,11px)' }}>
                                    {stats.audio.includes('MP4A') ? 'AAC STEREO' : stats.audio}
                                 </span>
-                             </div>
-                          </div>
-                          
-                          {/* Mobile Mini Stats - ENHANCED */}
-                          <div className="lg:hidden flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                             <span className="text-amber-500">{latency.toFixed(0)}ms</span>
-                             <div className="w-1 h-1 rounded-full bg-white/20" />
-                             <span className="text-indigo-400">{stats.resolution !== '0X0' ? stats.resolution : (channel.resolution || '1080P')}</span>
-                             <div className="w-1 h-1 rounded-full bg-white/20" />
-                             <span className="text-emerald-500">{stats.fps > 0 ? `${Math.round(stats.fps)}FPS` : '...'}</span>
-                             <div className="w-1 h-1 rounded-full bg-white/20" />
-                             <span className="text-sky-400">{stats.audio.includes('MP4A') ? 'AAC' : 'STEREO'}</span>
-                             <div className="w-1 h-1 rounded-full bg-white/20" />
-                             <div className="flex gap-[1px] items-center">
-                                {[1,2,3,4].map(i => (
-                                    <div key={i} className={`w-[1.5px] rounded-full ${stats.fps > 0 ? 'bg-emerald-500' : 'bg-white/10'}`} style={{ height: `${i*1.8}px` }} />
-                                ))}
+                                {channel.epg_id && (
+                                  <>
+                                    <div className="w-px bg-white/10 h-[clamp(6px,1.5cqw,12px)]" />
+                                    <div className="flex items-center gap-[0.5cqw] px-[0.8cqw] py-[0.3cqw] bg-indigo-500/20 rounded-md border border-indigo-500/30">
+                                       <CalendarCheck size="0.8cqw" className="text-indigo-400" />
+                                       <span className="font-black text-indigo-400 uppercase tracking-widest" style={{ fontSize: 'clamp(6px,0.8cqw,9px)' }}>EPG</span>
+                                    </div>
+                                  </>
+                                )}
                              </div>
                           </div>
                        </div>
                    </div>
                 </div>
 
-                {/* Desktop-Only Action Row */}
-                <div className="hidden lg:flex items-center justify-end gap-[clamp(6px,1.2cqw,12px)] w-auto shrink-0 border-white/5 lg:pt-0">
+                {/* Unified Action Row */}
+                <div className="flex flex-col items-end gap-[1.5cqw] w-auto shrink-0 relative">
+                   
+                   {/* Source Selector Overlay - Now absolute to this column */}
+                   <AnimatePresence>
+                      {showSettings && (
+                        <motion.div 
+                          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                          className="absolute bottom-full right-0 mb-[1.5cqw] z-[500] bg-slate-950/95 backdrop-blur-xl rounded-[1cqw] border border-white/10 p-[0.8cqw] shadow-3xl pointer-events-auto min-w-[20cqw]"
+                        >
+                          <div className="space-y-[0.4cqw]">
+                              <span className="font-black text-white/20 uppercase tracking-[0.2em] px-[0.8cqw] block mb-[0.6cqw]" style={{ fontSize: '0.7cqw' }}>Link Gateway</span>
+                              {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
+                                const labelMap: Record<string, string> = {
+                                  'hls': 'HLS Cache',
+                                  'ts': 'TLS Cache',
+                                  'tracking': 'Tracking',
+                                  'original': 'Original',
+                                  'smart': 'SMart'
+                                };
+                                const displayLabel = labelMap[mode.toLowerCase()] || mode.toUpperCase();
+                                return (
+                                  <button 
+                                    key={mode}
+                                    onClick={() => {
+                                      onSelectLink(url as string, mode);
+                                      setShowSettings(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-[1cqw] py-[0.8cqw] rounded-[0.5cqw] transition-all ${
+                                      activeMode === mode ? 'bg-indigo-600 text-white' : 'hover:bg-white/5 text-white/40'
+                                    }`}
+                                  >
+                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: '0.9cqw' }}>{displayLabel}</span>
+                                    {activeMode === mode && <div className="w-[0.5cqw] h-[30%] rounded-full bg-white animate-pulse" />}
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </motion.div>
+                      )}
+                   </AnimatePresence>
+
+                   {/* Source Toggle Button */}
+                   <button 
+                     onClick={() => setShowSettings(!showSettings)}
+                     className={`flex items-center gap-[0.5cqw] px-[1.5cqw] py-[0.8cqw] rounded-[1cqw] transition-all border ${
+                       showSettings 
+                       ? 'bg-indigo-600 border-indigo-400 text-white shadow-[0_0_15px_rgba(79,70,229,0.4)]' 
+                       : 'bg-white/5 border-white/10 text-indigo-400 hover:text-white hover:bg-white/10'
+                     }`}
+                   >
+                      <Zap size="1.2cqw" className={showSettings ? 'animate-pulse' : ''} />
+                      <span className="font-black uppercase tracking-widest" style={{ fontSize: '1cqw' }}>SRC: {activeMode}</span>
+                      <ChevronUp size="1.2cqw" className={`transition-transform duration-300 ${showSettings ? '' : 'rotate-180'}`} />
+                   </button>
+
                    {/* Pro Action Buttons */}
-                   <div className="flex items-center gap-1.5 lg:gap-2">
-                      <button className="bg-white/5 border border-white/5 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all">
-                         <Heart size="35%" />
-                      </button>
-                       <button 
-                        onClick={() => setShowShare(true)}
-                        className="bg-white/5 border border-white/5 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-                       >
-                          <Share2 size="35%" />
-                       </button>
-                   </div>
-                   <div className="flex items-center gap-1.5 lg:gap-2">
-                      <button 
-                        onClick={onOpenVLC}
-                        title="VLC Boost"
-                        className="bg-orange-600 shadow-xl shadow-orange-600/20 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-all"
-                      >
-                         <ExternalLink size="35%" />
-                      </button>
-                      <button 
-                        onClick={onToggleFullscreen}
-                        className="bg-white/10 border border-white/10 w-[clamp(28px,4cqw,48px)] h-[clamp(28px,4cqw,48px)] rounded-xl flex items-center justify-center text-white/60 hover:text-white transition-all"
-                      >
-                         <Maximize size="35%" />
-                      </button>
+                   <div className="flex items-center gap-[0.8cqw]">
+                      <div className="flex items-center gap-[0.5cqw]">
+                        <button className="bg-white/5 border border-white/5 w-[4cqw] h-[4cqw] rounded-[1cqw] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all">
+                           <Heart size="40%" />
+                        </button>
+                        <button 
+                          onClick={() => setShowShare(true)}
+                          className="bg-white/5 border border-white/5 w-[4cqw] h-[4cqw] rounded-[1cqw] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                        >
+                           <Share2 size="40%" />
+                        </button>
+                        <button 
+                          onClick={onToggleFullscreen}
+                          className="bg-white/10 border border-white/10 w-[4cqw] h-[4cqw] rounded-[1cqw] flex items-center justify-center text-white/60 hover:text-white transition-all"
+                        >
+                           <Maximize size="40%" />
+                        </button>
+                      </div>
                    </div>
                 </div>
              </div>
 
-             {/* Source Selector Overlay - Portal persistent for exit animations */}
-             {createPortal(
-               <AnimatePresence>
-                  {showSettings && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                      className="fixed z-[500] bg-slate-950 rounded-2xl border border-white/10 p-[clamp(8px,1.5cqw,16px)] shadow-3xl pointer-events-auto"
-                      style={{ 
-                          bottom: 'clamp(80px, 15cqw, 120px)',
-                          left: 'clamp(20px, 4cqw, 40px)'
-                      }}
-                    >
-                      <div className="space-y-1">
-                          <span className="font-black text-white/20 uppercase tracking-[0.2em] px-3 block mb-2" style={{ fontSize: 'clamp(7px,0.8cqw,10px)' }}>Link Gateway</span>
-                          {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => {
-                            const labelMap: Record<string, string> = {
-                              'hls': 'HLS Cache',
-                              'ts': 'TLS Cache',
-                              'tracking': 'Tracking',
-                              'original': 'Original',
-                              'smart': 'SMart',
-                              'vlc': 'VLC Player',
-                              'potplayer': 'PotPlayer'
-                            };
-                            const displayLabel = labelMap[mode.toLowerCase()] || mode.toUpperCase();
-
-                            return (
-                              <button 
-                                key={mode}
-                                onClick={() => {
-                                  onSelectLink(url as string, mode);
-                                  setShowSettings(false);
-                                }}
-                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
-                                  activeMode === mode ? 'bg-indigo-600 text-white' : 'hover:bg-white/5 text-white/40'
-                                }`}
-                              >
-                                <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(10px,1cqw,12px)' }}>{displayLabel}</span>
-                                {activeMode === mode && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-                              </button>
-                            );
-                          })}
-                      </div>
-                    </motion.div>
-                  )}
-               </AnimatePresence>,
-               document.getElementById('portal-root') || document.body
-             )}
+             {/* DELETED Source Selector Overlay - NO PORTAL */}
 
              {/* Share Links Modal - Portal persistent for exit animations */}
              {createPortal(

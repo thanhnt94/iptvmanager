@@ -56,10 +56,6 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     }
   };
 
-  const handleOpenVLC = () => {
-    if (!channel) return;
-    window.location.assign(`/api/channels/play/${channel.id}?token=${localStorage.getItem('api_token') || ''}&forced=vlc`);
-  };
 
   const modeConfig: Record<string, { label: string, icon: any }> = {
     'hls': { label: 'HLS', icon: <Wifi size={10} /> },
@@ -72,6 +68,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   return (
     <div 
       ref={containerRef} 
+      style={{ containerType: 'size' }}
       className={`relative group overflow-hidden bg-black ${layout === 'full' ? 'w-full h-full' : 'w-full aspect-video rounded-2xl md:rounded-[2rem] border border-white/5 shadow-2xl'}`}
     >
       <VideoEngine 
@@ -203,10 +200,10 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
           setIsMuted(v === 0);
         }}
         onToggleFullscreen={handleToggleFullscreen}
-        onOpenVLC={handleOpenVLC}
         onSelectLink={handleSelectLink}
         activeMode={activeMode}
         stats={stats}
+        layout={layout}
       />
     </div>
   );

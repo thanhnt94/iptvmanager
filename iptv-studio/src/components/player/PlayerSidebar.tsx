@@ -11,7 +11,8 @@ import {
   Filter,
   Layers,
   SearchX,
-  Settings2
+  Settings2,
+  CalendarCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLogoUrl } from '../../utils';
@@ -41,6 +42,7 @@ interface Channel {
   resolution: string;
   play_url: string;
   stream_format: string;
+  epg_id?: string | null;
 }
 
 interface PlayerSidebarProps {
@@ -323,8 +325,11 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                     </div>
                  </div>
                  <div className="flex-1 min-w-0 text-left">
-                    <div className={`text-[11px] font-black truncate leading-tight transition-colors ${activeChannelId === ch.id ? 'text-white' : 'text-slate-200'}`}>
+                    <div className={`text-[11px] font-black truncate leading-tight transition-colors flex items-center gap-2 ${activeChannelId === ch.id ? 'text-white' : 'text-slate-200'}`}>
                        {ch.name}
+                       {ch.epg_id && (
+                          <CalendarCheck size={11} className="text-indigo-400 shrink-0" />
+                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1.5">
                        <div className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-md border text-[8px] font-black uppercase tracking-widest ${

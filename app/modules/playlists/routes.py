@@ -229,6 +229,7 @@ def get_entries(playlist_id):
                 'logo_url': ch.logo_url,
                 'group': display_group,
                 'status': ch.status,
+                'epg_id': ch.epg_id,
                 'quality': ch.quality,
                 'resolution': ch.resolution,
                 'stream_format': ch.stream_format,

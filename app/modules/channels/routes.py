@@ -87,6 +87,7 @@ def list_channels():
             'group_name': ch.group_name,
             'stream_url': ch.stream_url,
             'status': ch.status,
+            'epg_id': ch.epg_id,
             'stream_format': ch.stream_format,
             'stream_type': ch.stream_type,
             'quality': ch.quality,
