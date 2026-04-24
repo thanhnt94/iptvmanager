@@ -291,6 +291,16 @@ def get_info(id):
         'memberships': memberships
     })
 
+@channels_bp.route('/<int:id>/touch', methods=['POST'])
+@login_required
+def touch_channel(id):
+    """Triggers a passive health check for the given channel."""
+    from app.modules.settings.services import SettingService
+    if SettingService.get('ENABLE_HEALTH_SYSTEM', True):
+        from app.modules.health.services import HealthCheckService
+        HealthCheckService.trigger_passive_check(id)
+    return jsonify({'status': 'ok'})
+
 @channels_bp.route('/add', methods=['POST'])
 @login_required
 def add_channel():

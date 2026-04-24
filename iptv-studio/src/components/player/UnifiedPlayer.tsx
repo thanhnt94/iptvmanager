@@ -35,6 +35,11 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
       setCurrentUrl(url);
       setStatus('loading');
       setError(null);
+      
+      // Trigger passive health check regardless of link type
+      if (channel.id) {
+        fetch(`/api/channels/${channel.id}/touch`, { method: 'POST' }).catch(() => {});
+      }
     }
   }, [channel, activeMode]);
 
