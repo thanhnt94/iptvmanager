@@ -40,6 +40,26 @@ def create_playlist():
         }
     })
 
+@playlists_bp.route('/<int:playlist_id>', methods=['PATCH'])
+@login_required
+def update_playlist_profile(playlist_id):
+    data = request.json or {}
+    name = data.get('name')
+    slug = data.get('slug')
+    
+    success, result = PlaylistService.update_profile(playlist_id, name, slug)
+    if not success:
+        return jsonify({'status': 'error', 'message': result}), 400
+        
+    return jsonify({
+        'status': 'ok',
+        'playlist': {
+            'id': result.id,
+            'name': result.name,
+            'slug': result.slug
+        }
+    })
+
 @playlists_bp.route('/', methods=['GET'])
 @login_required
 def list_playlists():
@@ -156,6 +176,20 @@ def create_playlist_group():
         
     group = PlaylistService.create_group(playlist_id, name)
     return jsonify({'status': 'ok', 'group_id': group.id})
+
+@playlists_bp.route('/batch-add', methods=['POST'])
+@login_required
+def batch_add_to_playlist():
+    data = request.json or {}
+    playlist_id = data.get('playlist_id')
+    channel_ids = data.get('channel_ids', [])
+    group_id = data.get('group_id')
+    
+    if not playlist_id or not channel_ids:
+        return jsonify({'status': 'error', 'message': 'Missing data'}), 400
+        
+    count = PlaylistService.batch_add_channels_to_playlist(playlist_id, channel_ids, group_id)
+    return jsonify({'status': 'ok', 'added_count': count})
 
 @playlists_bp.route('/entries/<int:entry_id>', methods=['DELETE'])
 @login_required

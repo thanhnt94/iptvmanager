@@ -17,6 +17,7 @@ interface PlaylistInfo {
   id: number;
   name: string;
   slug: string;
+  is_system: boolean;
 }
 
 interface Entry {
@@ -42,6 +43,11 @@ export const PlaylistEditor: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  
+  // Playlist Info Edit State
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editSlug, setEditSlug] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -60,6 +66,10 @@ export const PlaylistEditor: React.FC = () => {
       
       const pInfo = pRes.find((p: any) => p.id.toString() === id);
       setPlaylist(pInfo);
+      if (pInfo) {
+        setEditName(pInfo.name);
+        setEditSlug(pInfo.slug);
+      }
       
       const mapped = eRes.channels.map((ch: any) => ({
         id: ch.id, 
@@ -94,6 +104,28 @@ export const PlaylistEditor: React.FC = () => {
       alert("Error saving order");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdateInfo = async () => {
+    setProcessing(true);
+    try {
+      const res = await fetch(`/api/playlists/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editName, slug: editSlug })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        setPlaylist(prev => prev ? { ...prev, name: data.playlist.name, slug: data.playlist.slug } : null);
+        setIsInfoModalOpen(false);
+      } else {
+        alert(data.message || "Error updating info");
+      }
+    } catch (err) {
+      alert("Error updating info");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -159,11 +191,22 @@ export const PlaylistEditor: React.FC = () => {
            >
               <ArrowLeft size={20} />
            </button>
-           <div>
-              <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-white uppercase flex items-center gap-3">
-                Edit <span className="text-indigo-500">{playlist?.name}</span>
-              </h2>
-              <p className="text-slate-400 text-xs md:text-sm mt-1">/{playlist?.slug} • {entries.length} items in sequence</p>
+           <div className="flex items-center gap-4">
+             <div>
+                <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-white uppercase flex items-center gap-3">
+                  Edit <span className="text-indigo-500">{playlist?.name}</span>
+                </h2>
+                <p className="text-slate-400 text-xs md:text-sm mt-1">/{playlist?.slug} • {entries.length} items in sequence</p>
+             </div>
+             {!playlist?.is_system && (
+                <button 
+                  onClick={() => setIsInfoModalOpen(true)}
+                  className="w-10 h-10 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/10 transition-all"
+                  title="Edit Playlist Name/Slug"
+                >
+                  <FolderEdit size={16} />
+                </button>
+             )}
            </div>
         </div>
         <div className="flex items-center gap-3">
@@ -314,6 +357,54 @@ export const PlaylistEditor: React.FC = () => {
 
               <div className="mt-8 flex justify-end">
                  <button onClick={() => setIsGroupModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Close</button>
+              </div>
+           </motion.div>
+        </div>
+      )}
+
+      {/* Playlist Info Modal */}
+      {isInfoModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsInfoModalOpen(false)} />
+           <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-[2rem] p-8 shadow-2xl"
+           >
+              <h3 className="text-xl font-black text-white mb-2 uppercase">Rename Registry</h3>
+              <p className="text-slate-500 text-xs mb-8">Update the metadata for this playlist profile.</p>
+              
+              <div className="space-y-4">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Display Name</label>
+                    <input 
+                       type="text" 
+                       value={editName}
+                       onChange={e => setEditName(e.target.value)}
+                       className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                    />
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Friendly Slug (URL)</label>
+                    <input 
+                       type="text" 
+                       value={editSlug}
+                       onChange={e => setEditSlug(e.target.value)}
+                       className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-mono"
+                    />
+                 </div>
+              </div>
+
+              <div className="mt-8 flex items-center justify-end gap-4">
+                 <button onClick={() => setIsInfoModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Cancel</button>
+                 <button 
+                    onClick={handleUpdateInfo}
+                    disabled={processing}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-8 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                 >
+                    {processing ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    Apply Changes
+                 </button>
               </div>
            </motion.div>
         </div>

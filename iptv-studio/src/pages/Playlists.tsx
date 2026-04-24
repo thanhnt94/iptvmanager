@@ -383,17 +383,25 @@ export const Playlists: React.FC = () => {
                              >
                                 <p className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-slate-500 border-b border-white/5 mb-1">Playlist Tools</p>
                                 <button 
-                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 text-slate-300 transition-colors"
+                                  onClick={() => navigate(`/playlists/${item.id}`)}
+                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-indigo-500 text-slate-300 hover:text-white transition-all group"
                                 >
-                                   <ExternalLink size={14} />
+                                   <FolderTree size={14} className="group-hover:scale-110 transition-transform" />
+                                   <span className="text-[10px] font-black uppercase tracking-tight">Manage Sequence</span>
+                                </button>
+                                <button 
+                                  onClick={() => window.open(`/p/${item.owner_username}/${item.slug}`, '_blank')}
+                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-emerald-500 text-slate-300 hover:text-white transition-all group"
+                                >
+                                   <ExternalLink size={14} className="group-hover:scale-110 transition-transform" />
                                    <span className="text-[10px] font-black uppercase tracking-tight">Open Player</span>
                                 </button>
                                 {!item.is_system && (
                                    <button 
                                      onClick={() => handleDelete(item.id as number)}
-                                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-rose-500/10 text-rose-400 transition-colors"
+                                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-rose-500 text-rose-400 hover:text-white transition-all group"
                                    >
-                                      <Trash2 size={14} />
+                                      <Trash2 size={14} className="group-hover:scale-110 transition-transform" />
                                       <span className="text-[10px] font-black uppercase tracking-tight">Delete Profile</span>
                                    </button>
                                 )}

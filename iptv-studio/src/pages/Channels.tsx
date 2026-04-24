@@ -188,6 +188,14 @@ export const Channels: React.FC = () => {
    const [shareChannel, setShareChannel] = useState<Channel | null>(null);
    const [jumpPage, setJumpPage] = useState('');
    const [copiedKey, setCopiedKey] = useState<string | null>(null);
+   
+   // Bulk Actions State
+   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+   const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
+   const [checkingBatch, setCheckingBatch] = useState(false);
+
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -222,10 +230,97 @@ export const Channels: React.FC = () => {
       .catch(err => console.error("Filters fetch error:", err));
   };
 
+  const fetchUserPlaylists = () => {
+    fetch('/api/playlists')
+      .then(res => res.json())
+      .then(data => setUserPlaylists(data))
+      .catch(err => console.error("Playlists fetch error:", err));
+  };
+
   useEffect(() => {
     fetchChannels();
     fetchFilters();
+    fetchUserPlaylists();
   }, [fetchChannels]);
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === channels.length) setSelectedIds([]);
+    else setSelectedIds(channels.map(c => c.id));
+  };
+
+  const handleBatchAdd = async (playlistId: number, groupId?: number) => {
+    try {
+      const res = await fetch('/api/playlists/batch-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playlist_id: playlistId,
+          channel_ids: selectedIds,
+          group_id: groupId
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        alert(`Successfully added ${data.added_count} channels!`);
+        setSelectedIds([]);
+        setIsBatchModalOpen(false);
+      }
+    } catch (err) { alert('Batch add failed'); }
+  };
+
+  const handleBatchDelete = async () => {
+    if (!confirm(`Delete ${selectedIds.length} channels? This cannot be undone.`)) return;
+    try {
+      const res = await fetch('/api/channels/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds })
+      });
+      if (res.ok) {
+        alert('Bulk delete successful!');
+        setSelectedIds([]);
+        fetchChannels();
+      }
+    } catch (err) { alert('Batch delete failed'); }
+  };
+
+  const handleBatchGroupUpdate = async (groupName: string) => {
+    try {
+      const res = await fetch('/api/channels/batch-update-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds, group_name: groupName })
+      });
+      if (res.ok) {
+        alert('Bulk group update successful!');
+        setSelectedIds([]);
+        setIsGroupModalOpen(false);
+        fetchChannels();
+        fetchFilters();
+      }
+    } catch (err) { alert('Batch update failed'); }
+  };
+
+  const handleBatchCheck = async (fastMode: boolean) => {
+    setCheckingBatch(true);
+    try {
+      const res = await fetch('/api/health/batch-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds, fast_mode: fastMode })
+      });
+      if (res.ok) {
+        // Refresh channels to show new status
+        fetchChannels();
+        setSelectedIds([]);
+      }
+    } catch (err) { alert('Batch check failed'); }
+    finally { setCheckingBatch(false); }
+  };
 
   const openAdd = () => { setEditingId(null); setIsFormOpen(true); };
   const openEdit = (id: number) => { setEditingId(id); setIsFormOpen(true); };
@@ -491,7 +586,17 @@ export const Channels: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/5 bg-white/[0.02]">
-                <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.05em] w-[35%]">Identification</th>
+                <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.05em] w-[35%]">
+                   <div className="flex items-center gap-4">
+                      <button 
+                        onClick={toggleSelectAll}
+                        className={`w-5 h-5 rounded border transition-all flex items-center justify-center ${selectedIds.length === channels.length && channels.length > 0 ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10 hover:border-indigo-500/50'}`}
+                      >
+                         {selectedIds.length === channels.length && channels.length > 0 && <Check size={12} className="text-white" />}
+                      </button>
+                      Identification
+                   </div>
+                </th>
                 <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Group</th>
                 <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Health</th>
                 <th className="px-6 py-5 text-[10px] font-black text-white/30 uppercase tracking-[0.2em] text-right">Actions</th>
@@ -504,9 +609,15 @@ export const Channels: React.FC = () => {
                 <tr><td colSpan={4} className="p-20 text-center text-slate-500 font-bold uppercase tracking-widest">No Channels Found</td></tr>
               ) : (
                 channels.map((ch) => (
-                  <tr key={ch.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+                  <tr key={ch.id} className={`border-b border-white/5 transition-colors group ${selectedIds.includes(ch.id) ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : 'hover:bg-white/[0.02]'}`}>
                     <td className="px-6 py-4 max-w-sm">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={() => toggleSelect(ch.id)}
+                          className={`w-5 h-5 rounded border transition-all flex items-center justify-center shrink-0 ${selectedIds.includes(ch.id) ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10 hover:border-indigo-500/50'}`}
+                        >
+                           {selectedIds.includes(ch.id) && <Check size={12} className="text-white" />}
+                        </button>
                         <div className="w-10 h-10 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border border-white/5 group-hover:border-indigo-500/30 transition-colors shrink-0">
                           {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={16} />}
                         </div>
@@ -583,8 +694,14 @@ export const Channels: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
               key={ch.id} 
-              className="glass p-5 rounded-[2rem] space-y-5"
+              className={`glass p-5 rounded-[2rem] space-y-5 relative overflow-hidden ${selectedIds.includes(ch.id) ? 'ring-2 ring-indigo-500/50 bg-indigo-500/5' : ''}`}
+              onClick={() => toggleSelect(ch.id)}
             >
+              {selectedIds.includes(ch.id) && (
+                <div className="absolute top-4 right-4 w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center text-white shadow-lg">
+                  <Check size={14} />
+                </div>
+              )}
               <div className="flex items-center gap-4">
                  <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-white/5 flex items-center justify-center shrink-0">
                    {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={24} />}
@@ -725,6 +842,156 @@ export const Channels: React.FC = () => {
           )}
         </AnimatePresence>,
         document.getElementById('portal-root') || document.body
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      <AnimatePresence>
+        {selectedIds.length > 0 && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center gap-6"
+          >
+             <div className="flex items-center gap-4 pl-4 border-r border-white/10 pr-6">
+                <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-black text-sm">
+                   {selectedIds.length}
+                </div>
+                <div className="flex flex-col">
+                   <span className="text-[10px] font-black uppercase tracking-widest text-white">Channels Selected</span>
+                   <button onClick={() => setSelectedIds([])} className="text-[9px] font-bold text-slate-500 hover:text-rose-400 text-left uppercase transition-colors">Clear Selection</button>
+                </div>
+             </div>
+
+             <div className="flex items-center gap-2 pr-2">
+                <button 
+                  disabled={checkingBatch}
+                  onClick={() => handleBatchCheck(true)}
+                  className="w-12 h-12 bg-white/5 hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-400 rounded-2xl transition-all flex items-center justify-center border border-white/5 disabled:opacity-50"
+                  title="Quick Signal Check (Ping Only)"
+                >
+                   {checkingBatch ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} />}
+                </button>
+                <button 
+                  disabled={checkingBatch}
+                  onClick={() => handleBatchCheck(false)}
+                  className="w-12 h-12 bg-white/5 hover:bg-indigo-500/20 text-slate-500 hover:text-indigo-400 rounded-2xl transition-all flex items-center justify-center border border-white/5 disabled:opacity-50"
+                  title="Deep Metadata Analysis (FFprobe)"
+                >
+                   {checkingBatch ? <Loader2 className="animate-spin" size={18} /> : <Activity size={18} />}
+                </button>
+
+                <button 
+                  onClick={() => setIsBatchModalOpen(true)}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                >
+                   <Plus size={14} />
+                   Add to Playlist
+                </button>
+                <button 
+                  onClick={() => setIsGroupModalOpen(true)}
+                  className="bg-slate-950/50 hover:bg-white/10 text-slate-400 hover:text-white h-12 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 border border-white/5"
+                >
+                   <Filter size={14} />
+                   Change Group
+                </button>
+                <button 
+                  onClick={handleBatchDelete}
+                  className="w-12 h-12 bg-white/5 hover:bg-rose-500 text-slate-500 hover:text-white rounded-2xl transition-all flex items-center justify-center border border-white/5"
+                  title="Bulk Delete"
+                >
+                   <Trash2 size={20} />
+                </button>
+             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Batch Add Modal */}
+      {isBatchModalOpen && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsBatchModalOpen(false)} />
+           <motion.div 
+             initial={{ opacity: 0, scale: 0.9, y: 20 }}
+             animate={{ opacity: 1, scale: 1, y: 0 }}
+             className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+           >
+              <h3 className="text-xl font-black text-white mb-2 uppercase">Batch Assignment</h3>
+              <p className="text-slate-500 text-xs mb-8">Deploying <span className="text-indigo-400 font-black">{selectedIds.length}</span> signals to registry.</p>
+              
+              <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                 {userPlaylists.map(p => (
+                   <button 
+                     key={p.id}
+                     onClick={() => handleBatchAdd(p.id)}
+                     className="w-full text-left p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all group"
+                   >
+                      <div className="flex items-center justify-between">
+                         <div>
+                            <p className="text-xs font-black text-white uppercase tracking-tight group-hover:text-indigo-400 transition-colors">{p.name}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">/{p.slug} • {p.channel_count} channels</p>
+                         </div>
+                         <Plus size={16} className="text-slate-700 group-hover:text-indigo-400 transition-all" />
+                      </div>
+                   </button>
+                 ))}
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-white/5 flex justify-end">
+                 <button onClick={() => setIsBatchModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Cancel</button>
+              </div>
+           </motion.div>
+        </div>
+      )}
+
+      {/* Batch Group Modal */}
+      {isGroupModalOpen && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsGroupModalOpen(false)} />
+           <motion.div 
+             initial={{ opacity: 0, scale: 0.9, y: 20 }}
+             animate={{ opacity: 1, scale: 1, y: 0 }}
+             className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+           >
+              <h3 className="text-xl font-black text-white mb-2 uppercase">Batch Categorization</h3>
+              <p className="text-slate-500 text-xs mb-8">Re-labeling <span className="text-indigo-400 font-black">{selectedIds.length}</span> signals.</p>
+              
+              <div className="space-y-4">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">New Group Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="Type a group name..."
+                      className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleBatchGroupUpdate((e.target as HTMLInputElement).value);
+                      }}
+                    />
+                 </div>
+
+                 <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+                    <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest"><span className="bg-slate-900 px-4 text-slate-600">Or Select Existing</span></div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-2 max-h-[30vh] overflow-y-auto pr-2">
+                    {filters.groups.map(g => (
+                      <button 
+                        key={g}
+                        onClick={() => handleBatchGroupUpdate(g)}
+                        className="p-3 text-[10px] font-black uppercase tracking-widest bg-white/5 border border-white/5 rounded-xl text-slate-400 hover:text-white hover:border-indigo-500/30 transition-all"
+                      >
+                         {g}
+                      </button>
+                    ))}
+                 </div>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-white/5 flex justify-end">
+                 <button onClick={() => setIsGroupModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Cancel</button>
+              </div>
+           </motion.div>
+        </div>
       )}
     </div>
   );

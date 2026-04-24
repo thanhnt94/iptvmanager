@@ -51,3 +51,16 @@ def get_scan_options():
             'name': p.name
         } for p in playlists]
     })
+
+@health_bp.route('/batch-check', methods=['POST'])
+@login_required
+def batch_check():
+    data = request.json or {}
+    ids = data.get('ids', [])
+    fast_mode = data.get('fast_mode', False)
+    
+    if not ids:
+        return jsonify({'status': 'error', 'message': 'No IDs provided'}), 400
+        
+    results = HealthCheckService.batch_check_streams(ids, fast_mode=fast_mode)
+    return jsonify({'status': 'ok', 'results': results})

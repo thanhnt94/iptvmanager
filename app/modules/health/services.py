@@ -128,6 +128,28 @@ class HealthCheckService:
         }
 
     @staticmethod
+    def batch_check_streams(channel_ids, fast_mode=False):
+        """Checks multiple streams in parallel using the worker pool."""
+        from flask import current_app
+        app = current_app._get_current_object()
+        
+        results = []
+        def check_worker(cid):
+            with app.app_context():
+                return HealthCheckService.check_stream(cid, force=True, fast_mode=fast_mode)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_id = {executor.submit(check_worker, cid): cid for cid in channel_ids}
+            for future in concurrent.futures.as_completed(future_to_id):
+                cid = future_to_id[future]
+                try:
+                    res = future.result()
+                    results.append({'id': cid, 'status': 'ok', 'data': res})
+                except Exception as exc:
+                    results.append({'id': cid, 'status': 'error', 'message': str(exc)})
+        return results
+
+    @staticmethod
     def _update_stream_specs(channel):
         """Uses ffprobe to extract resolution, audio info, and detect VOD vs LIVE.
         Returns True if at least one stream is found, False otherwise."""

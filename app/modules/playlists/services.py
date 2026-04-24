@@ -17,6 +17,27 @@ class PlaylistService:
         return profile
 
     @staticmethod
+    def update_profile(playlist_id, name=None, slug=None):
+        profile = PlaylistProfile.query.get(playlist_id)
+        if not profile:
+            return False, "Playlist not found"
+        
+        if profile.is_system:
+            return False, "System playlists cannot be renamed"
+            
+        if name:
+            profile.name = name
+        if slug:
+            # Check for slug uniqueness for this user
+            existing = PlaylistProfile.query.filter_by(slug=slug, owner_id=profile.owner_id).first()
+            if existing and existing.id != profile.id:
+                return False, "Slug already in use"
+            profile.slug = slug
+            
+        db.session.commit()
+        return True, profile
+
+    @staticmethod
     def ensure_global_system_playlists():
         """Ensures truly global system playlists (like Community Shared)."""
         # Community Shared Playlist
@@ -73,6 +94,46 @@ class PlaylistService:
         db.session.add(group)
         db.session.commit()
         return group
+
+    @staticmethod
+    def add_channel_to_playlist(playlist_id, channel_id, group_id=None, new_group_name=None):
+        # 1. Handle New Group Creation
+        if not group_id and new_group_name:
+            # Check if group already exists in this playlist
+            existing_g = PlaylistGroup.query.filter_by(playlist_id=playlist_id, name=new_group_name).first()
+            if existing_g:
+                group_id = existing_g.id
+            else:
+                new_g = PlaylistGroup(playlist_id=playlist_id, name=new_group_name)
+                db.session.add(new_g)
+                db.session.commit()
+                group_id = new_g.id
+
+    @staticmethod
+    def batch_add_channels_to_playlist(playlist_id, channel_ids, group_id=None):
+        """Adds multiple channels to a playlist in bulk."""
+        added_count = 0
+        
+        # Get current max order once
+        max_order = db.session.query(db.func.max(PlaylistEntry.order_index))\
+            .filter_by(playlist_id=playlist_id).scalar() or 0
+            
+        for cid in channel_ids:
+            # Check for existing
+            existing = PlaylistEntry.query.filter_by(playlist_id=playlist_id, channel_id=cid).first()
+            if not existing:
+                max_order += 1
+                entry = PlaylistEntry(
+                    playlist_id=playlist_id,
+                    channel_id=cid,
+                    group_id=group_id,
+                    order_index=max_order
+                )
+                db.session.add(entry)
+                added_count += 1
+                
+        db.session.commit()
+        return added_count
 
     @staticmethod
     def add_channel_to_playlist(playlist_id, channel_id, group_id=None, new_group_name=None):

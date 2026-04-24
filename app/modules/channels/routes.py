@@ -116,6 +116,39 @@ def list_channels():
         }
     })
 
+@channels_bp.route('/batch-delete', methods=['POST'])
+@login_required
+def batch_delete():
+    data = request.json or {}
+    ids = data.get('ids', [])
+    if not ids: return jsonify({'status': 'error', 'message': 'No IDs provided'}), 400
+    
+    # RBAC: Free users can only delete their own
+    if current_user.role == 'free':
+        count = Channel.query.filter(Channel.id.in_(ids), Channel.owner_id == current_user.id).delete(synchronize_session=False)
+    else:
+        count = Channel.query.filter(Channel.id.in_(ids)).delete(synchronize_session=False)
+        
+    db.session.commit()
+    return jsonify({'status': 'ok', 'count': count})
+
+@channels_bp.route('/batch-update-group', methods=['POST'])
+@login_required
+def batch_update_group():
+    data = request.json or {}
+    ids = data.get('ids', [])
+    group_name = data.get('group_name')
+    if not ids or group_name is None: return jsonify({'status': 'error', 'message': 'Missing data'}), 400
+    
+    # RBAC
+    if current_user.role == 'free':
+        Channel.query.filter(Channel.id.in_(ids), Channel.owner_id == current_user.id).update({'group_name': group_name}, synchronize_session=False)
+    else:
+        Channel.query.filter(Channel.id.in_(ids)).update({'group_name': group_name}, synchronize_session=False)
+        
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
 @channels_bp.route('/groups/manage', methods=['GET'])
 @login_required
 def manage_groups():
