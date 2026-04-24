@@ -450,84 +450,21 @@ def delete_playlist(playlist_id):
 @playlists_bp.route('/<int:playlist_id>/quick-check', methods=['POST'])
 @login_required
 def quick_check_playlist(playlist_id):
-    """Fast signal-only check: HEAD request per channel, no ffprobe. Returns live/die counts."""
-    import requests as http_requests
-    import concurrent.futures
-    from datetime import datetime
-    
     profile = PlaylistProfile.query.get_or_404(playlist_id)
     
-    # Get channels for this playlist
-    if profile.is_system:
-        query = Channel.query
-        if profile.slug == 'public':
-            query = query.filter_by(is_public=True)
-        elif profile.owner_id:
-            query = query.filter_by(owner_id=profile.owner_id)
-            if "protected" in profile.slug:
-                query = query.filter_by(is_original=True)
-        channels = query.all()
-    else:
-        channels = [entry.channel for entry in profile.entries if entry.channel]
-    
-    total = len(channels)
-    if total == 0:
-        return jsonify({'status': 'ok', 'total': 0, 'live': 0, 'die': 0, 'updated': 0})
-    
-    results = {'live': 0, 'die': 0, 'updated': 0}
-    
-    def ping_channel(ch_id, url):
-        """Quick HEAD/GET check - returns (channel_id, 'live'|'die')"""
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': url
-        }
-        try:
-            resp = http_requests.head(url, timeout=5, headers=headers, allow_redirects=True)
-            if resp.status_code < 400:
-                return (ch_id, 'live')
-        except:
-            pass
-        try:
-            resp = http_requests.get(url, timeout=5, headers=headers, stream=True)
-            alive = resp.status_code < 400
-            resp.close()
-            return (ch_id, 'live' if alive else 'die')
-        except:
-            return (ch_id, 'die')
-    
-    # Run checks in parallel (8 workers for speed)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {
-            executor.submit(ping_channel, ch.id, ch.stream_url): ch 
-            for ch in channels if ch.stream_url
-        }
-        for future in concurrent.futures.as_completed(futures):
-            ch = futures[future]
-            try:
-                ch_id, new_status = future.result(timeout=10)
-                old_status = ch.status
-                ch.status = new_status
-                ch.last_checked_at = datetime.utcnow()
-                if old_status != new_status:
-                    results['updated'] += 1
-                if new_status == 'live':
-                    results['live'] += 1
-                else:
-                    results['die'] += 1
-            except:
-                ch.status = 'die'
-                ch.last_checked_at = datetime.utcnow()
-                results['die'] += 1
-    
-    db.session.commit()
+    # Always use background scan for stability and to avoid Gunicorn TLE
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.start_background_scan(
+        current_app._get_current_object(),
+        mode='all',
+        playlist_id=playlist_id,
+        delay=5
+    )
     
     return jsonify({
-        'status': 'ok',
-        'total': total,
-        'live': results['live'],
-        'die': results['die'],
-        'updated': results['updated']
+        'status': 'background',
+        'message': f'Signal check for "{profile.name}" initiated in background.',
+        'playlist_id': playlist_id
     })
 
 @playlists_bp.route('/publish/<slug>.xml')

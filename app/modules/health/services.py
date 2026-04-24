@@ -45,13 +45,13 @@ class HealthCheckService:
             
             # Try a quick HEAD first
             try:
-                response = requests.head(channel.stream_url, timeout=5, headers=headers, allow_redirects=True)
+                response = requests.head(channel.stream_url, timeout=10, headers=headers, allow_redirects=True)
                 latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                 ping_ok = response.status_code < 400
             except:
                 # Fallback to a tiny GET
                 try:
-                    response = requests.get(channel.stream_url, timeout=5, headers=headers, stream=True)
+                    response = requests.get(channel.stream_url, timeout=10, headers=headers, stream=True)
                     latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                     ping_ok = response.status_code < 400
                     response.close()
@@ -405,7 +405,7 @@ class HealthCheckService:
                                 time.sleep(float(manual_delay))
                             else:
                                 from app.modules.settings.services import SettingService
-                                time.sleep(int(SettingService.get('SCAN_DELAY_SECONDS', '1')))
+                                time.sleep(int(SettingService.get('SCAN_DELAY_SECONDS', '5')))
                     
                     state = ScannerStatus.get_singleton()
                     state.is_running = False

@@ -114,6 +114,8 @@ export const Playlists: React.FC = () => {
         setCheckResult({ id, live: data.live, die: data.die, total: data.total, updated: data.updated });
         // Auto-hide result after 8 seconds
         setTimeout(() => setCheckResult(prev => prev?.id === id ? null : prev), 8000);
+      } else if (data.status === 'background') {
+        alert(data.message || 'Background scan started for large playlist.');
       }
     } catch (err) {
       alert('Quick check failed');
