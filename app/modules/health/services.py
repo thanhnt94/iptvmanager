@@ -48,12 +48,30 @@ class HealthCheckService:
                 response = requests.head(channel.stream_url, timeout=10, headers=headers, allow_redirects=True)
                 latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                 ping_ok = response.status_code < 400
+                
+                # Validation: If it's HTML, it's probably an error page, not a stream
+                ctype = response.headers.get('Content-Type', '').lower()
+                if ping_ok and 'text/html' in ctype:
+                    # Some sites use HTML for everything, but mostly it's a "Not Found" page
+                    # Let's double check with a GET if it's small
+                    ping_ok = False 
             except:
                 # Fallback to a tiny GET
                 try:
                     response = requests.get(channel.stream_url, timeout=10, headers=headers, stream=True)
                     latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                     ping_ok = response.status_code < 400
+                    
+                    ctype = response.headers.get('Content-Type', '').lower()
+                    if ping_ok and 'text/html' in ctype:
+                        ping_ok = False
+                    
+                    # Also check if it's an empty body
+                    if ping_ok:
+                        content_length = response.headers.get('Content-Length')
+                        if content_length and int(content_length) == 0:
+                            ping_ok = False
+                            
                     response.close()
                 except:
                     ping_ok = False
@@ -438,8 +456,8 @@ class HealthCheckService:
         
         def run_passive():
             with app.app_context():
-                logger.debug(f"Passive HealthCheck triggered for channel {channel_id} (Fast Mode)")
-                HealthCheckService.check_stream(channel_id, fast_mode=True)
+                logger.debug(f"Passive HealthCheck triggered for channel {channel_id} (Fast Mode / Forced)")
+                HealthCheckService.check_stream(channel_id, force=True, fast_mode=True)
         
         import threading
         thread = threading.Thread(target=run_passive)
