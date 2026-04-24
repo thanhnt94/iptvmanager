@@ -264,6 +264,11 @@ def get_filters():
 @login_required
 def get_info(id):
     ch = Channel.query.get_or_404(id)
+    
+    from app.modules.settings.services import SettingService
+    if SettingService.get('ENABLE_HEALTH_SYSTEM', True):
+        from app.modules.health.services import HealthCheckService
+        HealthCheckService.trigger_passive_check(id)
     from app.modules.playlists.models import PlaylistEntry
     memberships = [e.playlist_id for e in PlaylistEntry.query.filter_by(channel_id=id).all()]
     token = current_user.api_token
