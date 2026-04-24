@@ -13,7 +13,7 @@ interface UnifiedPlayerProps {
 
 export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({ 
   channel, 
-  initialMode = 'TRACKING', 
+  initialMode = 'original', 
   layout = 'full'
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);

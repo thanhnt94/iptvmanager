@@ -66,9 +66,9 @@ def list_programs():
         if date_str:
             start_look = datetime.strptime(date_str, '%Y-%m-%d')
         else:
-            start_look = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            start_look = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     except:
-        start_look = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_look = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     end_look = start_look + timedelta(days=1, hours=6) # 30h window
     
@@ -152,3 +152,37 @@ def import_epg_url():
         
     result = EPGService.import_xmltv_from_url(url, current_user.id)
     return jsonify(result)
+
+@epg_bp.route('/now-next/<path:epg_id>', methods=['GET'])
+@login_required
+def get_now_next(epg_id):
+    from app.modules.channels.models import EPGData
+    from datetime import datetime
+    # Using system local time (UTC+7 as requested)
+    now = datetime.now()
+    
+    current = EPGData.query.filter(
+        EPGData.epg_id == epg_id,
+        EPGData.start <= now,
+        EPGData.stop >= now
+    ).first()
+    
+    next_prog = EPGData.query.filter(
+        EPGData.epg_id == epg_id,
+        EPGData.start > now
+    ).order_by(EPGData.start.asc()).first()
+    
+    return jsonify({
+        'current': {
+            'title': current.title,
+            'start': current.start.isoformat(),
+            'stop': current.stop.isoformat(),
+            'desc': current.desc
+        } if current else None,
+        'next': {
+            'title': next_prog.title,
+            'start': next_prog.start.isoformat(),
+            'stop': next_prog.stop.isoformat(),
+            'desc': next_prog.desc
+        } if next_prog else None
+    })

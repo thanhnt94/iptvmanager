@@ -43,7 +43,7 @@ export const Player: React.FC<{ user: { username: string, role: string } }> = ({
                     <UnifiedPlayer 
                       key={activeChannel.id}
                       channel={activeChannel}
-                      initialMode="TRACKING"
+                      initialMode="original"
                     />
                   </div>
                 )}

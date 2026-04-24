@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
@@ -86,7 +86,38 @@ interface CustomSelectProps {
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ value, onChange, options, icon, minWidth = '160px' }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
   const selectedLabel = options.find(o => o.value === value)?.label || 'Select...';
+
+  // Keyboard navigation: Jump to item by pressing its first letter
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const char = e.key.toLowerCase();
+        const index = options.findIndex(opt => 
+          opt.label.trim().toLowerCase().startsWith(char)
+        );
+
+        if (index !== -1 && listRef.current) {
+          const container = listRef.current;
+          const targetItem = container.children[index] as HTMLElement;
+          if (targetItem) {
+            targetItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }
+      }
+
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, options]);
 
   return (
     <div className="relative" style={{ minWidth }}>
@@ -111,7 +142,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, onChange, options, i
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               className="absolute top-full left-0 right-0 mt-2 z-[100] glass border border-white/10 rounded-2xl overflow-hidden shadow-3xl py-1"
             >
-              <div className="max-h-60 overflow-y-auto scrollbar-hide">
+              <div ref={listRef} className="max-h-60 overflow-y-auto scrollbar-hide">
                 {options.map((opt) => (
                   <button 
                     key={opt.value}

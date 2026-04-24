@@ -196,12 +196,17 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                       channel={{
                         id: channelId || 0,
                         name: formData.name || 'Draft Preview',
+                        logo_url: formData.logo_url,
+                        group_name: formData.group_name,
                         stream_url: formData.stream_url,
                         proxy_type: formData.proxy_type,
                         play_links: {
-                          smart: `/api/channels/play/preview?url=${encodeURIComponent(formData.stream_url)}&proxy=${formData.proxy_type}&token=${localStorage.getItem('api_token')}`
+                          smart: `/api/channels/play/preview?url=${encodeURIComponent(formData.stream_url)}&proxy=${formData.proxy_type}&token=${localStorage.getItem('api_token')}`,
+                          tracking: `/api/channels/play/preview?url=${encodeURIComponent(formData.stream_url)}&proxy=${formData.proxy_type}&token=${localStorage.getItem('api_token')}`,
+                          original: formData.stream_url
                         }
                       }}
+                      initialMode="original"
                       layout="compact"
                     />
                   </div>

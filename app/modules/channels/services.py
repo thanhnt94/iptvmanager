@@ -844,8 +844,8 @@ class EPGService:
                 
                 # Parse times: 20240320120000 +0000
                 try:
-                    start_dt = datetime.strptime(start_str.split(' ')[0], '%Y%m%d%H%M%S')
-                    stop_dt = datetime.strptime(stop_str.split(' ')[0], '%Y%m%d%H%M%S')
+                    start_dt = EPGService._parse_xmltv_date(start_str)
+                    stop_dt = EPGService._parse_xmltv_date(stop_str)
                     
                     # Check for existing to avoid exact duplicates
                     existing = EPGData.query.filter_by(
@@ -999,8 +999,26 @@ class EPGService:
 
     @staticmethod
     def _parse_xmltv_date(date_str):
-        from datetime import datetime
-        # 20231023120000 +0000
-        clean = date_str.split(' ')[0]
-        return datetime.strptime(clean[:14], '%Y%m%d%H%M%S')
+        from datetime import datetime, timedelta
+        # Example: 20240424113000 +0000 or 20240424113000 +0700
+        if not date_str: return datetime.now()
+        parts = date_str.split(' ')
+        clean = parts[0]
+        try:
+            dt = datetime.strptime(clean[:14], '%Y%m%d%H%M%S')
+            
+            if len(parts) > 1:
+                offset_str = parts[1] # e.g. +0000 or +0700
+                sign = 1 if offset_str[0] == '+' else -1
+                hours = int(offset_str[1:3])
+                minutes = int(offset_str[3:5])
+                offset_minutes = sign * (hours * 60 + minutes)
+                
+                # Convert to UTC first, then to UTC+7
+                dt_utc = dt - timedelta(minutes=offset_minutes)
+                return dt_utc + timedelta(hours=7)
+            
+            return dt
+        except:
+            return datetime.now()
 
