@@ -56,7 +56,7 @@ def create_app(config_class=Config):
     # --- CORE BLUEPRINT REGISTRATION ---
     from app.modules.ingestion.routes import ingestion_bp
     from app.modules.channels.routes import channels_bp, streams_bp
-    from app.modules.playlists.routes import playlists_bp
+    from app.modules.playlists.routes import playlists_bp, publish_bp
     from app.modules.auth.routes import auth_bp
     from app.modules.auth_center.routes import auth_center_bp
     from app.modules.health.routes import health_bp
@@ -68,6 +68,7 @@ def create_app(config_class=Config):
     app.register_blueprint(channels_bp, url_prefix='/api/channels')
     app.register_blueprint(streams_bp, url_prefix='/api/streams')
     app.register_blueprint(playlists_bp, url_prefix='/api/playlists')
+    app.register_blueprint(publish_bp) # NO PREFIX for friendly URLs
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(auth_center_bp, url_prefix='/api/auth-center')
     app.register_blueprint(health_bp, url_prefix='/api/health')

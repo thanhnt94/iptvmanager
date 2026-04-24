@@ -7,6 +7,7 @@ from app.modules.channels.models import Channel
 from app.core.database import db
 
 playlists_bp = Blueprint('playlists', __name__)
+publish_bp = Blueprint('publish', __name__)
 
 # API & Manifest Core Only - HTML Routes Purged
 
@@ -77,6 +78,23 @@ def list_playlists():
         owner = User.query.get(p.owner_id) if p.owner_id else None
         owner_name = owner.username if owner else 'system'
         
+        # Calculate live/die stats
+        live_count = 0
+        die_count = 0
+        if p.is_system:
+            stat_query = Channel.query
+            if p.slug == 'public': stat_query = stat_query.filter_by(is_public=True)
+            elif p.owner_id:
+                stat_query = stat_query.filter_by(owner_id=p.owner_id)
+                if "protected" in p.slug: stat_query = stat_query.filter_by(is_original=True)
+            live_count = stat_query.filter_by(status='live').count()
+            die_count = stat_query.filter_by(status='die').count()
+        else:
+            for entry in p.entries:
+                if entry.channel:
+                    if entry.channel.status == 'live': live_count += 1
+                    elif entry.channel.status == 'die': die_count += 1
+        
         res.append({
             'id': p.id,
             'name': p.name,
@@ -84,6 +102,8 @@ def list_playlists():
             'security_token': p.security_token,
             'is_system': p.is_system,
             'channel_count': count,
+            'live_count': live_count,
+            'die_count': die_count,
             'created_at': p.created_at.strftime('%Y-%m-%d'),
             'owner_username': owner_name
         })
@@ -268,10 +288,10 @@ def update_entry_group(entry_id):
     PlaylistService.update_entry_group(entry_id, group_id)
     return jsonify({'status': 'ok'})
 
-# Dynamic Manifest Endpoints
-@playlists_bp.route('/p/<username>/<slug>', defaults={'mode': 'smart', 'status': 'live'})
-@playlists_bp.route('/p/<username>/<slug>/<mode>', defaults={'status': 'live'})
-@playlists_bp.route('/p/<username>/<slug>/<mode>/<status>')
+# Dynamic Manifest Endpoints (Friendly URLs - NO /api PREFIX)
+@publish_bp.route('/p/<username>/<slug>', defaults={'mode': 'smart', 'status': 'live'})
+@publish_bp.route('/p/<username>/<slug>/<mode>', defaults={'status': 'live'})
+@publish_bp.route('/p/<username>/<slug>/<mode>/<status>')
 def publish_friendly(username, slug, mode, status):
     from app.modules.auth.models import User
     user = User.query.filter_by(username=username).first_or_404()
@@ -284,13 +304,13 @@ def publish_friendly(username, slug, mode, status):
     # Token is now optional (username + secret slug acts as the key)
     token = request.args.get('token') or profile.security_token
     
-    xml_url = url_for('playlists.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
+    xml_url = url_for('publish.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
     m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
     response = Response(m3u_content, mimetype='application/x-mpegurl')
     response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
     return response
 
-@playlists_bp.route('/publish/<username>/<slug>.<ext>')
+@publish_bp.route('/publish/<username>/<slug>.<ext>')
 def publish_personalized(username, slug, ext):
     from app.modules.auth.models import User
     user = User.query.filter_by(username=username).first_or_404()
@@ -309,22 +329,22 @@ def publish_personalized(username, slug, ext):
     if ext == 'xml':
         return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
     else:
-        xml_url = url_for('playlists.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
+        xml_url = url_for('publish.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
         m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
         response = Response(m3u_content, mimetype='application/x-mpegurl')
         response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
         return response
 
-@playlists_bp.route('/publish/<slug>.m3u8')
+@publish_bp.route('/publish/<slug>.m3u8')
 def publish_m3u8_legacy(slug):
     # Keep legacy for some time or redirect
     profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
     from app.modules.auth.models import User
     owner = User.query.get(profile.owner_id) if profile.owner_id else None
     username = owner.username if owner else 'system'
-    return redirect(url_for('playlists.publish_personalized', username=username, slug=slug, ext='m3u8', **request.args))
+    return redirect(url_for('publish.publish_personalized', username=username, slug=slug, ext='m3u8', **request.args))
 
-@playlists_bp.route('/publish/user/<username>/<ptype>.<ext>')
+@publish_bp.route('/publish/user/<username>/<ptype>.<ext>')
 def publish_user_special(username, ptype, ext):
     from app.modules.auth.models import User
     user = User.query.filter_by(username=username).first_or_404()
@@ -343,11 +363,11 @@ def publish_user_special(username, ptype, ext):
     else:
         hide_die = request.args.get('hide_die', 'false').lower() == 'true'
         mode = request.args.get('mode')
-        xml_url = url_for('playlists.publish_user_special', username=username, ptype=ptype, ext='xml', token=token, _external=True)
+        xml_url = url_for('publish.publish_user_special', username=username, ptype=ptype, ext='xml', token=token, _external=True)
         m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
         return Response(m3u_content, mimetype='application/x-mpegurl')
 
-@playlists_bp.route('/publish/common/public.<ext>')
+@publish_bp.route('/publish/common/public.<ext>')
 def publish_common_public(ext):
     token = request.args.get('token')
     from app.modules.auth.models import User
@@ -362,9 +382,28 @@ def publish_common_public(ext):
     else:
         hide_die = request.args.get('hide_die', 'false').lower() == 'true'
         mode = request.args.get('mode')
-        xml_url = url_for('playlists.publish_common_public', ext='xml', token=token, _external=True)
+        xml_url = url_for('publish.publish_common_public', ext='xml', token=token, _external=True)
         m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
         return Response(m3u_content, mimetype='application/x-mpegurl')
+
+@publish_bp.route('/publish/<slug>.xml')
+def publish_xml(slug):
+    profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
+    token = request.args.get('token')
+    
+    from app.modules.auth.models import User
+    viewer = User.query.filter_by(api_token=token).first() if token else None
+
+    # Access Control
+    if profile.is_system:
+        if profile.slug == 'public' and (not viewer or viewer.role == 'free'):
+            abort(403)
+        if profile.owner_id and (not viewer or (viewer.id != profile.owner_id and viewer.role != 'admin')):
+            abort(403)
+    elif profile.security_token and token != profile.security_token:
+        abort(403)
+
+    return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
 
 @playlists_bp.route('/<int:playlist_id>', methods=['DELETE'])
 @login_required
@@ -373,6 +412,89 @@ def delete_playlist(playlist_id):
     if success:
         return jsonify({'status': 'ok', 'message': message})
     return jsonify({'status': 'error', 'message': message}), 400
+
+@playlists_bp.route('/<int:playlist_id>/quick-check', methods=['POST'])
+@login_required
+def quick_check_playlist(playlist_id):
+    """Fast signal-only check: HEAD request per channel, no ffprobe. Returns live/die counts."""
+    import requests as http_requests
+    import concurrent.futures
+    from datetime import datetime
+    
+    profile = PlaylistProfile.query.get_or_404(playlist_id)
+    
+    # Get channels for this playlist
+    if profile.is_system:
+        query = Channel.query
+        if profile.slug == 'public':
+            query = query.filter_by(is_public=True)
+        elif profile.owner_id:
+            query = query.filter_by(owner_id=profile.owner_id)
+            if "protected" in profile.slug:
+                query = query.filter_by(is_original=True)
+        channels = query.all()
+    else:
+        channels = [entry.channel for entry in profile.entries if entry.channel]
+    
+    total = len(channels)
+    if total == 0:
+        return jsonify({'status': 'ok', 'total': 0, 'live': 0, 'die': 0, 'updated': 0})
+    
+    results = {'live': 0, 'die': 0, 'updated': 0}
+    
+    def ping_channel(ch_id, url):
+        """Quick HEAD/GET check - returns (channel_id, 'live'|'die')"""
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': url
+        }
+        try:
+            resp = http_requests.head(url, timeout=5, headers=headers, allow_redirects=True)
+            if resp.status_code < 400:
+                return (ch_id, 'live')
+        except:
+            pass
+        try:
+            resp = http_requests.get(url, timeout=5, headers=headers, stream=True)
+            alive = resp.status_code < 400
+            resp.close()
+            return (ch_id, 'live' if alive else 'die')
+        except:
+            return (ch_id, 'die')
+    
+    # Run checks in parallel (8 workers for speed)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {
+            executor.submit(ping_channel, ch.id, ch.stream_url): ch 
+            for ch in channels if ch.stream_url
+        }
+        for future in concurrent.futures.as_completed(futures):
+            ch = futures[future]
+            try:
+                ch_id, new_status = future.result(timeout=10)
+                old_status = ch.status
+                ch.status = new_status
+                ch.last_checked_at = datetime.utcnow()
+                if old_status != new_status:
+                    results['updated'] += 1
+                if new_status == 'live':
+                    results['live'] += 1
+                else:
+                    results['die'] += 1
+            except:
+                ch.status = 'die'
+                ch.last_checked_at = datetime.utcnow()
+                results['die'] += 1
+    
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok',
+        'total': total,
+        'live': results['live'],
+        'die': results['die'],
+        'updated': results['updated']
+    })
 
 @playlists_bp.route('/publish/<slug>.xml')
 def publish_xml(slug):

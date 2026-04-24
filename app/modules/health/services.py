@@ -14,7 +14,7 @@ logger = logging.getLogger('iptv')
 
 class HealthCheckService:
     @staticmethod
-    def check_stream(channel_id, force=False):
+    def check_stream(channel_id, force=False, fast_mode=False):
         """Checks the connectivity and technical specs of a single stream URL."""
         channel = Channel.query.get(channel_id)
         if not channel:
@@ -67,13 +67,17 @@ class HealthCheckService:
                 else: channel.quality = 'poor'
             
             # 3. Stream Specs via FFprobe (Heavy)
-            enable_ffprobe = SettingService.get('ENABLE_FFPROBE_DETAIL', True)
+            # Only run ffprobe if NOT in fast_mode AND setting is ON
+            enable_ffprobe = SettingService.get('ENABLE_FFPROBE_DETAIL', True) and not fast_mode
             success = False
             if enable_ffprobe:
                 success = HealthCheckService._update_stream_specs(channel)
             else:
-                logger.debug(f"Skipping FFprobe for {channel.name} (Deep Analysis OFF)")
-                success = ping_ok # If ping is ok, we consider it a success for "basic" live status
+                if fast_mode:
+                    logger.debug(f"Fast Mode: Skipping FFprobe for {channel.name}")
+                else:
+                    logger.debug(f"Skipping FFprobe for {channel.name} (Deep Analysis OFF)")
+                success = ping_ok # In fast mode, ping_ok is enough for success status
             
             if not success:
                 if not ping_ok:
@@ -412,8 +416,8 @@ class HealthCheckService:
         
         def run_passive():
             with app.app_context():
-                logger.debug(f"Passive HealthCheck triggered for channel {channel_id}")
-                HealthCheckService.check_stream(channel_id)
+                logger.debug(f"Passive HealthCheck triggered for channel {channel_id} (Fast Mode)")
+                HealthCheckService.check_stream(channel_id, fast_mode=True)
         
         import threading
         thread = threading.Thread(target=run_passive)

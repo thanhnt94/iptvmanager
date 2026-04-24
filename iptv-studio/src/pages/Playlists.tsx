@@ -19,7 +19,8 @@ import {
   Trash2,
   Activity,
   Globe,
-  FolderTree
+  FolderTree,
+  Wifi
 } from 'lucide-react';
 
 interface Playlist {
@@ -28,6 +29,8 @@ interface Playlist {
   slug: string;
   is_system: boolean;
   channel_count: number;
+  live_count: number;
+  die_count: number;
   security_token: string;
   created_at: string;
   owner_username: string;
@@ -49,6 +52,8 @@ export const Playlists: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newSlug, setNewSlug] = useState('');
   const [creating, setCreating] = useState(false);
+  const [checkingId, setCheckingId] = useState<number | string | null>(null);
+  const [checkResult, setCheckResult] = useState<{id: number|string, live: number, die: number, total: number, updated: number} | null>(null);
 
   useEffect(() => {
     fetch('/api/playlists')
@@ -96,6 +101,24 @@ export const Playlists: React.FC = () => {
       }
     } catch (err) {
       alert('Failed to delete playlist');
+    }
+  };
+
+  const handleQuickCheck = async (id: number | string) => {
+    setCheckingId(id);
+    setCheckResult(null);
+    try {
+      const res = await fetch(`/api/playlists/${id}/quick-check`, { method: 'POST' });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        setCheckResult({ id, live: data.live, die: data.die, total: data.total, updated: data.updated });
+        // Auto-hide result after 8 seconds
+        setTimeout(() => setCheckResult(prev => prev?.id === id ? null : prev), 8000);
+      }
+    } catch (err) {
+      alert('Quick check failed');
+    } finally {
+      setCheckingId(null);
     }
   };
 
@@ -195,7 +218,19 @@ export const Playlists: React.FC = () => {
                          <Tv size={14} />
                          <span className="text-[10px] font-black uppercase tracking-widest">Channels</span>
                       </div>
-                      <p className="text-xl font-black text-white">{item.channel_count}</p>
+                      <div className="flex flex-col">
+                        <span className="text-[32px] font-black text-white leading-none">{item.channel_count}</span>
+                        <div className="flex items-center gap-3 mt-1">
+                          <div className="flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span className="text-[10px] font-bold text-emerald-500/80 uppercase">{item.live_count} LIVE</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            <span className="text-[10px] font-bold text-rose-500/80 uppercase">{item.die_count} DIE</span>
+                          </div>
+                        </div>
+                      </div>
                    </div>
                    <div className="bg-slate-950/40 p-4 rounded-2xl border border-white/5">
                       <div className="flex items-center gap-2 text-slate-500 mb-1">
@@ -207,11 +242,31 @@ export const Playlists: React.FC = () => {
                 </div>
 
                 <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between">
-                   <div className="flex items-center gap-2 text-slate-500">
-                      <Clock size={12} />
-                      <span className="text-[10px] whitespace-nowrap">{item.created_at}</span>
-                   </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 text-slate-500">
+                       <Clock size={12} />
+                       <span className="text-[10px] whitespace-nowrap">{item.created_at}</span>
+                    </div>
+                    {/* Check Result Toast */}
+                    {checkResult?.id === item.id && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        className="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-950/95 backdrop-blur-xl border border-white/10 rounded-2xl px-5 py-3 shadow-2xl z-50 flex items-center gap-4 whitespace-nowrap"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] font-black text-emerald-400">{checkResult.live} LIVE</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-rose-500" />
+                          <span className="text-[10px] font-black text-rose-400">{checkResult.die} DIE</span>
+                        </div>
+                        {checkResult.updated > 0 && (
+                          <span className="text-[10px] font-black text-amber-400">{checkResult.updated} changed</span>
+                        )}
+                      </motion.div>
+                    )}
+                     <div className="flex items-center gap-2">
                        <div className="relative">
                           <button 
                             onClick={() => setActiveDropdown(activeDropdown === item.id ? null : item.id)}
@@ -295,6 +350,16 @@ export const Playlists: React.FC = () => {
                            )}
                        </div>
                        
+                       {/* Quick Check Button */}
+                       <button 
+                         onClick={() => handleQuickCheck(item.id)}
+                         disabled={checkingId === item.id}
+                         className={`p-2 rounded-xl transition-all border ${checkingId === item.id ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'hover:bg-emerald-500/10 hover:text-emerald-400 text-slate-500 border-transparent hover:border-emerald-500/20'}`}
+                         title="Quick Signal Check"
+                       >
+                          {checkingId === item.id ? <Loader2 size={16} className="animate-spin" /> : <Wifi size={16} />}
+                       </button>
+
                        <button 
                           onClick={() => navigate(`/playlists/${item.id}`)}
                           className="px-4 py-2 bg-slate-950/50 hover:bg-white/5 text-slate-400 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/5"
