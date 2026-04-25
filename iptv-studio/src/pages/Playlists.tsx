@@ -72,6 +72,7 @@ export const Playlists: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [checkingId, setCheckingId] = useState<number | string | null>(null);
   const [checkResult, setCheckResult] = useState<{id: number|string, live: number, die: number, total: number, updated: number} | null>(null);
+  const [scanDelayMenu, setScanDelayMenu] = useState<number | string | null>(null);
 
   // Auto Scan Modal State
   const [isAutoScanModalOpen, setIsAutoScanModalOpen] = useState(false);
@@ -217,27 +218,30 @@ export const Playlists: React.FC = () => {
     setIsAutoScanModalOpen(true);
   };
 
-  const handleQuickCheck = async (id: number | string) => {
+  const handleQuickCheck = async (id: number | string, delay: number = 5) => {
     setCheckingId(id);
     setCheckResult(null);
+    setScanDelayMenu(null);
     
     // Optimistic Update: Mark as scanning immediately in UI
     setPlaylists(prev => prev.map(p => p.id === id ? { ...p, is_scanning: true, current_scanning_name: 'Initiating...' } : p));
 
     try {
-      const res = await fetch(`/api/playlists/${id}/quick-check`, { method: 'POST' });
+      const res = await fetch(`/api/playlists/${id}/quick-check`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delay })
+      });
       const data = await res.json();
       if (data.status === 'ok') {
         setCheckResult({ id, live: data.live, die: data.die, total: data.total, updated: data.updated });
         setTimeout(() => setCheckResult(prev => prev?.id === id ? null : prev), 8000);
       } else if (data.status === 'background') {
-        // No alert needed, the UI will reflect scanning status via polling
         console.log("Background scan started");
       }
     } catch (err: any) {
       console.error('Quick check failed:', err);
       alert(`Lỗi: Không thể khởi chạy tiến trình quét ngầm. ${err.message || 'Máy chủ phản hồi lỗi.'}`);
-      // Revert scanning status on error
       setPlaylists(prev => prev.map(p => p.id === id ? { ...p, is_scanning: false } : p));
     } finally {
       setCheckingId(null);
@@ -328,7 +332,7 @@ export const Playlists: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.05 }}
             key={item.id} 
-            className={`glass relative group transition-all hover:bg-slate-900/60 ${viewMode === 'grid' ? 'p-6 rounded-[2rem]' : 'p-4 rounded-2xl flex items-center justify-between'}`}
+            className={`glass relative group transition-all hover:bg-slate-900/60 ${viewMode === 'grid' ? 'p-6 rounded-[2rem]' : 'p-4 rounded-2xl flex items-center justify-between'} ${scanDelayMenu === item.id || activeDropdown === item.id || activeMenu === item.id ? 'z-[60]' : ''}`}
           >
             <div className="flex items-center gap-4">
                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${item.is_system ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-400'}`}>
@@ -381,7 +385,7 @@ export const Playlists: React.FC = () => {
                           </div>
                         </div>
                         
-                        {(item.is_scanning || (scannerStatus?.is_running && Number(scannerStatus?.playlist_id) === Number(item.id))) && (
+                        {scannerStatus?.is_running && Number(scannerStatus?.playlist_id) === Number(item.id) && (
                           <div className="mt-4 space-y-3 p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2 overflow-hidden">
@@ -541,20 +545,40 @@ export const Playlists: React.FC = () => {
                            <XSquare size={16} className="animate-pulse" />
                          </button>
                        ) : (
-                         <button 
-                            onClick={() => handleQuickCheck(item.id)}
-                            disabled={checkingId === item.id}
-                            className={`p-2 rounded-xl transition-all border ${
-                              checkingId === item.id 
-                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
-                                : 'hover:bg-emerald-500/10 hover:text-emerald-400 text-slate-500 border-transparent hover:border-emerald-500/20'
-                            }`}
-                            title="Quick Signal Check"
-                          >
-                             {checkingId === item.id 
-                               ? <Loader2 size={16} className="animate-spin" /> 
-                               : <Wifi size={16} />}
-                          </button>
+                         <div className="relative">
+                           <button 
+                              onClick={() => setScanDelayMenu(scanDelayMenu === item.id ? null : item.id)}
+                              disabled={checkingId === item.id}
+                              className={`p-2 rounded-xl transition-all border ${
+                                checkingId === item.id 
+                                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
+                                  : 'hover:bg-emerald-500/10 hover:text-emerald-400 text-slate-500 border-transparent hover:border-emerald-500/20'
+                              }`}
+                              title="Quick Signal Check"
+                            >
+                               {checkingId === item.id 
+                                 ? <Loader2 size={16} className="animate-spin" /> 
+                                 : <Wifi size={16} />}
+                            </button>
+                            {scanDelayMenu === item.id && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setScanDelayMenu(null)} />
+                                <div className="absolute right-0 top-full mt-2 z-50 bg-slate-900 border border-white/10 rounded-xl shadow-2xl p-2 min-w-[140px] animate-in fade-in zoom-in-95 duration-200">
+                                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-2 py-1 mb-1">Scan Delay</p>
+                                   {[0, 1, 3, 5, 10, 30].map(d => (
+                                     <button
+                                       key={d}
+                                       onClick={() => handleQuickCheck(item.id, d)}
+                                       className="w-full text-left px-3 py-2 text-xs font-bold text-slate-300 hover:bg-indigo-500/10 hover:text-indigo-400 rounded-lg transition-all flex items-center justify-between"
+                                     >
+                                       <span>{d === 0 ? 'No delay' : `${d}s / channel`}</span>
+                                       {d === 5 && <span className="text-[8px] text-indigo-500 font-black">DEFAULT</span>}
+                                     </button>
+                                   ))}
+                                </div>
+                              </>
+                            )}
+                         </div>
                        )}
 
                        <button 

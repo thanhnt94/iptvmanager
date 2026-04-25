@@ -292,12 +292,26 @@ class HealthCheckService:
 
     @staticmethod
     def stop_scan():
-        """Instant stop via in-memory signal — no DB dependency."""
+        """Instant stop via in-memory signal + immediate DB cleanup."""
         HealthCheckService._stop_event.set()
-        # Also clear the queue so no pending scans start
+        # Clear the queue so no pending scans start
         with HealthCheckService._queue_lock:
             HealthCheckService._scan_queue.clear()
-        logger.info("Stop signal sent + queue cleared.")
+        # Immediately update DB so frontend poll sees stopped state
+        try:
+            state = ScannerStatus.get_singleton()
+            state.is_running = False
+            state.stop_requested = True
+            state.current_name = None
+            db.session.commit()
+            # Also clean up playlist scanning flags
+            for p in PlaylistProfile.query.filter_by(is_scanning=True).all():
+                p.is_scanning = False
+                p.current_scanning_name = None
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Stop DB cleanup error: {e}")
+        logger.info("Stop signal sent + queue cleared + DB cleaned.")
 
     @staticmethod
     def _add_log(name, status, error=None):
@@ -427,13 +441,28 @@ class HealthCheckService:
 
                             future = executor.submit(check_with_context, app, channel.id)
                             try:
-                                result = future.result(timeout=25) 
+                                # Poll with 1-second intervals so stop is responsive
+                                result = None
+                                for _tick in range(25):
+                                    if HealthCheckService._stop_event.is_set():
+                                        future.cancel()
+                                        break
+                                    try:
+                                        result = future.result(timeout=1)
+                                        break
+                                    except concurrent.futures.TimeoutError:
+                                        continue
+                                else:
+                                    # 25 seconds expired
+                                    channel.status = 'die'
+                                    channel.error_message = "Diagnostic Timeout (Server too slow)"
+                                
+                                if HealthCheckService._stop_event.is_set():
+                                    break
+                                    
                                 if result:
                                     channel.status = result.get('status', 'unknown')
                                     channel.error_message = result.get('error_message')
-                            except concurrent.futures.TimeoutError:
-                                channel.status = 'die'
-                                channel.error_message = "Diagnostic Timeout (Server too slow)"
                             except Exception as e:
                                 logger.error(f"Scanner internal error for {channel.id}: {e}")
         
@@ -463,10 +492,15 @@ class HealthCheckService:
                             logger.info(f" [SCAN] #{playlist_id} {state.current}/{state.total} ({progress_pct:.0f}%) L:{state.live_count} D:{state.die_count} | {channel.name}")
                             
                             if manual_delay is not None:
-                                time.sleep(float(manual_delay))
+                                if HealthCheckService._stop_event.wait(timeout=float(manual_delay)):
+                                    logger.info(f"Scanner: STOPPED during delay at {idx+1}/{len(channels)}")
+                                    break
                             else:
                                 from app.modules.settings.services import SettingService
-                                time.sleep(int(SettingService.get('SCAN_DELAY_SECONDS', '5')))
+                                wait_time = int(SettingService.get('SCAN_DELAY_SECONDS', '5'))
+                                if HealthCheckService._stop_event.wait(timeout=wait_time):
+                                    logger.info(f"Scanner: STOPPED during delay at {idx+1}/{len(channels)}")
+                                    break
 
                 except Exception as e:
                     logger.error(f"Scanner CRITICAL ERROR: {e}", exc_info=True)

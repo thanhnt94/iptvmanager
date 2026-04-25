@@ -467,18 +467,21 @@ def delete_playlist(playlist_id):
 def quick_check_playlist(playlist_id):
     profile = PlaylistProfile.query.get_or_404(playlist_id)
     
-    # Always use background scan for stability and to avoid Gunicorn TLE
+    # Read delay from request body (default: 5 seconds)
+    data = request.get_json(silent=True) or {}
+    delay = data.get('delay', 5)
+    
     from app.modules.health.services import HealthCheckService
     HealthCheckService.start_background_scan(
         current_app._get_current_object(),
         mode='all',
         playlist_id=playlist_id,
-        delay=5
+        delay=delay
     )
     
     return jsonify({
         'status': 'background',
-        'message': f'Signal check for "{profile.name}" initiated.',
+        'message': f'Signal check for "{profile.name}" initiated (delay: {delay}s).',
         'playlist_id': playlist_id
     })
 
