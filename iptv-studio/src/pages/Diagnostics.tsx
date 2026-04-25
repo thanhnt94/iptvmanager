@@ -78,9 +78,30 @@ export const Diagnostics: React.FC = () => {
 
   useEffect(() => {
     fetchOptions();
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 1500);
-    return () => clearInterval(interval);
+    
+    let timeoutId: any;
+    let isMounted = true;
+    
+    const poll = async () => {
+      if (!isMounted) return;
+      try {
+        const res = await fetch('/api/health/status');
+        const data = await res.json();
+        if (isMounted) setStatus(data);
+        const delay = data.is_running ? 2000 : 8000;
+        timeoutId = setTimeout(poll, delay);
+      } catch (err) {
+        console.error("Status fetch error:", err);
+        if (isMounted) timeoutId = setTimeout(poll, 8000);
+      }
+    };
+    
+    poll();
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   useEffect(() => {
@@ -114,7 +135,8 @@ export const Diagnostics: React.FC = () => {
   const stopScan = async () => {
     try {
       await fetch('/api/health/stop', { method: 'POST' });
-      fetchStatus();
+      // Immediately reset UI — don't wait for next poll
+      setStatus(prev => prev ? { ...prev, is_running: false, stop_requested: true, current_name: '' } : prev);
     } catch (err) {
       console.error("Stop scan error:", err);
     }
@@ -297,7 +319,7 @@ export const Diagnostics: React.FC = () => {
 
           {/* Progress Section */}
           <AnimatePresence>
-            {(status.is_running || status.current > 0) && (
+            {status.is_running && (
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
