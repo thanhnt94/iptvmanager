@@ -17,22 +17,32 @@ class PlaylistService:
         return profile
 
     @staticmethod
-    def update_profile(playlist_id, name=None, slug=None):
+    def update_profile(playlist_id, name=None, slug=None, auto_scan_enabled=None, auto_scan_interval=None):
         profile = PlaylistProfile.query.get(playlist_id)
         if not profile:
             return False, "Playlist not found"
         
         if profile.is_system:
-            return False, "System playlists cannot be renamed"
-            
-        if name:
-            profile.name = name
-        if slug:
-            # Check for slug uniqueness for this user
-            existing = PlaylistProfile.query.filter_by(slug=slug, owner_id=profile.owner_id).first()
-            if existing and existing.id != profile.id:
-                return False, "Slug already in use"
-            profile.slug = slug
+            # Allow updating auto-scan for system playlists too if needed, but keep name/slug protected
+            pass
+        else:
+            if name:
+                profile.name = name
+            if slug:
+                # Check for slug uniqueness for this user
+                existing = PlaylistProfile.query.filter_by(slug=slug, owner_id=profile.owner_id).first()
+                if existing and existing.id != profile.id:
+                    return False, "Slug already in use"
+                profile.slug = slug
+        
+        if auto_scan_enabled is not None:
+            profile.auto_scan_enabled = bool(auto_scan_enabled)
+        
+        if auto_scan_interval is not None:
+            try:
+                profile.auto_scan_interval = int(auto_scan_interval)
+            except (ValueError, TypeError):
+                pass
             
         db.session.commit()
         return True, profile

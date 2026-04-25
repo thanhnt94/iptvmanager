@@ -14,6 +14,15 @@ class PlaylistProfile(db.Model):
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Auto-scan settings
+    auto_scan_enabled = db.Column(db.Boolean, default=False)
+    auto_scan_interval = db.Column(db.Integer, default=1440) # Default 1 day in minutes
+    last_auto_scan_at = db.Column(db.DateTime)
+    
+    # Live Scanning Status (Persistent in DB)
+    is_scanning = db.Column(db.Boolean, default=False)
+    current_scanning_name = db.Column(db.String(255))
+    
     # Relationship to entries
     entries = db.relationship('PlaylistEntry', backref='playlist', cascade='all, delete-orphan', order_by='PlaylistEntry.order_index')
     groups = db.relationship('PlaylistGroup', backref='playlist', cascade='all, delete-orphan')

@@ -8,7 +8,6 @@ import {
   MoreVertical, 
   Layers, 
   Tv, 
-  ShieldCheck, 
   Clock,
   LayoutGrid,
   List,
@@ -20,7 +19,8 @@ import {
   Activity,
   Globe,
   FolderTree,
-  Wifi
+  Wifi,
+  XSquare
 } from 'lucide-react';
 
 interface Playlist {
@@ -34,6 +34,21 @@ interface Playlist {
   security_token: string;
   created_at: string;
   owner_username: string;
+  auto_scan_enabled: boolean;
+  auto_scan_interval: number;
+  last_auto_scan_at: string | null;
+  is_scanning: boolean;
+  current_scanning_name: string | null;
+}
+
+interface ScannerStatus {
+  is_running: boolean;
+  total: number;
+  current: number;
+  current_name: string;
+  playlist_id: number | null;
+  live_count: number;
+  die_count: number;
 }
 
 export const Playlists: React.FC = () => {
@@ -47,6 +62,9 @@ export const Playlists: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [hideDieFilter, setHideDieFilter] = useState(true);
   
+  // Scanner Progress State
+  const [scannerStatus, setScannerStatus] = useState<ScannerStatus | null>(null);
+  
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -55,7 +73,14 @@ export const Playlists: React.FC = () => {
   const [checkingId, setCheckingId] = useState<number | string | null>(null);
   const [checkResult, setCheckResult] = useState<{id: number|string, live: number, die: number, total: number, updated: number} | null>(null);
 
-  useEffect(() => {
+  // Auto Scan Modal State
+  const [isAutoScanModalOpen, setIsAutoScanModalOpen] = useState(false);
+  const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
+  const [tempInterval, setTempInterval] = useState(1440);
+  const [tempEnabled, setTempEnabled] = useState(false);
+  const [savingAutoScan, setSavingAutoScan] = useState(false);
+
+  const fetchPlaylists = () => {
     fetch('/api/playlists')
       .then(res => res.json())
       .then(data => {
@@ -63,7 +88,58 @@ export const Playlists: React.FC = () => {
         setLoading(false);
       })
       .catch(err => console.error("Playlists fetch error:", err));
+  };
+
+  useEffect(() => {
+    fetchPlaylists();
   }, []);
+
+  // Use a ref to track the previous running state to avoid infinite effect loops
+  const wasRunningRef = React.useRef(false);
+
+  // Polling for Scanner Status - Safe recursive approach
+  useEffect(() => {
+    let timeoutId: any;
+    let isMounted = true;
+
+    const poll = async () => {
+      if (!isMounted) return;
+      try {
+        const res = await fetch('/api/health/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (!isMounted) return;
+
+        // If scan is running, refresh the full list to get updated current_scanning_name from DB
+        if (data.is_running) {
+          fetchPlaylists();
+        }
+        
+        // If scan just finished (transition from running to not running)
+        if (wasRunningRef.current && !data.is_running) {
+          fetchPlaylists();
+        }
+        
+        wasRunningRef.current = data.is_running;
+        setScannerStatus(data);
+        
+        // Dynamic interval: Poll faster if scanning
+        const delay = data.is_running ? 3000 : 10000;
+        timeoutId = setTimeout(poll, delay);
+      } catch (err) {
+        console.error("Scanner status poll error:", err);
+        if (isMounted) timeoutId = setTimeout(poll, 10000);
+      }
+    };
+
+    poll(); // Start loop
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, []); // Empty dependency array ensures this runs exactly once on mount
 
   const filtered = playlists.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -104,23 +180,80 @@ export const Playlists: React.FC = () => {
     }
   };
 
+  const handleUpdateAutoScan = async () => {
+    if (!editingPlaylist) return;
+    setSavingAutoScan(true);
+    try {
+      const resp = await fetch(`/api/playlists/${editingPlaylist.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          auto_scan_enabled: tempEnabled,
+          auto_scan_interval: tempInterval
+        })
+      });
+      const data = await resp.json();
+      if (data.status === 'ok') {
+        setPlaylists(prev => prev.map(p => p.id === editingPlaylist.id ? { 
+          ...p, 
+          auto_scan_enabled: data.playlist.auto_scan_enabled,
+          auto_scan_interval: data.playlist.auto_scan_interval
+        } : p));
+        setIsAutoScanModalOpen(false);
+      } else {
+        alert(data.message || 'Error updating settings');
+      }
+    } catch (err) {
+      alert('Failed to update auto-scan settings');
+    } finally {
+      setSavingAutoScan(false);
+    }
+  };
+
+  const openAutoScanModal = (playlist: Playlist) => {
+    setEditingPlaylist(playlist);
+    setTempEnabled(playlist.auto_scan_enabled);
+    setTempInterval(playlist.auto_scan_interval || 1440);
+    setIsAutoScanModalOpen(true);
+  };
+
   const handleQuickCheck = async (id: number | string) => {
     setCheckingId(id);
     setCheckResult(null);
+    
+    // Optimistic Update: Mark as scanning immediately in UI
+    setPlaylists(prev => prev.map(p => p.id === id ? { ...p, is_scanning: true, current_scanning_name: 'Initiating...' } : p));
+
     try {
       const res = await fetch(`/api/playlists/${id}/quick-check`, { method: 'POST' });
       const data = await res.json();
       if (data.status === 'ok') {
         setCheckResult({ id, live: data.live, die: data.die, total: data.total, updated: data.updated });
-        // Auto-hide result after 8 seconds
         setTimeout(() => setCheckResult(prev => prev?.id === id ? null : prev), 8000);
       } else if (data.status === 'background') {
-        alert(data.message || 'Background scan started for large playlist.');
+        // No alert needed, the UI will reflect scanning status via polling
+        console.log("Background scan started");
       }
-    } catch (err) {
-      alert('Quick check failed');
+    } catch (err: any) {
+      console.error('Quick check failed:', err);
+      alert(`Lỗi: Không thể khởi chạy tiến trình quét ngầm. ${err.message || 'Máy chủ phản hồi lỗi.'}`);
+      // Revert scanning status on error
+      setPlaylists(prev => prev.map(p => p.id === id ? { ...p, is_scanning: false } : p));
     } finally {
       setCheckingId(null);
+    }
+  };
+
+  const handleStopScan = async () => {
+    try {
+      await fetch('/api/health/stop', { method: 'POST' });
+      // Immediately clear UI state — don't wait for next poll
+      setScannerStatus(prev => prev ? { ...prev, is_running: false, stop_requested: true } : prev);
+      setPlaylists(prev => prev.map(p => ({ ...p, is_scanning: false, current_scanning_name: null })));
+      // Re-fetch fresh data from server
+      setTimeout(fetchPlaylists, 500);
+    } catch (err) {
+      console.error("Failed to stop scan:", err);
     }
   };
 
@@ -207,6 +340,11 @@ export const Playlists: React.FC = () => {
                     {item.is_system && (
                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-full border border-indigo-500/30">System</span>
                     )}
+                    {item.auto_scan_enabled && (
+                       <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30 flex items-center gap-1">
+                          <Clock size={8} /> Auto
+                       </span>
+                    )}
                   </div>
                   <p className="text-slate-500 text-xs font-medium tracking-wide">/{item.slug}</p>
                </div>
@@ -214,32 +352,64 @@ export const Playlists: React.FC = () => {
 
             {viewMode === 'grid' ? (
               <>
-                <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="mt-8 grid grid-cols-1 gap-4">
                    <div className="bg-slate-950/40 p-4 rounded-2xl border border-white/5">
                       <div className="flex items-center gap-2 text-slate-500 mb-1">
                          <Tv size={14} />
                          <span className="text-[10px] font-black uppercase tracking-widest">Channels</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[32px] font-black text-white leading-none">{item.channel_count}</span>
+                        <span className="text-[32px] font-black text-white leading-none">
+                          {item.channel_count}
+                        </span>
                         <div className="flex items-center gap-3 mt-1">
                           <div className="flex items-center gap-1">
                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span className="text-[10px] font-bold text-emerald-500/80 uppercase">{item.live_count} LIVE</span>
+                            <span className="text-[10px] font-bold text-emerald-500/80 uppercase">
+                              {scannerStatus?.is_running && Number(scannerStatus?.playlist_id) === Number(item.id) 
+                                ? scannerStatus.live_count 
+                                : item.live_count} LIVE
+                            </span>
                           </div>
                           <div className="flex items-center gap-1">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            <span className="text-[10px] font-bold text-rose-500/80 uppercase">{item.die_count} DIE</span>
+                            <span className="text-[10px] font-bold text-rose-500/80 uppercase">
+                              {scannerStatus?.is_running && Number(scannerStatus?.playlist_id) === Number(item.id) 
+                                ? scannerStatus.die_count 
+                                : item.die_count} DIE
+                            </span>
                           </div>
                         </div>
+                        
+                        {(item.is_scanning || (scannerStatus?.is_running && Number(scannerStatus?.playlist_id) === Number(item.id))) && (
+                          <div className="mt-4 space-y-3 p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <Activity size={12} className="text-indigo-400 animate-pulse shrink-0" />
+                                <span className="text-[10px] text-slate-300 font-bold truncate">
+                                  {item.current_scanning_name || scannerStatus?.current_name || 'Preparing...'}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-indigo-400 font-black tracking-widest">
+                                {Number(scannerStatus?.playlist_id) === Number(item.id) 
+                                  ? `${Math.round(((scannerStatus?.current || 0) / (scannerStatus?.total || 1)) * 100)}%`
+                                  : 'STARTING'}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-white/5 p-0.5">
+                              <motion.div 
+                                className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.4)]"
+                                initial={{ width: "5%" }}
+                                animate={{ width: Number(scannerStatus?.playlist_id) === Number(item.id) 
+                                  ? `${((scannerStatus?.current || 0) / (scannerStatus?.total || 1)) * 100}%`
+                                  : '10%' 
+                                }}
+                                transition={{ type: 'spring', stiffness: 50 }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                   </div>
-                   <div className="bg-slate-950/40 p-4 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-2 text-slate-500 mb-1">
-                         <ShieldCheck size={14} />
-                         <span className="text-[10px] font-black uppercase tracking-widest">Auth</span>
-                      </div>
-                      <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1.5">Secure</p>
                    </div>
                 </div>
 
@@ -269,6 +439,15 @@ export const Playlists: React.FC = () => {
                       </motion.div>
                     )}
                      <div className="flex items-center gap-2">
+                       {/* Auto Scan Settings Button */}
+                       <button 
+                         onClick={() => openAutoScanModal(item)}
+                         className={`p-2 rounded-xl transition-all border ${item.auto_scan_enabled ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'hover:bg-white/5 text-slate-500 border-transparent hover:border-white/10'}`}
+                         title="Auto-Scan Settings"
+                       >
+                          <Clock size={16} />
+                       </button>
+
                        <div className="relative">
                           <button 
                             onClick={() => setActiveDropdown(activeDropdown === item.id ? null : item.id)}
@@ -352,15 +531,31 @@ export const Playlists: React.FC = () => {
                            )}
                        </div>
                        
-                       {/* Quick Check Button */}
-                       <button 
-                         onClick={() => handleQuickCheck(item.id)}
-                         disabled={checkingId === item.id}
-                         className={`p-2 rounded-xl transition-all border ${checkingId === item.id ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'hover:bg-emerald-500/10 hover:text-emerald-400 text-slate-500 border-transparent hover:border-emerald-500/20'}`}
-                         title="Quick Signal Check"
-                       >
-                          {checkingId === item.id ? <Loader2 size={16} className="animate-spin" /> : <Wifi size={16} />}
-                       </button>
+                       {/* Quick Check / Stop Button */}
+                       {scannerStatus?.is_running && Number(scannerStatus?.playlist_id) === Number(item.id) ? (
+                         <button 
+                           onClick={handleStopScan}
+                           className="p-2 rounded-xl transition-all border bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.3)]"
+                           title="Stop Scan"
+                         >
+                           <XSquare size={16} className="animate-pulse" />
+                         </button>
+                       ) : (
+                         <button 
+                            onClick={() => handleQuickCheck(item.id)}
+                            disabled={checkingId === item.id}
+                            className={`p-2 rounded-xl transition-all border ${
+                              checkingId === item.id 
+                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
+                                : 'hover:bg-emerald-500/10 hover:text-emerald-400 text-slate-500 border-transparent hover:border-emerald-500/20'
+                            }`}
+                            title="Quick Signal Check"
+                          >
+                             {checkingId === item.id 
+                               ? <Loader2 size={16} className="animate-spin" /> 
+                               : <Wifi size={16} />}
+                          </button>
+                       )}
 
                        <button 
                           onClick={() => navigate(`/playlists/${item.id}`)}
@@ -659,6 +854,86 @@ export const Playlists: React.FC = () => {
                 </div>
              </div>
           </motion.div>
+        </div>
+      )}
+
+      {/* Auto-Scan Settings Modal */}
+      {isAutoScanModalOpen && editingPlaylist && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+           <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             onClick={() => setIsAutoScanModalOpen(false)}
+             className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+           />
+           <motion.div 
+             initial={{ scale: 0.9, opacity: 0, y: 20 }}
+             animate={{ scale: 1, opacity: 1, y: 0 }}
+             className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl"
+           >
+              <div className="flex items-center gap-4 mb-8">
+                 <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                    <Clock size={24} />
+                 </div>
+                 <div>
+                    <h2 className="text-xl font-black text-white tracking-tight">Auto-Scan Settings</h2>
+                    <p className="text-slate-500 text-xs font-medium">Configure periodic signal checks</p>
+                 </div>
+              </div>
+
+              <div className="space-y-6">
+                 <div className="flex items-center justify-between p-4 bg-slate-950/50 rounded-2xl border border-white/5">
+                    <div>
+                       <p className="text-xs font-black text-white uppercase tracking-wider">Enable Scheduler</p>
+                       <p className="text-[10px] text-slate-500 mt-0.5">Automatically scan in background</p>
+                    </div>
+                    <button 
+                      onClick={() => setTempEnabled(!tempEnabled)}
+                      className={`relative w-12 h-6 rounded-full transition-all duration-300 p-1 ${tempEnabled ? 'bg-amber-500' : 'bg-slate-800'}`}
+                    >
+                       <div className={`w-4 h-4 rounded-full bg-white transition-all duration-300 ${tempEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                    </button>
+                 </div>
+
+                 <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2 block ml-1">Scan Interval (Minutes)</label>
+                    <input 
+                      type="number"
+                      value={tempInterval}
+                      onChange={(e) => setTempInterval(parseInt(e.target.value) || 1440)}
+                      placeholder="e.g., 60"
+                      className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all font-bold"
+                    />
+                    <div className="flex gap-2 mt-3">
+                       {[60, 360, 1440].map(mins => (
+                         <button 
+                           key={mins}
+                           onClick={() => setTempInterval(mins)}
+                           className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${tempInterval === mins ? 'bg-amber-500 text-black' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                         >
+                            {mins >= 1440 ? `${Math.round(mins/1440)} Day` : mins >= 60 ? `${Math.round(mins/60)}H` : `${mins}M`}
+                         </button>
+                       ))}
+                    </div>
+                 </div>
+
+                 <div className="flex gap-3 pt-4">
+                    <button 
+                      onClick={() => setIsAutoScanModalOpen(false)}
+                      className="flex-1 h-12 rounded-2xl text-slate-400 font-black text-xs uppercase tracking-widest hover:bg-white/5 transition-all"
+                    >
+                       Cancel
+                    </button>
+                    <button 
+                      onClick={handleUpdateAutoScan}
+                      disabled={savingAutoScan}
+                      className="flex-[2] h-12 bg-amber-500 hover:bg-amber-400 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-amber-500/20 disabled:opacity-50"
+                    >
+                       {savingAutoScan ? 'Saving...' : 'Save Settings'}
+                    </button>
+                 </div>
+              </div>
+           </motion.div>
         </div>
       )}
     </div>

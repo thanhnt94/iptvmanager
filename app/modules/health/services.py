@@ -3,6 +3,7 @@ import subprocess
 import shutil
 import json
 import time
+import threading
 import concurrent.futures
 from datetime import datetime
 import logging
@@ -13,6 +14,12 @@ from app.core.database import db
 logger = logging.getLogger('iptv')
 
 class HealthCheckService:
+    # In-memory stop signal — works instantly across threads, no DB dependency
+    _stop_event = threading.Event()
+    # Scan queue for consecutive playlist scans
+    _scan_queue = []
+    _queue_lock = threading.Lock()
+
     @staticmethod
     def check_stream(channel_id, force=False, fast_mode=False):
         """Checks the connectivity and technical specs of a single stream URL."""
@@ -285,9 +292,12 @@ class HealthCheckService:
 
     @staticmethod
     def stop_scan():
-        status = ScannerStatus.get_singleton()
-        status.stop_requested = True
-        db.session.commit()
+        """Instant stop via in-memory signal — no DB dependency."""
+        HealthCheckService._stop_event.set()
+        # Also clear the queue so no pending scans start
+        with HealthCheckService._queue_lock:
+            HealthCheckService._scan_queue.clear()
+        logger.info("Stop signal sent + queue cleared.")
 
     @staticmethod
     def _add_log(name, status, error=None):
@@ -312,15 +322,17 @@ class HealthCheckService:
 
     @staticmethod
     def start_background_scan(app, mode='all', days=None, playlist_id=None, group=None, delay=None):
-        """Starts the scanning process in a background thread."""
+        """Starts a scan or queues it if another scan is already running."""
         current_status = ScannerStatus.get_singleton()
         if current_status.is_running:
-            return
+            scan_job = {'mode': mode, 'days': days, 'playlist_id': playlist_id, 'group': group, 'delay': delay}
+            with HealthCheckService._queue_lock:
+                HealthCheckService._scan_queue.append(scan_job)
+            logger.info(f"Scanner busy. Queued playlist #{playlist_id}. Queue size: {len(HealthCheckService._scan_queue)}")
+            return 'queued'
             
         def run_scan(app, mode, days, playlist_id, group, manual_delay):
-            app_context = app.app_context()
-            with app_context:
-                state = ScannerStatus.get_singleton()
+            with app.app_context():
                 try:
                     # Type conversions
                     try:
@@ -328,25 +340,24 @@ class HealthCheckService:
                         if days: days = int(days)
                     except: pass
 
-                    logger.info(f"Persistent Scanner: Start requested. Mode: {mode}, Group: {group}")
+                    logger.info(f"Scanner START — Playlist: {playlist_id}, Mode: {mode}, Group: {group}")
+                    HealthCheckService._stop_event.clear()
+                    
+                    state = ScannerStatus.get_singleton()
                     state.is_running = True
                     state.stop_requested = False
                     state.mode = mode
                     state.group = group or 'all'
                     state.playlist_id = playlist_id
                     state.current = 0
-                    
-                    # Update counts from DB
-                    from sqlalchemy import func
-                    counts = dict(db.session.query(Channel.status, func.count(Channel.id)).group_by(Channel.status).all())
-                    state.live_count = counts.get('live', 0)
-                    state.die_count = counts.get('die', 0)
-                    state.unknown_count = counts.get('unknown', 0)
+                    state.current_name = None
+                    state.current_id = None
                     db.session.commit()
-                    
+
+                    # Build channel query scoped to the target playlist
                     query = Channel.query
+                    from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
                     if playlist_id:
-                        from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
                         profile = PlaylistProfile.query.get(playlist_id)
                         if not (profile and profile.is_system):
                             query = query.join(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
@@ -364,28 +375,50 @@ class HealthCheckService:
                         query = query.filter((Channel.last_checked_at == None) | (Channel.last_checked_at < threshold))
                     
                     channels = query.all()
+                    
+                    # Compute initial counts ONLY from channels in this scan scope
                     state.total = len(channels)
+                    state.live_count = sum(1 for c in channels if c.status == 'live')
+                    state.die_count = sum(1 for c in channels if c.status == 'die')
+                    state.unknown_count = sum(1 for c in channels if c.status == 'unknown' or c.status is None)
                     db.session.commit()
+                    
+                    logger.info(f"Persistent Scanner: Found {len(channels)} channels. Live={state.live_count}, Die={state.die_count}, Unknown={state.unknown_count}")
                     
                     if not channels:
                         state.is_running = False
                         db.session.commit()
                         return
+
+                    # Mark playlist as scanning in DB
+                    if playlist_id:
+                        p_profile = PlaylistProfile.query.get(playlist_id)
+                        if p_profile:
+                            p_profile.is_scanning = True
+                            db.session.commit()
     
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         for idx, channel in enumerate(channels):
-                            # Re-fetch state object to catch external stop requests
-                            state = ScannerStatus.get_singleton() 
-                            if state.stop_requested:
+                            # CHECK STOP — instant via threading.Event (no DB needed)
+                            if HealthCheckService._stop_event.is_set():
+                                logger.info(f"Scanner: STOPPED by user at {idx}/{len(channels)}")
                                 break
                             
                             state.current_name = channel.name
                             state.current_id = channel.id
+                            state.current = idx + 1
                             
-                            old_status = channel.status
+                            # Sync current name to PlaylistProfile
+                            if playlist_id:
+                                p_profile = PlaylistProfile.query.get(playlist_id)
+                                if p_profile:
+                                    p_profile.current_scanning_name = channel.name
+                            db.session.commit()
                             
-                            def check_with_context(app_obj, cid):
-                                with app_obj.app_context():
+                            old_status = channel.status or 'unknown'
+                            
+                            def check_with_context(app_ref, cid):
+                                with app_ref.app_context():
                                     return HealthCheckService.check_stream(cid)
 
                             future = executor.submit(check_with_context, app, channel.id)
@@ -397,49 +430,81 @@ class HealthCheckService:
                             except concurrent.futures.TimeoutError:
                                 channel.status = 'die'
                                 channel.error_message = "Diagnostic Timeout (Server too slow)"
-                                db.session.commit()
                             except Exception as e:
                                 logger.error(f"Scanner internal error for {channel.id}: {e}")
         
-                            new_status = channel.status
+                            new_status = channel.status or 'unknown'
                             HealthCheckService._add_log(channel.name, new_status, channel.error_message)
                             
+                            # Update LIVE/DIE counts when status changes
                             if old_status != new_status:
-                                if old_status == 'unknown': state.unknown_count -= 1
-                                elif old_status == 'live': state.live_count -= 1
-                                elif old_status == 'die': state.die_count -= 1
+                                if old_status == 'unknown': state.unknown_count = max(0, state.unknown_count - 1)
+                                elif old_status == 'live': state.live_count = max(0, state.live_count - 1)
+                                elif old_status == 'die': state.die_count = max(0, state.die_count - 1)
                                 
                                 if new_status == 'unknown': state.unknown_count += 1
                                 elif new_status == 'live': state.live_count += 1
                                 elif new_status == 'die': state.die_count += 1
-            
-                            state.current = idx + 1
                             
-                            # Commit progress to Database every 10 channels (Performance balance)
-                            if (idx + 1) % 10 == 0:
-                                db.session.commit()
-                                
+                            # Commit EVERY channel so frontend sees real-time progress
+                            db.session.commit()
+                            
+                            # Detailed Terminal Logging
+                            progress_pct = (state.current / (state.total or 1)) * 100
+                            bar_size = 20
+                            filled_size = int(bar_size * progress_pct / 100)
+                            bar = "=" * filled_size + ">" + " " * (bar_size - filled_size - 1)
+                            if filled_size == bar_size: bar = "=" * bar_size
+                            
+                            logger.info(f" [SCAN] #{playlist_id} {state.current}/{state.total} ({progress_pct:.0f}%) L:{state.live_count} D:{state.die_count} | {channel.name}")
+                            
                             if manual_delay is not None:
                                 time.sleep(float(manual_delay))
                             else:
                                 from app.modules.settings.services import SettingService
                                 time.sleep(int(SettingService.get('SCAN_DELAY_SECONDS', '5')))
-                    
-                    state = ScannerStatus.get_singleton()
-                    state.is_running = False
-                    db.session.commit()
+
                 except Exception as e:
                     logger.error(f"Scanner CRITICAL ERROR: {e}", exc_info=True)
                 finally:
-                    state = ScannerStatus.get_singleton()
-                    state.is_running = False
-                    db.session.commit()
-                    db.session.remove()
+                    # Always clean up
+                    try:
+                        state = ScannerStatus.get_singleton()
+                        state.is_running = False
+                        state.stop_requested = False
+                        state.current_name = None
+                        db.session.commit()
+                        
+                        if playlist_id:
+                            from app.modules.playlists.models import PlaylistProfile as PP
+                            p_profile = PP.query.get(playlist_id)
+                            if p_profile:
+                                p_profile.is_scanning = False
+                                p_profile.current_scanning_name = None
+                                db.session.commit()
+                        
+                        logger.info(f"Scanner DONE — L:{state.live_count} D:{state.die_count} U:{state.unknown_count}")
+                    except Exception as cleanup_err:
+                        logger.error(f"Scanner cleanup error: {cleanup_err}")
+                    finally:
+                        db.session.remove()
+                    
+                    # Auto-start next queued scan
+                    next_job = None
+                    with HealthCheckService._queue_lock:
+                        if HealthCheckService._scan_queue:
+                            next_job = HealthCheckService._scan_queue.pop(0)
+                    
+                    if next_job and not HealthCheckService._stop_event.is_set():
+                        logger.info(f"Scanner: Starting queued scan — Playlist #{next_job.get('playlist_id')}")
+                        time.sleep(1)
+                        run_scan(app, next_job['mode'], next_job.get('days'), next_job.get('playlist_id'), next_job.get('group'), next_job.get('delay'))
 
+        # Clear stop event before starting
+        HealthCheckService._stop_event.clear()
         status_obj = ScannerStatus.get_singleton()
         status_obj.is_running = True
         db.session.commit()
-        import threading
         thread = threading.Thread(target=run_scan, args=(app, mode, days, playlist_id, group, delay))
         thread.daemon = True
         thread.start()

@@ -46,8 +46,16 @@ def update_playlist_profile(playlist_id):
     data = request.json or {}
     name = data.get('name')
     slug = data.get('slug')
+    auto_scan_enabled = data.get('auto_scan_enabled')
+    auto_scan_interval = data.get('auto_scan_interval')
     
-    success, result = PlaylistService.update_profile(playlist_id, name, slug)
+    success, result = PlaylistService.update_profile(
+        playlist_id, 
+        name=name, 
+        slug=slug, 
+        auto_scan_enabled=auto_scan_enabled, 
+        auto_scan_interval=auto_scan_interval
+    )
     if not success:
         return jsonify({'status': 'error', 'message': result}), 400
         
@@ -56,7 +64,9 @@ def update_playlist_profile(playlist_id):
         'playlist': {
             'id': result.id,
             'name': result.name,
-            'slug': result.slug
+            'slug': result.slug,
+            'auto_scan_enabled': result.auto_scan_enabled,
+            'auto_scan_interval': result.auto_scan_interval
         }
     })
 
@@ -125,7 +135,12 @@ def list_playlists():
             'live_count': live_count,
             'die_count': die_count,
             'created_at': p.created_at.strftime('%Y-%m-%d'),
-            'owner_username': owner_name
+            'owner_username': owner_name,
+            'auto_scan_enabled': p.auto_scan_enabled,
+            'auto_scan_interval': p.auto_scan_interval,
+            'last_auto_scan_at': p.last_auto_scan_at.isoformat() if p.last_auto_scan_at else None,
+            'is_scanning': p.is_scanning,
+            'current_scanning_name': p.current_scanning_name
         })
     return jsonify(res)
 
@@ -463,7 +478,7 @@ def quick_check_playlist(playlist_id):
     
     return jsonify({
         'status': 'background',
-        'message': f'Signal check for "{profile.name}" initiated in background.',
+        'message': f'Signal check for "{profile.name}" initiated.',
         'playlist_id': playlist_id
     })
 
