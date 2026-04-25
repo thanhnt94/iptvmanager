@@ -192,7 +192,7 @@ export const Channels: React.FC = () => {
    const [shareChannel, setShareChannel] = useState<Channel | null>(null);
    const [jumpPage, setJumpPage] = useState('');
    const [copiedKey, setCopiedKey] = useState<string | null>(null);
-   const [viewMode, setViewMode] = useState<'standard' | 'links' | 'logos'>('standard');
+   const [viewMode, setViewMode] = useState<'standard' | 'links' | 'logos' | 'epg'>('standard');
    const [savingId, setSavingId] = useState<number | null>(null);
    
    // Bulk Actions State
@@ -611,7 +611,8 @@ export const Channels: React.FC = () => {
               options={[
                 { value: 'standard', label: 'Standard View' },
                 { value: 'links', label: 'Quick Links' },
-                { value: 'logos', label: 'Quick Logos' }
+                { value: 'logos', label: 'Quick Logos' },
+                { value: 'epg', label: 'Quick EPG' }
               ]}
               minWidth="160px"
             />
@@ -700,26 +701,27 @@ export const Channels: React.FC = () => {
                     );
                   }
 
-                  if (viewMode === 'logos') {
+                   if (viewMode === 'epg') {
                     return (
                       <tr key={ch.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
                         <td className="px-6 py-4">
-                           <span className="text-xs font-black text-white truncate">{ch.name}</span>
-                        </td>
-                        <td className="px-1 py-4 text-center">
-                           <div className="w-12 h-12 rounded-xl bg-slate-900 border border-white/10 p-1 mx-auto flex items-center justify-center overflow-hidden">
-                              {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain" alt="" /> : <Tv className="text-slate-800" size={20} />}
+                           <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center border border-white/5 shrink-0">
+                                {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={14} />}
+                              </div>
+                              <span className="text-xs font-black text-white truncate">{ch.name}</span>
                            </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4" colSpan={2}>
                            <div className="relative group">
-                              <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400" size={14} />
+                              <CalendarCheck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400" size={14} />
                               <input 
                                 type="text"
-                                defaultValue={ch.logo_url || ''}
+                                defaultValue={ch.epg_id || ''}
+                                placeholder="e.g. discovery.us"
                                 onBlur={(e) => {
-                                  if (e.target.value !== (ch.logo_url || '')) {
-                                    handleQuickUpdate(ch.id, { logo_url: e.target.value });
+                                  if (e.target.value !== (ch.epg_id || '')) {
+                                    handleQuickUpdate(ch.id, { epg_id: e.target.value });
                                   }
                                 }}
                                 className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-10 py-2 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all"
@@ -749,6 +751,7 @@ export const Channels: React.FC = () => {
                       </tr>
                     );
                   }
+
 
                   return (
                     <tr key={ch.id} className={`border-b border-white/5 transition-colors group ${selectedIds.includes(ch.id) ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : 'hover:bg-white/[0.02]'}`}>
@@ -875,6 +878,59 @@ export const Channels: React.FC = () => {
                             }
                           }}
                           className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-8 pr-10 py-1.5 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500/50 font-mono"
+                        />
+                        <button 
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input');
+                            if (input) {
+                              input.value = '';
+                              input.focus();
+                            }
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 active:text-rose-400 p-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                      <button 
+                        disabled={savingId === ch.id}
+                        className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg disabled:opacity-50"
+                      >
+                        {savingId === ch.id ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                      </button>
+                   </div>
+                </div>
+              );
+            }
+
+            // Mobile Quick EPG Mode
+            if (viewMode === 'epg') {
+              return (
+                <div key={ch.id} className="glass p-3 rounded-2xl flex flex-col gap-2 border border-white/5">
+                   <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                         <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shrink-0">
+                           {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={16} />}
+                         </div>
+                         <span className="text-[11px] font-black text-white truncate leading-tight">{ch.name}</span>
+                      </div>
+                      <div className={`px-2 py-0.5 rounded-full border text-[7px] font-black uppercase tracking-tighter ${ch.status === 'live' ? 'border-emerald-500/20 text-emerald-400' : 'border-rose-500/20 text-rose-400'}`}>
+                        {ch.status}
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <CalendarCheck className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={12} />
+                        <input 
+                          type="text"
+                          defaultValue={ch.epg_id || ''}
+                          placeholder="EPG ID"
+                          onBlur={(e) => {
+                            if (e.target.value !== (ch.epg_id || '')) {
+                              handleQuickUpdate(ch.id, { epg_id: e.target.value });
+                            }
+                          }}
+                          className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-8 pr-10 py-1.5 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500/50"
                         />
                         <button 
                           onClick={(e) => {
