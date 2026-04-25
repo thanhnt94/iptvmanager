@@ -10,8 +10,10 @@ import {
   Loader2, 
   Plus,
   Tv,
-  Layout
+  Layout,
+  Pencil
 } from 'lucide-react';
+import { ChannelForm } from '../components/forms/ChannelForm';
 
 interface PlaylistInfo {
   id: number;
@@ -27,6 +29,7 @@ interface Entry {
   group_name: string;
   logo_url: string;
   status: string;
+  stream_url?: string;
 }
 
 export const PlaylistEditor: React.FC = () => {
@@ -48,6 +51,9 @@ export const PlaylistEditor: React.FC = () => {
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editSlug, setEditSlug] = useState('');
+
+  // Quick Channel Edit State
+  const [editingChannelId, setEditingChannelId] = useState<number | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -77,7 +83,8 @@ export const PlaylistEditor: React.FC = () => {
         name: ch.name,
         group_name: ch.group || 'Ungrouped',
         logo_url: ch.logo_url,
-        status: ch.status
+        status: ch.status,
+        stream_url: ch.play_links?.original || ''
       }));
       setEntries(mapped);
       if (gRes && gRes.groups) {
@@ -271,8 +278,16 @@ export const PlaylistEditor: React.FC = () => {
 
                      <div className="flex items-center gap-2">
                         <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingChannelId(item.channel_id); }}
+                          className="p-2.5 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          title="Quick Edit Channel"
+                        >
+                           <Pencil size={16} />
+                        </button>
+                        <button 
                           onClick={(e) => { e.stopPropagation(); setEditingEntry(item); setIsGroupModalOpen(true); }}
                           className="p-2.5 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          title="Change Group"
                         >
                            <FolderEdit size={16} />
                         </button>
@@ -408,6 +423,14 @@ export const PlaylistEditor: React.FC = () => {
               </div>
            </motion.div>
         </div>
+      )}
+      {/* Full-Featured Channel Edit Form */}
+      {editingChannelId && (
+        <ChannelForm 
+          channelId={editingChannelId}
+          onClose={() => setEditingChannelId(null)}
+          onSuccess={() => { setEditingChannelId(null); fetchPlaylistData(); }}
+        />
       )}
     </div>
   );

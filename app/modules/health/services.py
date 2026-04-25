@@ -376,6 +376,10 @@ class HealthCheckService:
                     
                     channels = query.all()
                     
+                    # Sort by scan priority: unknown/None → die → live
+                    priority = {'unknown': 0, None: 0, 'die': 1, 'live': 2}
+                    channels.sort(key=lambda c: priority.get(c.status, 0))
+                    
                     # Compute initial counts ONLY from channels in this scan scope
                     state.total = len(channels)
                     state.live_count = sum(1 for c in channels if c.status == 'live')
