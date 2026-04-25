@@ -25,7 +25,11 @@ import {
   Check,
   Globe,
   Lock as LockIcon,
-  CalendarCheck
+  CalendarCheck,
+  LayoutGrid,
+  Link2,
+  Image as ImageIcon,
+  Save
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
@@ -188,6 +192,8 @@ export const Channels: React.FC = () => {
    const [shareChannel, setShareChannel] = useState<Channel | null>(null);
    const [jumpPage, setJumpPage] = useState('');
    const [copiedKey, setCopiedKey] = useState<string | null>(null);
+   const [viewMode, setViewMode] = useState<'standard' | 'links' | 'logos'>('standard');
+   const [savingId, setSavingId] = useState<number | null>(null);
    
    // Bulk Actions State
    const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -374,6 +380,26 @@ export const Channels: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleQuickUpdate = async (id: number, data: any) => {
+    setSavingId(id);
+    try {
+      const res = await fetch(`/api/channels/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, ...data } : ch));
+      } else {
+        alert('Update failed');
+      }
+    } catch (err) {
+      alert('Update error');
+    } finally {
+      setSavingId(null);
+    }
   };
 
    const updateParams = (updates: Record<string, string>) => {
@@ -574,6 +600,21 @@ export const Channels: React.FC = () => {
               ]}
               minWidth="150px"
             />
+
+            <div className="w-px h-8 bg-white/5 hidden lg:block mx-2" />
+
+            {/* View Mode Selector */}
+            <CustomSelect 
+              value={viewMode}
+              onChange={(v) => setViewMode(v as any)}
+              icon={<LayoutGrid size={14} />}
+              options={[
+                { value: 'standard', label: 'Standard View' },
+                { value: 'links', label: 'Quick Links' },
+                { value: 'logos', label: 'Quick Logos' }
+              ]}
+              minWidth="160px"
+            />
         </div>
       </div>
 
@@ -608,73 +649,151 @@ export const Channels: React.FC = () => {
               ) : channels.length === 0 ? (
                 <tr><td colSpan={4} className="p-20 text-center text-slate-500 font-bold uppercase tracking-widest">No Channels Found</td></tr>
               ) : (
-                channels.map((ch) => (
-                  <tr key={ch.id} className={`border-b border-white/5 transition-colors group ${selectedIds.includes(ch.id) ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : 'hover:bg-white/[0.02]'}`}>
-                    <td className="px-6 py-4 max-w-sm">
-                      <div className="flex items-center gap-4">
-                        <button 
-                          onClick={() => toggleSelect(ch.id)}
-                          className={`w-5 h-5 rounded border transition-all flex items-center justify-center shrink-0 ${selectedIds.includes(ch.id) ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10 hover:border-indigo-500/50'}`}
-                        >
-                           {selectedIds.includes(ch.id) && <Check size={12} className="text-white" />}
-                        </button>
-                        <div className="w-10 h-10 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border border-white/5 group-hover:border-indigo-500/30 transition-colors shrink-0">
-                          {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={16} />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                           <div className="flex items-center gap-2">
-                             <h4 className="text-sm font-black text-white truncate leading-tight">{ch.name}</h4>
-                             <div className="flex gap-1 shrink-0 items-center">
-                                {ch.epg_id && <CalendarCheck className="text-indigo-400" size={10} />}
-                                {ch.is_original && <Shield className="text-indigo-400" size={10} />}
-                                {ch.is_public ? <Globe className="text-emerald-400" size={10} /> : <LockIcon className="text-slate-600" size={10} />}
-                             </div>
+                channels.map((ch) => {
+                  if (viewMode === 'links') {
+                    return (
+                      <tr key={ch.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-4">
+                           <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center border border-white/5 shrink-0">
+                                {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={14} />}
+                              </div>
+                              <span className="text-xs font-black text-white truncate">{ch.name}</span>
                            </div>
-                           <p className="text-[9px] text-slate-500 truncate mt-0.5 opacity-60 font-medium">{ch.stream_url}</p>
+                        </td>
+                        <td className="px-6 py-4" colSpan={2}>
+                           <div className="relative group">
+                              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400" size={14} />
+                              <input 
+                                type="text"
+                                defaultValue={ch.stream_url}
+                                onBlur={(e) => {
+                                  if (e.target.value !== ch.stream_url) {
+                                    handleQuickUpdate(ch.id, { stream_url: e.target.value });
+                                  }
+                                }}
+                                className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all font-mono"
+                              />
+                           </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                           <button 
+                            disabled={savingId === ch.id}
+                            className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-50"
+                           >
+                             {savingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                           </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  if (viewMode === 'logos') {
+                    return (
+                      <tr key={ch.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-4">
+                           <span className="text-xs font-black text-white truncate">{ch.name}</span>
+                        </td>
+                        <td className="px-1 py-4 text-center">
+                           <div className="w-12 h-12 rounded-xl bg-slate-900 border border-white/10 p-1 mx-auto flex items-center justify-center overflow-hidden">
+                              {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain" alt="" /> : <Tv className="text-slate-800" size={20} />}
+                           </div>
+                        </td>
+                        <td className="px-6 py-4">
+                           <div className="relative group">
+                              <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400" size={14} />
+                              <input 
+                                type="text"
+                                defaultValue={ch.logo_url || ''}
+                                onBlur={(e) => {
+                                  if (e.target.value !== (ch.logo_url || '')) {
+                                    handleQuickUpdate(ch.id, { logo_url: e.target.value });
+                                  }
+                                }}
+                                className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all"
+                              />
+                           </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                           <button 
+                            disabled={savingId === ch.id}
+                            className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-50"
+                           >
+                             {savingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                           </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={ch.id} className={`border-b border-white/5 transition-colors group ${selectedIds.includes(ch.id) ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : 'hover:bg-white/[0.02]'}`}>
+                      <td className="px-6 py-4 max-w-sm">
+                        <div className="flex items-center gap-4">
+                          <button 
+                            onClick={() => toggleSelect(ch.id)}
+                            className={`w-5 h-5 rounded border transition-all flex items-center justify-center shrink-0 ${selectedIds.includes(ch.id) ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10 hover:border-indigo-500/50'}`}
+                          >
+                             {selectedIds.includes(ch.id) && <Check size={12} className="text-white" />}
+                          </button>
+                          <div className="w-10 h-10 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border border-white/5 group-hover:border-indigo-500/30 transition-colors shrink-0">
+                            {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={16} />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                             <div className="flex items-center gap-2">
+                               <h4 className="text-sm font-black text-white truncate leading-tight">{ch.name}</h4>
+                               <div className="flex gap-1 shrink-0 items-center">
+                                  {ch.epg_id && <CalendarCheck className="text-indigo-400" size={10} />}
+                                  {ch.is_original && <Shield className="text-indigo-400" size={10} />}
+                                  {ch.is_public ? <Globe className="text-emerald-400" size={10} /> : <LockIcon className="text-slate-600" size={10} />}
+                               </div>
+                             </div>
+                             <p className="text-[9px] text-slate-500 truncate mt-0.5 opacity-60 font-medium">{ch.stream_url}</p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-white/5 px-2.5 py-1.5 rounded-lg border border-white/5">
-                        {ch.group_name || 'Uncategorized'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/5 w-fit bg-slate-950/40">
-                          {getStatusIcon(ch.status)}
-                          <span className="text-[9px] font-black uppercase tracking-widest text-white">{ch.status}</span>
-                          <span className="text-slate-700 mx-1">|</span>
-                          <span className="text-[9px] font-black text-slate-500 uppercase">{Math.round(ch.latency)}ms</span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {[
-                            { icon: <Eye size={16} />, onClick: () => setPreviewChannel(ch), title: 'Preview' },
-                            { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute', hide: user.role === 'free' },
-                            { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />, onClick: () => handleCheck(ch.id), title: 'Check' },
-                            { icon: ch.is_public ? <Globe size={16} /> : <LockIcon size={16} />, onClick: () => togglePublic(ch.id), title: 'Toggle Visibility', active: ch.is_public },
-                            { icon: ch.is_original ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_original },
-                            { icon: <Settings2 size={16} />, onClick: () => openEdit(ch.id), title: 'Edit' },
-                            { icon: <Trash2 size={16} />, onClick: () => handleDelete(ch.id), title: 'Delete', danger: true }
-                          ].filter(b => !b.hide).map((btn, idx) => (
-                            <button 
-                              key={idx}
-                              onClick={btn.onClick}
-                              title={btn.title}
-                              className={`p-2 rounded-xl transition-all ${
-                                btn.danger ? 'text-slate-600 hover:text-rose-400 hover:bg-rose-500/10' :
-                                btn.active ? 'text-indigo-400 bg-indigo-500/10' :
-                                'text-slate-600 hover:text-white hover:bg-white/5'
-                              }`}
-                            >
-                              {btn.icon}
-                            </button>
-                          ))}
-                        </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-white/5 px-2.5 py-1.5 rounded-lg border border-white/5">
+                          {ch.group_name || 'Uncategorized'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/5 w-fit bg-slate-950/40">
+                            {getStatusIcon(ch.status)}
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white">{ch.status}</span>
+                            <span className="text-slate-700 mx-1">|</span>
+                            <span className="text-[9px] font-black text-slate-500 uppercase">{Math.round(ch.latency)}ms</span>
+                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {[
+                              { icon: <Eye size={16} />, onClick: () => setPreviewChannel(ch), title: 'Preview' },
+                              { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute', hide: user.role === 'free' },
+                              { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />, onClick: () => handleCheck(ch.id), title: 'Check' },
+                              { icon: ch.is_public ? <Globe size={16} /> : <LockIcon size={16} />, onClick: () => togglePublic(ch.id), title: 'Toggle Visibility', active: ch.is_public },
+                              { icon: ch.is_original ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_original },
+                              { icon: <Settings2 size={16} />, onClick: () => openEdit(ch.id), title: 'Edit' },
+                              { icon: <Trash2 size={16} />, onClick: () => handleDelete(ch.id), title: 'Delete', danger: true }
+                            ].filter(b => !b.hide).map((btn, idx) => (
+                              <button 
+                                key={idx}
+                                onClick={btn.onClick}
+                                title={btn.title}
+                                className={`p-2 rounded-xl transition-all ${
+                                  btn.danger ? 'text-slate-600 hover:text-rose-400 hover:bg-rose-500/10' :
+                                  btn.active ? 'text-indigo-400 bg-indigo-500/10' :
+                                  'text-slate-600 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                {btn.icon}
+                              </button>
+                            ))}
+                          </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
