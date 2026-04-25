@@ -75,6 +75,7 @@ export const PlaylistEditor: React.FC = () => {
   const [previewChannel, setPreviewChannel] = useState<any>(null);
   const [checkingStatusId, setCheckingStatusId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [draggedId, setDraggedId] = useState<number | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -249,14 +250,26 @@ export const PlaylistEditor: React.FC = () => {
     }
   };
 
-  const handleBulkGroup = () => {
-    if (selectedIds.size === 0) return;
-    // Use first selected as template for modal
-    const firstId = Array.from(selectedIds)[0];
-    const item = entries.find(e => e.id === firstId);
-    if (item) {
-      setEditingEntry(item);
-      setIsGroupModalOpen(true);
+  const handleReorder = (newOrder: Entry[]) => {
+    if (draggedId && selectedIds.has(draggedId)) {
+      // Find the new index of the item being dragged
+      const targetIndex = newOrder.findIndex(item => item.id === draggedId);
+      
+      // Get all unselected items in their new relative order
+      const unselected = newOrder.filter(item => !selectedIds.has(item.id));
+      
+      // Get all selected items in their ORIGINAL relative order
+      const selected = entries.filter(item => selectedIds.has(item.id));
+      
+      // Calculate adjusted insertion index (count how many unselected items are before targetIndex in newOrder)
+      const unselectedBefore = newOrder.slice(0, targetIndex).filter(item => !selectedIds.has(item.id)).length;
+      
+      const finalOrder = [...unselected];
+      finalOrder.splice(unselectedBefore, 0, ...selected);
+      
+      setEntries(finalOrder);
+    } else {
+      setEntries(newOrder);
     }
   };
 
@@ -292,6 +305,17 @@ export const PlaylistEditor: React.FC = () => {
        alert("Error updating groups");
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleBulkGroup = () => {
+    if (selectedIds.size === 0) return;
+    // Use first selected as template for modal
+    const firstId = Array.from(selectedIds)[0];
+    const item = entries.find(e => e.id === firstId);
+    if (item) {
+      setEditingEntry(item);
+      setIsGroupModalOpen(true);
     }
   };
 
@@ -366,7 +390,7 @@ export const PlaylistEditor: React.FC = () => {
          <Reorder.Group 
             axis="y" 
             values={entries} 
-            onReorder={setEntries}
+            onReorder={handleReorder}
             className="space-y-2"
          >
             {entries.map((item) => (
@@ -374,6 +398,8 @@ export const PlaylistEditor: React.FC = () => {
                  key={item.id} 
                  value={item}
                  className="group"
+                 onDragStart={() => setDraggedId(item.id)}
+                 onDragEnd={() => setDraggedId(null)}
                >
                   <div className={`border rounded-2xl p-4 flex items-center justify-between transition-all cursor-grab active:cursor-grabbing ${selectedIds.has(item.id) ? 'bg-indigo-500/10 border-indigo-500/40' : 'bg-slate-950/40 border-white/5 hover:border-indigo-500/20'}`}>
                      <div className="flex items-center gap-4">
