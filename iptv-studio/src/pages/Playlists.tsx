@@ -462,9 +462,9 @@ export const Playlists: React.FC = () => {
 
                           {activeDropdown === item.id && (
                               <motion.div 
-                                initial={{ opacity: 0, x: 20, scale: 0.95 }}
-                                animate={{ opacity: 1, x: 0, scale: 1 }}
-                                className="absolute bottom-0 right-[calc(100%+1rem)] w-64 bg-slate-950/98 backdrop-blur-3xl rounded-3xl p-4 shadow-[0_20px_70px_rgba(0,0,0,0.8)] z-[100] border border-white/10"
+                                initial={{ opacity: 0, y: 10, scale: 0.95, x: 0 }}
+                                animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
+                                className="absolute md:bottom-0 md:right-[calc(100%+1rem)] md:mb-0 right-0 bottom-full mb-4 w-64 bg-slate-950/98 backdrop-blur-3xl rounded-3xl p-4 shadow-[0_20px_70px_rgba(0,0,0,0.8)] z-[100] border border-white/10"
                               >
                                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
                                     <div className="flex flex-col">
