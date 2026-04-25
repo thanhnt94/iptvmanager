@@ -30,7 +30,8 @@ import {
   Link2,
   Image as ImageIcon,
   Save,
-  ArrowUpDown
+  ArrowUpDown,
+  ZapOff
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
@@ -53,6 +54,7 @@ interface Channel {
   resolution: string;
   latency: number;
   is_original: boolean;
+  is_passthrough: boolean;
   is_public: boolean;
   last_checked: string;
   play_url?: string;
@@ -175,7 +177,6 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, onChange, options, i
 export const Channels: React.FC = () => {
    const [searchParams, setSearchParams] = useSearchParams();
    const page = parseInt(searchParams.get('page') || '1');
-// ... (rest of states)
    const search = searchParams.get('search') || '';
    const selectedGroup = searchParams.get('group') || '';
    const selectedStatus = searchParams.get('status') || '';
@@ -321,12 +322,21 @@ export const Channels: React.FC = () => {
   };
 
   const handleBatchCheck = async (fastMode: boolean) => {
+    const idsToCheck = channels
+      .filter(ch => selectedIds.includes(ch.id) && !ch.is_passthrough)
+      .map(ch => ch.id);
+    
+    if (idsToCheck.length === 0) {
+      alert("No eligible channels for check (all selected are Passthrough)");
+      return;
+    }
+
     setCheckingBatch(true);
     try {
       const res = await fetch('/api/health/batch-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedIds, fast_mode: fastMode })
+        body: JSON.stringify({ ids: idsToCheck, fast_mode: fastMode })
       });
       if (res.ok) {
         // Refresh channels to show new status
@@ -335,6 +345,20 @@ export const Channels: React.FC = () => {
       }
     } catch (err) { alert('Batch check failed'); }
     finally { setCheckingBatch(false); }
+  };
+
+  const handleBatchToggle = async (field: string, value: boolean) => {
+    try {
+      const res = await fetch('/api/channels/batch-update-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds, field, value })
+      });
+      if (res.ok) {
+        setChannels(prev => prev.map(ch => selectedIds.includes(ch.id) ? { ...ch, [field]: value } : ch));
+        setSelectedIds([]);
+      }
+    } catch (err) { alert('Batch update failed'); }
   };
 
   const openAdd = () => { setEditingId(null); setIsFormOpen(true); };
@@ -831,6 +855,7 @@ export const Channels: React.FC = () => {
                                <div className="flex gap-1 shrink-0 items-center">
                                   {ch.epg_id && <CalendarCheck className="text-indigo-400" size={10} />}
                                   {ch.is_original && <Shield className="text-indigo-400" size={10} />}
+                                  {ch.is_passthrough && <ZapOff className="text-rose-400" size={10} />}
                                   {ch.is_public ? <Globe className="text-emerald-400" size={10} /> : <LockIcon className="text-slate-600" size={10} />}
                                </div>
                              </div>
@@ -844,31 +869,41 @@ export const Channels: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/5 w-fit bg-slate-950/40">
-                            {getStatusIcon(ch.status)}
-                            <span className="text-[9px] font-black uppercase tracking-widest text-white">{ch.status}</span>
-                            <span className="text-slate-700 mx-1">|</span>
-                            <span className="text-[9px] font-black text-slate-500 uppercase">{Math.round(ch.latency)}ms</span>
-                         </div>
+                          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border w-fit bg-slate-950/40 ${ch.is_passthrough ? 'border-rose-500/30' : 'border-white/5'}`}>
+                             {ch.is_passthrough ? (
+                               <>
+                                 <ZapOff className="text-rose-400" size={14} />
+                                 <span className="text-[9px] font-black uppercase tracking-widest text-rose-400">Passthrough</span>
+                               </>
+                             ) : (
+                               <>
+                                 {getStatusIcon(ch.status)}
+                                 <span className="text-[9px] font-black uppercase tracking-widest text-white">{ch.status}</span>
+                                 <span className="text-slate-700 mx-1">|</span>
+                                 <span className="text-[9px] font-black text-slate-500 uppercase">{Math.round(ch.latency)}ms</span>
+                               </>
+                             )}
+                          </div>
                       </td>
                       <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-1">
                             {[
-                              { icon: <Eye size={16} />, onClick: () => setPreviewChannel(ch), title: 'Preview' },
-                              { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute', hide: user.role === 'free' },
-                              { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />, onClick: () => handleCheck(ch.id), title: 'Check' },
-                              { icon: ch.is_public ? <Globe size={16} /> : <LockIcon size={16} />, onClick: () => togglePublic(ch.id), title: 'Toggle Visibility', active: ch.is_public },
-                              { icon: ch.is_original ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_original },
-                              { icon: <Settings2 size={16} />, onClick: () => openEdit(ch.id), title: 'Edit' },
-                              { icon: <Trash2 size={16} />, onClick: () => handleDelete(ch.id), title: 'Delete', danger: true }
+                               { icon: <Eye size={16} />, onClick: () => setPreviewChannel(ch), title: 'Preview', disabled: ch.is_passthrough },
+                               { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute', hide: user.role === 'free' },
+                               { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />, onClick: () => handleCheck(ch.id), title: 'Check', disabled: ch.is_passthrough },
+                               { icon: ch.is_public ? <Globe size={16} /> : <LockIcon size={16} />, onClick: () => togglePublic(ch.id), title: 'Toggle Visibility', active: ch.is_public },
+                               { icon: ch.is_original ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_original },
+                               { icon: <Settings2 size={16} />, onClick: () => openEdit(ch.id), title: 'Edit' },
+                               { icon: <Trash2 size={16} />, onClick: () => handleDelete(ch.id), title: 'Delete', danger: true }
                             ].filter(b => !b.hide).map((btn, idx) => (
                               <button 
                                 key={idx}
-                                onClick={btn.onClick}
-                                title={btn.title}
+                                onClick={btn.disabled ? undefined : btn.onClick}
+                                title={btn.disabled ? 'Passthrough Mode (No Preview/Scan)' : btn.title}
                                 className={`p-2 rounded-xl transition-all ${
                                   btn.danger ? 'text-slate-600 hover:text-rose-400 hover:bg-rose-500/10' :
                                   btn.active ? 'text-indigo-400 bg-indigo-500/10' :
+                                  btn.disabled ? 'text-slate-800 cursor-not-allowed opacity-30' :
                                   'text-slate-600 hover:text-white hover:bg-white/5'
                                 }`}
                               >
@@ -1288,13 +1323,39 @@ export const Channels: React.FC = () => {
                    {checkingBatch ? <Loader2 className="animate-spin" size={18} /> : <Activity size={18} />}
                 </button>
 
-                <button 
-                  onClick={() => setIsBatchModalOpen(true)}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
-                >
-                   <Plus size={14} />
-                   Add to Playlist
-                </button>
+                 <div className="w-px h-8 bg-white/10 mx-1" />
+
+                 <button 
+                   onClick={() => handleBatchToggle('is_passthrough', true)}
+                   className="w-12 h-12 bg-white/5 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 rounded-2xl transition-all flex items-center justify-center border border-white/5"
+                   title="Batch: Set Passthrough (Safety)"
+                 >
+                    <ZapOff size={18} />
+                 </button>
+                 <button 
+                   onClick={() => handleBatchToggle('is_original', true)}
+                   className="w-12 h-12 bg-white/5 hover:bg-indigo-500/20 text-slate-500 hover:text-indigo-400 rounded-2xl transition-all flex items-center justify-center border border-white/5"
+                   title="Batch: Set Protected (Scan Lock)"
+                 >
+                    <Shield size={18} />
+                 </button>
+                 <button 
+                   onClick={() => handleBatchToggle('is_public', true)}
+                   className="w-12 h-12 bg-white/5 hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-400 rounded-2xl transition-all flex items-center justify-center border border-white/5"
+                   title="Batch: Set Community (Share)"
+                 >
+                    <Globe size={18} />
+                 </button>
+
+                 <div className="w-px h-8 bg-white/10 mx-1" />
+                 
+                 <button 
+                   onClick={() => setIsBatchModalOpen(true)}
+                   className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                 >
+                    <Plus size={14} />
+                    Add to Playlist
+                 </button>
                 <button 
                   onClick={() => setIsGroupModalOpen(true)}
                   className="bg-slate-950/50 hover:bg-white/10 text-slate-400 hover:text-white h-12 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 border border-white/5"

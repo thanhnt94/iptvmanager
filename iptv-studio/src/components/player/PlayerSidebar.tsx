@@ -12,7 +12,10 @@ import {
   Layers,
   SearchX,
   Settings2,
-  CalendarCheck
+  CalendarCheck,
+  ArrowDownAZ,
+  ArrowDownUp,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLogoUrl } from '../../utils';
@@ -43,6 +46,7 @@ interface Channel {
   play_url: string;
   stream_format: string;
   epg_id?: string | null;
+  is_passthrough?: boolean;
 }
 
 interface PlayerSidebarProps {
@@ -65,6 +69,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   const [channels, setChannels] = useState<Channel[]>([]);
   const [search, setSearch] = useState('');
   const [hideDie, setHideDie] = useState(false);
+  const [sortMode, setSortMode] = useState<'alphabetical' | 'default' | 'status'>('alphabetical');
   const debouncedSearch = useDebounce(search, 300);
   
   const [page, setPage] = useState(1);
@@ -131,6 +136,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
       group: selectedCategory,
       q: debouncedSearch,
       hide_die: hideDie.toString(),
+      sort: sortMode,
       limit: '100'
     });
 
@@ -175,12 +181,12 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [selectedPlaylist, selectedCategory, debouncedSearch, page, hideDie]);
+  }, [selectedPlaylist, selectedCategory, debouncedSearch, page, hideDie, sortMode]);
 
   // Trigger fetch on filter change
   useEffect(() => {
     fetchChannels(true);
-  }, [selectedPlaylist, selectedCategory, debouncedSearch, hideDie, fetchChannels]);
+  }, [selectedPlaylist, selectedCategory, debouncedSearch, hideDie, sortMode, fetchChannels]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -262,7 +268,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                <button 
                 onClick={() => setHideDie(!hideDie)}
                 title={hideDie ? "Showing Live Only" : "Exclude Offline"}
-                className={`flex items-center justify-center w-9 h-9 rounded-xl border transition-all ${
+                className={`flex items-center justify-center w-9 h-9 rounded-xl border transition-all shrink-0 ${
                   hideDie 
                   ? 'bg-rose-500/20 border-rose-500/40 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.2)]' 
                   : 'bg-white/5 border-white/5 text-white/20 hover:bg-white/10'
@@ -270,6 +276,36 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                >
                  {hideDie ? <WifiOff size={16} /> : <Zap size={16} />}
                </button>
+
+               <div className="relative group shrink-0">
+                  <button 
+                   className="flex items-center justify-center w-9 h-9 rounded-xl border bg-white/5 border-white/5 text-white/20 hover:bg-white/10 transition-all"
+                   title="Sort Order"
+                  >
+                    {sortMode === 'alphabetical' ? <ArrowDownAZ size={16} /> : sortMode === 'status' ? <Activity size={16} /> : <ArrowDownUp size={16} />}
+                  </button>
+                  <div className="absolute right-0 top-full mt-2 w-40 bg-slate-900 border border-white/10 rounded-xl shadow-2xl p-1.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                     <p className="text-[8px] font-black uppercase tracking-widest text-slate-500 px-2 py-1">Sort By</p>
+                     <button 
+                       onClick={() => setSortMode('alphabetical')}
+                       className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-bold transition-all ${sortMode === 'alphabetical' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-300 hover:bg-white/5'}`}
+                     >
+                        <ArrowDownAZ size={14} /> A-Z (Default)
+                     </button>
+                     <button 
+                       onClick={() => setSortMode('default')}
+                       className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-bold transition-all ${sortMode === 'default' ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-300 hover:bg-white/5'}`}
+                     >
+                        <ArrowDownUp size={14} /> Custom Order
+                     </button>
+                     <button 
+                       onClick={() => setSortMode('status')}
+                       className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-bold transition-all ${sortMode === 'status' ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-300 hover:bg-white/5'}`}
+                     >
+                        <Activity size={14} /> Status (Live First)
+                     </button>
+                  </div>
+               </div>
             </div>
          </div>
       </div>
@@ -288,7 +324,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
       >
         <AnimatePresence mode="popLayout">
           {channels.length > 0 ? (
-            channels.map((ch) => (
+            channels.filter(ch => !ch.is_passthrough).map((ch) => (
               <motion.button
                 layout
                 initial={{ opacity: 0, y: 10 }}

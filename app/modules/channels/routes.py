@@ -94,6 +94,7 @@ def list_channels():
             'resolution': ch.resolution,
             'latency': ch.latency or 0,
             'is_original': ch.is_original,
+            'is_passthrough': ch.is_passthrough,
             'is_public': ch.is_public,
             'last_checked': ch.last_checked_at.isoformat() if hasattr(ch, 'last_checked_at') and ch.last_checked_at else None,
             'play_links': {
@@ -148,6 +149,26 @@ def batch_update_group():
         
     db.session.commit()
     return jsonify({'status': 'ok'})
+
+@channels_bp.route('/batch-update-toggle', methods=['POST'])
+@login_required
+def batch_update_toggle():
+    data = request.json or {}
+    ids = data.get('ids', [])
+    field = data.get('field') # is_passthrough, is_original, is_public
+    value = data.get('value')
+    
+    if not ids or field not in ['is_passthrough', 'is_original', 'is_public'] or value is None:
+        return jsonify({'status': 'error', 'message': 'Invalid data'}), 400
+        
+    # RBAC
+    if current_user.role == 'free':
+        count = Channel.query.filter(Channel.id.in_(ids), Channel.owner_id == current_user.id).update({field: value}, synchronize_session=False)
+    else:
+        count = Channel.query.filter(Channel.id.in_(ids)).update({field: value}, synchronize_session=False)
+        
+    db.session.commit()
+    return jsonify({'status': 'ok', 'count': count})
 
 @channels_bp.route('/groups/manage', methods=['GET'])
 @login_required
@@ -279,6 +300,7 @@ def get_info(id):
             'logo_url': ch.logo_url, 'group_name': ch.group_name,
             'epg_id': ch.epg_id, 'proxy_type': ch.proxy_type or 'none',
             'is_original': ch.is_original,
+            'is_passthrough': ch.is_passthrough,
             'is_public': ch.is_public,
             'play_links': {
                 'smart': url_for('channels.play_channel', channel_id=ch.id, token=token, _external=True),
@@ -321,6 +343,7 @@ def add_channel():
             epg_id=data.get('epg_id'),
             proxy_type=data.get('proxy_type', 'none'),
             is_original=data.get('is_original', False),
+            is_passthrough=data.get('is_passthrough', False),
             is_public=data.get('is_public', False),
             owner_id=current_user.id
         )
@@ -359,6 +382,7 @@ def update_channel(id):
         ch.epg_id = data.get('epg_id', ch.epg_id)
         ch.proxy_type = data.get('proxy_type', ch.proxy_type)
         ch.is_original = data.get('is_original', ch.is_original)
+        ch.is_passthrough = data.get('is_passthrough', ch.is_passthrough)
         ch.is_public = data.get('is_public', ch.is_public)
         
         playlist_ids = data.get('selected_playlists', [])
@@ -462,6 +486,11 @@ def kill_session(key):
 @channels_bp.route('/smartlink/<int:channel_id>')
 def play_channel(channel_id):
     channel = Channel.query.get_or_404(channel_id)
+    
+    # Passthrough channels block all VPS interaction
+    if channel.is_passthrough:
+        return redirect(channel.stream_url)
+
     channel.play_count = (channel.play_count or 0) + 1
     
     from app.modules.settings.services import SettingService

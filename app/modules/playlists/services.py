@@ -17,7 +17,7 @@ class PlaylistService:
         return profile
 
     @staticmethod
-    def update_profile(playlist_id, name=None, slug=None, auto_scan_enabled=None, auto_scan_interval=None):
+    def update_profile(playlist_id, name=None, slug=None, auto_scan_enabled=None, auto_scan_time=None):
         profile = PlaylistProfile.query.get(playlist_id)
         if not profile:
             return False, "Playlist not found"
@@ -38,11 +38,8 @@ class PlaylistService:
         if auto_scan_enabled is not None:
             profile.auto_scan_enabled = bool(auto_scan_enabled)
         
-        if auto_scan_interval is not None:
-            try:
-                profile.auto_scan_interval = int(auto_scan_interval)
-            except (ValueError, TypeError):
-                pass
+        if auto_scan_time is not None:
+            profile.auto_scan_time = str(auto_scan_time)
             
         db.session.commit()
         return True, profile
@@ -223,7 +220,7 @@ class PlaylistService:
                 # Determine URL based on forced mode or channel default
                 is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
                 
-                if mode == 'direct':
+                if mode == 'direct' or ch.is_passthrough:
                     wrapper_url = ch.stream_url
                 elif mode == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
@@ -235,7 +232,7 @@ class PlaylistService:
                 else:
                     # Fallback to channel specific setting
                     ptype = ch.proxy_type or 'default'
-                    if ptype == 'none' or ptype == 'direct':
+                    if ptype == 'none' or ptype == 'direct' or ch.is_passthrough:
                         wrapper_url = ch.stream_url
                     elif ptype == 'tracking' or (ptype == 'default' and is_flv):
                         wrapper_url = url_for('channels.track_redirect', **wrapper_params)
@@ -262,7 +259,7 @@ class PlaylistService:
                 # Determine URL based on forced mode or channel default
                 is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
 
-                if mode == 'direct':
+                if mode == 'direct' or ch.is_passthrough:
                     wrapper_url = ch.stream_url
                 elif mode == 'tracking':
                     wrapper_url = url_for('channels.track_redirect', **wrapper_params)
@@ -274,7 +271,7 @@ class PlaylistService:
                 else:
                     # Fallback to channel specific setting
                     ptype = ch.proxy_type or 'default'
-                    if ptype == 'none' or ptype == 'direct':
+                    if ptype == 'none' or ptype == 'direct' or ch.is_passthrough:
                         wrapper_url = ch.stream_url
                     elif ptype == 'tracking' or (ptype == 'default' and is_flv):
                         wrapper_url = url_for('channels.track_redirect', **wrapper_params)

@@ -10,7 +10,8 @@ import {
   Layers,
   ChevronRight,
   Loader2,
-  Users
+  Users,
+  ZapOff
 } from 'lucide-react';
 
 interface Stats {
@@ -19,6 +20,7 @@ interface Stats {
     live: number;
     die: number;
     unknown: number;
+    passthrough: number;
   };
   playlists: {
     total: number;
@@ -78,6 +80,7 @@ export const Dashboard: React.FC = () => {
     { label: 'Live', value: stats.channels.live, icon: <Zap size={16} />, color: 'bg-emerald-500', text: 'text-emerald-400' },
     { label: 'Offline', value: stats.channels.die, icon: <WifiOff size={16} />, color: 'bg-rose-500', text: 'text-rose-400' },
     { label: 'Unknown', value: stats.channels.unknown, icon: <HelpCircle size={16} />, color: 'bg-slate-500', text: 'text-slate-400' },
+    { label: 'Passthrough', value: stats.channels.passthrough, icon: <ZapOff size={16} />, color: 'bg-rose-950/30', text: 'text-rose-400' },
   ];
 
   return (

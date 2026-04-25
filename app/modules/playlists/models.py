@@ -16,7 +16,8 @@ class PlaylistProfile(db.Model):
     
     # Auto-scan settings
     auto_scan_enabled = db.Column(db.Boolean, default=False)
-    auto_scan_interval = db.Column(db.Integer, default=1440) # Default 1 day in minutes
+    auto_scan_interval = db.Column(db.Integer, default=1440) # Legacy fallback
+    auto_scan_time = db.Column(db.String(5), nullable=True) # "HH:MM" format
     last_auto_scan_at = db.Column(db.DateTime)
     
     # Live Scanning Status (Persistent in DB)

@@ -14,6 +14,7 @@ import {
   Pencil,
   Eye,
   Copy,
+  ZapOff,
   Zap,
   RefreshCw,
   Check,
@@ -37,6 +38,7 @@ interface Entry {
   group_name: string;
   logo_url: string;
   status: string;
+  is_passthrough: boolean;
   stream_url?: string;
   play_links?: {
     smart: string;
@@ -427,24 +429,30 @@ export const PlaylistEditor: React.FC = () => {
                                  {item.group_name}
                               </span>
                               <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'live' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : item.status === 'die' ? 'bg-rose-500' : 'bg-slate-600'}`} />
-                              {item.status !== 'unknown' && <span className={`text-[9px] font-bold uppercase tracking-tighter ${item.status === 'live' ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>{item.status}</span>}
-                           </div>
+                               {item.is_passthrough ? (
+                                 <span className="text-[9px] font-black uppercase tracking-tighter text-rose-400 flex items-center gap-1">
+                                   <ZapOff size={8} /> Passthrough
+                                 </span>
+                               ) : (
+                                 item.status !== 'unknown' && <span className={`text-[9px] font-bold uppercase tracking-tighter ${item.status === 'live' ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>{item.status}</span>
+                               )}
+                            </div>
                         </div>
                      </div>
 
                      <div className="flex items-center gap-1.5">
                         <button 
-                          onClick={(e) => { e.stopPropagation(); setPreviewChannel({ id: item.channel_id, name: item.name, stream_url: item.stream_url, play_links: item.play_links }); }}
-                          className="p-2 bg-slate-900 hover:bg-emerald-500 text-slate-500 hover:text-white rounded-xl transition-all"
-                          title="Preview"
+                           onClick={(e) => { e.stopPropagation(); !item.is_passthrough && setPreviewChannel({ id: item.channel_id, name: item.name, stream_url: item.stream_url, play_links: item.play_links }); }}
+                           className={`p-2 rounded-xl transition-all ${item.is_passthrough ? 'bg-slate-900/50 text-slate-800 cursor-not-allowed opacity-30' : 'bg-slate-900 hover:bg-emerald-500 text-slate-500 hover:text-white'}`}
+                           title={item.is_passthrough ? 'Passthrough Mode (No Preview)' : 'Preview'}
                         >
                            <Eye size={14} />
                         </button>
                         <button 
-                          onClick={(e) => { e.stopPropagation(); handleCheckStatus(item); }}
-                          disabled={checkingStatusId === item.id}
-                          className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all disabled:opacity-50"
-                          title="Refresh Status"
+                           onClick={(e) => { e.stopPropagation(); !item.is_passthrough && handleCheckStatus(item); }}
+                           disabled={checkingStatusId === item.id || item.is_passthrough}
+                           className={`p-2 rounded-xl transition-all ${item.is_passthrough ? 'bg-slate-900/50 text-slate-800 cursor-not-allowed opacity-30' : 'bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white disabled:opacity-50'}`}
+                           title={item.is_passthrough ? 'Passthrough Mode (No Scan)' : 'Refresh Status'}
                         >
                            {checkingStatusId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                         </button>

@@ -154,9 +154,10 @@ def create_app(config_class=Config):
         return jsonify({
             'channels': {
                 'total': Channel.query.count(),
-                'live': Channel.query.filter_by(status='live').count(),
-                'die': Channel.query.filter_by(status='die').count(),
-                'unknown': Channel.query.filter((Channel.status == None) | (Channel.status == 'unknown')).count()
+                'live': Channel.query.filter_by(status='live', is_passthrough=False).count(),
+                'die': Channel.query.filter_by(status='die', is_passthrough=False).count(),
+                'unknown': Channel.query.filter(((Channel.status == None) | (Channel.status == 'unknown')) & (Channel.is_passthrough == False)).count(),
+                'passthrough': Channel.query.filter_by(is_passthrough=True).count()
             },
             'playlists': {'total': PlaylistProfile.query.count()},
             'users': {'total': User.query.count()},

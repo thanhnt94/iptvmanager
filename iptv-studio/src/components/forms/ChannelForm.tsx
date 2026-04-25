@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Play,
   Globe,
-  Lock as LockIcon
+  Lock as LockIcon,
+  ZapOff
 } from 'lucide-react';
 import { getLogoUrl } from '../../utils';
 import { UnifiedPlayer } from '../player/UnifiedPlayer';
@@ -43,6 +44,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
     epg_id: '',
     proxy_type: 'none',
     is_original: false,
+    is_passthrough: false,
     is_public: false,
     selected_playlists: [] as number[]
   });
@@ -85,6 +87,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
               epg_id: ch.epg_id || '',
               proxy_type: ch.proxy_type || 'none',
               is_original: !!ch.is_original,
+              is_passthrough: !!ch.is_passthrough,
               is_public: !!ch.is_public,
               selected_playlists: data.memberships || []
             });
@@ -296,10 +299,16 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                 {formData.stream_url && !showPreview && (
                   <button 
                     type="button"
+                    disabled={formData.is_passthrough}
                     onClick={() => setShowPreview(true)}
-                    className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className={`flex items-center gap-1.5 transition-colors ${
+                      formData.is_passthrough 
+                      ? 'text-slate-700 cursor-not-allowed' 
+                      : 'text-indigo-400 hover:text-indigo-300'
+                    }`}
+                    title={formData.is_passthrough ? 'Test Link disabled in Passthrough Mode' : 'Test Stream Connection'}
                   >
-                    <Play size={12} fill="currentColor" />
+                    <Play size={12} fill="currentColor" className={formData.is_passthrough ? 'opacity-30' : ''} />
                     <span className="text-[9px] font-black uppercase tracking-widest">Test Link</span>
                   </button>
                 )}
@@ -359,7 +368,28 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_original ? 'left-5' : 'left-1'}`} />
                     </div>
                   </button>
-               </div>
+
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, is_passthrough: !formData.is_passthrough})}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all mt-4 ${
+                      formData.is_passthrough 
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' 
+                      : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                       <ZapOff size={20} />
+                       <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-widest">Passthrough Mode</p>
+                          <p className="text-[9px] font-medium opacity-60">Skip VPS Scan/Player (Direct Device Only)</p>
+                       </div>
+                    </div>
+                    <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_passthrough ? 'bg-rose-500' : 'bg-slate-800'}`}>
+                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_passthrough ? 'left-5' : 'left-1'}`} />
+                    </div>
+                  </button>
+                </div>
 
                <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-4">Public Accessibility</h4>

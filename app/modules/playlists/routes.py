@@ -47,14 +47,14 @@ def update_playlist_profile(playlist_id):
     name = data.get('name')
     slug = data.get('slug')
     auto_scan_enabled = data.get('auto_scan_enabled')
-    auto_scan_interval = data.get('auto_scan_interval')
+    auto_scan_time = data.get('auto_scan_time')
     
     success, result = PlaylistService.update_profile(
         playlist_id, 
         name=name, 
         slug=slug, 
         auto_scan_enabled=auto_scan_enabled, 
-        auto_scan_interval=auto_scan_interval
+        auto_scan_time=auto_scan_time
     )
     if not success:
         return jsonify({'status': 'error', 'message': result}), 400
@@ -66,7 +66,7 @@ def update_playlist_profile(playlist_id):
             'name': result.name,
             'slug': result.slug,
             'auto_scan_enabled': result.auto_scan_enabled,
-            'auto_scan_interval': result.auto_scan_interval
+            'auto_scan_time': result.auto_scan_time
         }
     })
 
@@ -137,7 +137,7 @@ def list_playlists():
             'created_at': p.created_at.strftime('%Y-%m-%d'),
             'owner_username': owner_name,
             'auto_scan_enabled': p.auto_scan_enabled,
-            'auto_scan_interval': p.auto_scan_interval,
+            'auto_scan_time': p.auto_scan_time,
             'last_auto_scan_at': p.last_auto_scan_at.isoformat() if p.last_auto_scan_at else None,
             'is_scanning': p.is_scanning,
             'current_scanning_name': p.current_scanning_name
@@ -226,6 +226,7 @@ def get_entries(playlist_id):
     search = request.args.get('q', '')
     group = request.args.get('group', '')
     hide_die = request.args.get('hide_die', 'false').lower() == 'true'
+    sort_mode = request.args.get('sort', 'alphabetical')
 
     is_system_playlist = False
     if playlist_id > 0:
@@ -251,7 +252,17 @@ def get_entries(playlist_id):
         if search: query = query.filter(Channel.name.ilike(f'%{search}%'))
         if group: query = query.filter(Channel.group_name == group)
         
-        pagination = query.order_by(Channel.name.asc()).paginate(page=page, per_page=per_page)
+        if sort_mode == 'status':
+            # Case statement to sort 'live' first, then others
+            from sqlalchemy import case
+            status_order = case((Channel.status == 'live', 1), (Channel.status == 'die', 3), else_=2)
+            query = query.order_by(status_order.asc(), Channel.name.asc())
+        elif sort_mode == 'default':
+            query = query.order_by(Channel.id.asc())
+        else: # alphabetical
+            query = query.order_by(Channel.name.asc())
+            
+        pagination = query.paginate(page=page, per_page=per_page)
         items = [(ch, None) for ch in pagination.items]
     else:
         # Check accessibility for non-system playlists
@@ -266,7 +277,16 @@ def get_entries(playlist_id):
         if search: query = query.filter(Channel.name.ilike(f'%{search}%'))
         if group: query = query.filter(Channel.group_name == group)
 
-        pagination = query.order_by(PlaylistEntry.order_index.asc()).paginate(page=page, per_page=per_page)
+        if sort_mode == 'status':
+            from sqlalchemy import case
+            status_order = case((Channel.status == 'live', 1), (Channel.status == 'die', 3), else_=2)
+            query = query.order_by(status_order.asc(), Channel.name.asc())
+        elif sort_mode == 'alphabetical':
+            query = query.order_by(Channel.name.asc())
+        else: # default
+            query = query.order_by(PlaylistEntry.order_index.asc())
+
+        pagination = query.paginate(page=page, per_page=per_page)
         items = pagination.items
     
     # Safety check for token
@@ -302,6 +322,7 @@ def get_entries(playlist_id):
                 'quality': ch.quality,
                 'resolution': ch.resolution,
                 'stream_format': ch.stream_format,
+                'is_passthrough': ch.is_passthrough,
                 'play_url': smart_url,
                 'play_links': {
                     'smart': smart_url,

@@ -35,7 +35,7 @@ interface Playlist {
   created_at: string;
   owner_username: string;
   auto_scan_enabled: boolean;
-  auto_scan_interval: number;
+  auto_scan_time: string | null;
   last_auto_scan_at: string | null;
   is_scanning: boolean;
   current_scanning_name: string | null;
@@ -77,7 +77,7 @@ export const Playlists: React.FC = () => {
   // Auto Scan Modal State
   const [isAutoScanModalOpen, setIsAutoScanModalOpen] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
-  const [tempInterval, setTempInterval] = useState(1440);
+  const [tempTime, setTempTime] = useState('00:00');
   const [tempEnabled, setTempEnabled] = useState(false);
   const [savingAutoScan, setSavingAutoScan] = useState(false);
 
@@ -190,7 +190,7 @@ export const Playlists: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           auto_scan_enabled: tempEnabled,
-          auto_scan_interval: tempInterval
+          auto_scan_time: tempTime
         })
       });
       const data = await resp.json();
@@ -198,7 +198,7 @@ export const Playlists: React.FC = () => {
         setPlaylists(prev => prev.map(p => p.id === editingPlaylist.id ? { 
           ...p, 
           auto_scan_enabled: data.playlist.auto_scan_enabled,
-          auto_scan_interval: data.playlist.auto_scan_interval
+          auto_scan_time: data.playlist.auto_scan_time
         } : p));
         setIsAutoScanModalOpen(false);
       } else {
@@ -214,7 +214,7 @@ export const Playlists: React.FC = () => {
   const openAutoScanModal = (playlist: Playlist) => {
     setEditingPlaylist(playlist);
     setTempEnabled(playlist.auto_scan_enabled);
-    setTempInterval(playlist.auto_scan_interval || 1440);
+    setTempTime(playlist.auto_scan_time || '00:00');
     setIsAutoScanModalOpen(true);
   };
 
@@ -346,7 +346,7 @@ export const Playlists: React.FC = () => {
                     )}
                     {item.auto_scan_enabled && (
                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30 flex items-center gap-1">
-                          <Clock size={8} /> Auto
+                          <Clock size={8} /> Auto: {item.auto_scan_time || '00:00'}
                        </span>
                     )}
                   </div>
@@ -920,25 +920,13 @@ export const Playlists: React.FC = () => {
                  </div>
 
                  <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2 block ml-1">Scan Interval (Minutes)</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2 block ml-1">Scan Time (UTC+7)</label>
                     <input 
-                      type="number"
-                      value={tempInterval}
-                      onChange={(e) => setTempInterval(parseInt(e.target.value) || 1440)}
-                      placeholder="e.g., 60"
-                      className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all font-bold"
+                      type="time"
+                      value={tempTime}
+                      onChange={(e) => setTempTime(e.target.value)}
+                      className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all font-bold block"
                     />
-                    <div className="flex gap-2 mt-3">
-                       {[60, 360, 1440].map(mins => (
-                         <button 
-                           key={mins}
-                           onClick={() => setTempInterval(mins)}
-                           className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${tempInterval === mins ? 'bg-amber-500 text-black' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-                         >
-                            {mins >= 1440 ? `${Math.round(mins/1440)} Day` : mins >= 60 ? `${Math.round(mins/60)}H` : `${mins}M`}
-                         </button>
-                       ))}
-                    </div>
                  </div>
 
                  <div className="flex gap-3 pt-4">

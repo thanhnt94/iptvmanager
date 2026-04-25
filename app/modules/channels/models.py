@@ -23,6 +23,7 @@ class Channel(db.Model):
     error_message = db.Column(db.Text)    # Last failure reason
     last_checked_at = db.Column(db.DateTime)
     is_original = db.Column(db.Boolean, default=False)
+    is_passthrough = db.Column(db.Boolean, default=False)
     
     # Permission fields
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'))

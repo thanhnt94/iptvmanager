@@ -31,6 +31,9 @@ class HealthCheckService:
         if not SettingService.get('ENABLE_HEALTH_SYSTEM', True):
             return {'status': channel.status, 'skipped': 'Master switch OFF'}
 
+        if channel.is_passthrough:
+            return {'status': 'live', 'skipped': 'Passthrough mode active'}
+
         # 1. Skip if checked recently (TTL setting) unless forced
         if not force and channel.last_checked_at:
             ttl_minutes = SettingService.get('HEARTBEAT_TTL_MINUTES', 30)
@@ -369,7 +372,7 @@ class HealthCheckService:
                     db.session.commit()
 
                     # Build channel query scoped to the target playlist
-                    query = Channel.query
+                    query = Channel.query.filter_by(is_passthrough=False)
                     from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
                     if playlist_id:
                         profile = PlaylistProfile.query.get(playlist_id)
@@ -553,6 +556,10 @@ class HealthCheckService:
         from app.modules.settings.services import SettingService
         if not SettingService.get('ENABLE_HEALTH_SYSTEM', True): return
         if not SettingService.get('ENABLE_PASSIVE_CHECK', True): return
+
+        # Security: Never check passthrough channels
+        ch = Channel.query.get(channel_id)
+        if not ch or ch.is_passthrough: return
 
         from flask import current_app
         app = current_app._get_current_object()
