@@ -192,7 +192,7 @@ export const Channels: React.FC = () => {
    const [shareChannel, setShareChannel] = useState<Channel | null>(null);
    const [jumpPage, setJumpPage] = useState('');
    const [copiedKey, setCopiedKey] = useState<string | null>(null);
-   const [viewMode, setViewMode] = useState<'standard' | 'links' | 'logos' | 'epg'>('standard');
+   const [viewMode, setViewMode] = useState<'standard' | 'links' | 'logos' | 'epg' | 'titles'>('standard');
    const [savingId, setSavingId] = useState<number | null>(null);
    
    // Bulk Actions State
@@ -621,7 +621,8 @@ export const Channels: React.FC = () => {
                 { value: 'standard', label: 'Standard View' },
                 { value: 'links', label: 'Quick Links' },
                 { value: 'logos', label: 'Quick Logos' },
-                { value: 'epg', label: 'Quick EPG' }
+                { value: 'epg', label: 'Quick EPG' },
+                { value: 'titles', label: 'Quick Titles' }
               ]}
               minWidth="160px"
             />
@@ -660,6 +661,53 @@ export const Channels: React.FC = () => {
                 <tr><td colSpan={4} className="p-20 text-center text-slate-500 font-bold uppercase tracking-widest">No Channels Found</td></tr>
               ) : (
                 channels.map((ch) => {
+                  if (viewMode === 'titles') {
+                    return (
+                      <tr key={ch.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-4">
+                           <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center border border-white/5 shrink-0">
+                             {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={16} />}
+                           </div>
+                        </td>
+                        <td className="px-6 py-4" colSpan={2}>
+                           <div className="relative group">
+                              <Tv className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400" size={14} />
+                              <input 
+                                type="text"
+                                defaultValue={ch.name}
+                                onBlur={(e) => {
+                                  if (e.target.value !== ch.name) {
+                                    handleQuickUpdate(ch.id, { name: e.target.value });
+                                  }
+                                }}
+                                className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-10 py-2 text-[11px] text-white font-black focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all uppercase tracking-tight"
+                              />
+                              <button 
+                                onClick={(e) => {
+                                  const input = e.currentTarget.parentElement?.querySelector('input');
+                                  if (input) {
+                                    input.value = '';
+                                    input.focus();
+                                  }
+                                }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <X size={14} />
+                              </button>
+                           </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                           <button 
+                            disabled={savingId === ch.id}
+                            className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-50"
+                           >
+                             {savingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                           </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   if (viewMode === 'links') {
                     return (
                       <tr key={ch.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
@@ -905,6 +953,37 @@ export const Channels: React.FC = () => {
                       <button 
                         disabled={savingId === ch.id}
                         className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg disabled:opacity-50"
+                      >
+                        {savingId === ch.id ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                      </button>
+                   </div>
+                </div>
+              );
+            }
+
+            // Mobile Quick Titles Mode
+            if (viewMode === 'titles') {
+              return (
+                <div key={ch.id} className="glass p-3 rounded-2xl flex flex-col gap-2 border border-white/5">
+                   <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shrink-0">
+                        {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={16} />}
+                      </div>
+                      <div className="relative flex-1">
+                        <input 
+                          type="text"
+                          defaultValue={ch.name}
+                          onBlur={(e) => {
+                            if (e.target.value !== ch.name) {
+                              handleQuickUpdate(ch.id, { name: e.target.value });
+                            }
+                          }}
+                          className="w-full bg-slate-950/40 border border-white/5 rounded-xl px-4 py-1.5 text-[11px] text-white font-black focus:outline-none focus:border-indigo-500/50 uppercase tracking-tight"
+                        />
+                      </div>
+                      <button 
+                        disabled={savingId === ch.id}
+                        className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg"
                       >
                         {savingId === ch.id ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
                       </button>
