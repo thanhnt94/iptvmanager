@@ -17,6 +17,16 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 channels_bp = Blueprint('channels', __name__)
 logger = logging.getLogger('iptv')
 
+def check_channel_access(channel, user_override=None):
+    """Enforces the rule that users can only interact with their own channels or public channels."""
+    if channel.is_public:
+        return
+    if user_override and getattr(user_override, 'id', None) == channel.owner_id:
+        return
+    if current_user.is_authenticated and channel.owner_id == current_user.id:
+        return
+    abort(403)
+
 def validate_proxy_access(token=None):
     from app.modules.auth.models import User
     from app.modules.playlists.models import PlaylistProfile
@@ -57,9 +67,11 @@ def list_channels():
     sort = request.args.get('sort', 'name') # name, newest, oldest
     
     query = Channel.query
-    # RBAC Filtering
-    if current_user.role == 'free':
-        query = query.filter_by(owner_id=current_user.id)
+    # RBAC Filtering: Everyone (Admin, VIP, Free) can only see their own channels OR public channels
+    query = query.filter(db.or_(
+        Channel.owner_id == current_user.id,
+        Channel.is_public == True
+    ))
         
     if search:
         query = query.filter(Channel.name.ilike(f'%{search}%'))
@@ -285,6 +297,8 @@ def get_filters():
 @login_required
 def get_info(id):
     ch = Channel.query.get_or_404(id)
+    check_channel_access(ch)
+
     
     from app.modules.settings.services import SettingService
     if SettingService.get('ENABLE_HEALTH_SYSTEM', True):
@@ -317,6 +331,8 @@ def get_info(id):
 @login_required
 def touch_channel(id):
     """Triggers a passive health check for the given channel."""
+    ch = Channel.query.get_or_404(id)
+    check_channel_access(ch)
     from app.modules.settings.services import SettingService
     if SettingService.get('ENABLE_HEALTH_SYSTEM', True):
         from app.modules.health.services import HealthCheckService
@@ -365,6 +381,7 @@ def add_channel():
 @login_required
 def update_channel(id):
     ch = Channel.query.get_or_404(id)
+    check_channel_access(ch)
     data = request.json
     
     new_url = data.get('stream_url', ch.stream_url)
@@ -402,6 +419,8 @@ def update_channel(id):
 @login_required
 def delete_channel(id):
     ch = Channel.query.get_or_404(id)
+    check_channel_access(ch)
+
     db.session.delete(ch)
     db.session.commit()
     return jsonify({'status': 'ok'})
@@ -409,6 +428,8 @@ def delete_channel(id):
 @channels_bp.route('/<int:id>/check', methods=['POST'])
 @login_required
 def check_channel(id):
+    ch = Channel.query.get_or_404(id)
+    check_channel_access(ch)
     from app.modules.health.services import HealthCheckService
     result = HealthCheckService.check_stream(id)
     return jsonify(result)
@@ -417,6 +438,7 @@ def check_channel(id):
 @login_required
 def toggle_protection(id):
     ch = Channel.query.get_or_404(id)
+    check_channel_access(ch)
     try:
         ch.is_original = not getattr(ch, 'is_original', False)
         db.session.commit()
@@ -433,9 +455,7 @@ def toggle_protection(id):
 @login_required
 def toggle_public(id):
     ch = Channel.query.get_or_404(id)
-    # Protection: Free users can only toggle their own channels
-    if current_user.role == 'free' and ch.owner_id != current_user.id:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+    check_channel_access(ch)
         
     try:
         ch.is_public = not getattr(ch, 'is_public', False)
@@ -460,6 +480,11 @@ def get_active_sessions():
     results = []
     for s in sessions:
         ch = Channel.query.get(s['channel_id'])
+        if ch:
+            try:
+                check_channel_access(ch)
+            except:
+                continue
         results.append({
             'key': s.get('key'),
             'channel_name': ch.name if ch else 'Unknown',
@@ -486,6 +511,9 @@ def kill_session(key):
 @channels_bp.route('/smartlink/<int:channel_id>')
 def play_channel(channel_id):
     channel = Channel.query.get_or_404(channel_id)
+    token = request.args.get('token')
+    user = validate_proxy_access(token) if token else None
+    check_channel_access(channel, user_override=user)
     
     # Passthrough channels block all VPS interaction
     if channel.is_passthrough:
@@ -568,6 +596,7 @@ def play_hls(channel_id):
     token = request.args.get('token')
     user = validate_proxy_access(token)
     if not user: abort(401)
+    check_channel_access(channel, user_override=user)
     
     ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'HLS Proxy', bandwidth_kbps=4500)
     
@@ -665,6 +694,7 @@ def play_ts(channel_id):
     token = request.args.get('token')
     user = validate_proxy_access(token)
     if not user: abort(401)
+    check_channel_access(channel, user_override=user)
     
     ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'TS Proxy', bandwidth_kbps=8000)
     
@@ -679,12 +709,18 @@ def track_redirect(channel_id):
     channel = Channel.query.get_or_404(channel_id)
     token = request.args.get('token')
     user_role = 'free'
+    user = None
     if current_user.is_authenticated:
         user_role = current_user.role
+        user = current_user
     elif token:
         from app.modules.auth.models import User
         u = User.query.filter_by(api_token=token).first()
-        if u: user_role = u.role
+        if u: 
+            user_role = u.role
+            user = u
+            
+    check_channel_access(channel, user_override=user)
 
     if user_role == 'free':
         return redirect(channel.stream_url)

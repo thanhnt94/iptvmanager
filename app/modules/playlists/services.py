@@ -198,12 +198,12 @@ class PlaylistService:
             
             # 1. Handle PERSONALized system playlists (All, Protected)
             if profile.owner_id:
-                query = query.filter_by(owner_id=profile.owner_id)
                 if "protected" in profile.slug:
-                    query = query.filter_by(is_original=True)
+                    query = query.filter_by(owner_id=profile.owner_id, is_original=True)
+                else: # e.g. "All Channels"
+                    query = query.filter(db.or_(Channel.owner_id == profile.owner_id, Channel.is_public == True))
             
             # 2. Handle GLOBAL system playlists (Public/Community)
-            elif profile.slug == 'public':
                 query = query.filter_by(is_public=True)
                 
             if hide_die:
@@ -307,9 +307,10 @@ class PlaylistService:
             
             # 1. PERSONALized isolation
             if profile.owner_id:
-                query = query.filter_by(owner_id=profile.owner_id)
                 if "protected" in profile.slug:
-                    query = query.filter_by(is_original=True)
+                    query = query.filter_by(owner_id=profile.owner_id, is_original=True)
+                else:
+                    query = query.filter(db.or_(Channel.owner_id == profile.owner_id, Channel.is_public == True))
             # 2. GLOBAL isolation
             elif profile.slug == 'public':
                 query = query.filter_by(is_public=True)

@@ -5,9 +5,9 @@ from app.core.database import db
 
 class DataExportService:
     @staticmethod
-    def export_to_excel():
+    def export_to_excel(user):
         """Exports all channels to an Excel file buffer."""
-        channels = Channel.query.all()
+        channels = Channel.query.filter(db.or_(Channel.owner_id == user.id, Channel.is_public == True)).all()
         data = []
         for ch in channels:
             data.append({

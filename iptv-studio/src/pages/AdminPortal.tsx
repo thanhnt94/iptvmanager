@@ -41,6 +41,9 @@ export const AdminPortal: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'free' });
+
   useEffect(() => {
     fetchInitialData();
   }, [activeTab]);
@@ -136,6 +139,31 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!newUser.username || !newUser.password) {
+      showMsg('error', 'Username and Password required');
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showMsg('success', 'User created successfully');
+        setIsUserModalOpen(false);
+        setNewUser({ username: '', email: '', password: '', role: 'free' });
+        fetchInitialData(); // Refresh list
+      } else {
+        showMsg('error', data.message || 'Creation failed');
+      }
+    } catch (err) {
+      showMsg('error', 'Network error');
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header */}
@@ -203,7 +231,7 @@ export const AdminPortal: React.FC = () => {
                       <h2 className="text-2xl font-black text-white tracking-tight">Identity Management</h2>
                       <p className="text-sm text-slate-400">Control system access and playlist permissions</p>
                     </div>
-                    <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
+                    <button onClick={() => setIsUserModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
                       <UserPlus size={16} /> New User
                     </button>
                   </div>
@@ -518,6 +546,56 @@ export const AdminPortal: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* New User Modal */}
+      <AnimatePresence>
+        {isUserModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsUserModalOpen(false)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+            >
+               <h3 className="text-xl font-black text-white tracking-tight mb-6">Create <span className="text-indigo-400">User</span></h3>
+               <div className="space-y-4">
+                  <div>
+                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Username</label>
+                     <input type="text" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium mt-1" />
+                  </div>
+                  <div>
+                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email</label>
+                     <input type="email" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium mt-1" />
+                  </div>
+                  <div>
+                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
+                     <input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium mt-1" />
+                  </div>
+                  <div>
+                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Role</label>
+                     <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full bg-slate-950/50 border border-white/5 rounded-2xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium mt-1 appearance-none cursor-pointer">
+                        <option value="free">Free User</option>
+                        <option value="vip">VIP User</option>
+                        <option value="admin">Admin</option>
+                     </select>
+                  </div>
+                  <div className="pt-4 flex gap-3">
+                     <button onClick={() => setIsUserModalOpen(false)} className="flex-1 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-white hover:bg-white/5 transition-all">Cancel</button>
+                     <button onClick={handleCreateUser} className="flex-[2] bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20">Create</button>
+                  </div>
+               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

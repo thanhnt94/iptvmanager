@@ -52,12 +52,28 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     setStats({ fps: 0, audio: 'SCANNING...', resolution: '0X0' });
   };
 
-  const handleToggleFullscreen = () => {
+  const handleToggleFullscreen = async () => {
     if (!containerRef.current) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      containerRef.current.requestFullscreen();
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        // Unlock orientation when exiting fullscreen
+        if (window.screen && window.screen.orientation && window.screen.orientation.unlock) {
+          window.screen.orientation.unlock();
+        }
+      } else {
+        await containerRef.current.requestFullscreen();
+        // Force landscape on mobile devices
+        if (window.screen && window.screen.orientation && window.screen.orientation.lock) {
+          try {
+            await (window.screen.orientation.lock as any)('landscape');
+          } catch (e) {
+            console.log('Orientation lock not supported or failed:', e);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Fullscreen API error:', err);
     }
   };
 

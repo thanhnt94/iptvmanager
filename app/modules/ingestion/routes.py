@@ -13,7 +13,8 @@ ingestion_bp = Blueprint('ingestion', __name__)
 @ingestion_bp.route('/export/excel', methods=['GET'])
 @login_required
 def export_excel():
-    buffer = DataExportService.export_to_excel()
+    from flask_login import current_user
+    buffer = DataExportService.export_to_excel(current_user)
     return send_file(
         buffer,
         as_attachment=True,

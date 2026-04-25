@@ -9,6 +9,14 @@ from app.core.database import db
 playlists_bp = Blueprint('playlists', __name__)
 publish_bp = Blueprint('publish', __name__)
 
+def check_playlist_access(playlist):
+    """Enforces the rule that users can only interact with their own playlists or global system playlists."""
+    if playlist.is_system and playlist.owner_id is None:
+        return
+    if current_user.is_authenticated and playlist.owner_id == current_user.id:
+        return
+    abort(403)
+
 # API & Manifest Core Only - HTML Routes Purged
 
 @playlists_bp.route('/', methods=['POST'])
@@ -43,6 +51,8 @@ def create_playlist():
 @playlists_bp.route('/<int:playlist_id>', methods=['PATCH'])
 @login_required
 def update_playlist_profile(playlist_id):
+    p = PlaylistProfile.query.get_or_404(playlist_id)
+    check_playlist_access(p)
     data = request.json or {}
     name = data.get('name')
     slug = data.get('slug')
@@ -75,14 +85,10 @@ def update_playlist_profile(playlist_id):
 def list_playlists():
     PlaylistService.ensure_user_default_playlists(current_user)
     
-    query = PlaylistProfile.query
-    if current_user.role == 'free':
-        # Free users see their own playlists (including personalized system ones)
-        query = query.filter_by(owner_id=current_user.id)
-    else:
-        # VIP/Admin see ALL playlists (their own, plus global system, etc.)
-        # But let's prioritize showing only relevant ones: global system + their own + shared
-        pass
+    query = PlaylistProfile.query.filter(db.or_(
+        PlaylistProfile.owner_id == current_user.id,
+        db.and_(PlaylistProfile.is_system == True, PlaylistProfile.owner_id == None)
+    ))
 
     profiles = query.all()
     res = []
@@ -150,8 +156,9 @@ def get_groups(playlist_id):
     """Returns a list of groups for a specific playlist with IDs."""
     is_system = False
     p = None
-    if playlist_id > 0:
+    if playlist_id > 0 and playlist_id != 'system_all':
         p = PlaylistProfile.query.get_or_404(playlist_id)
+        check_playlist_access(p)
         if p.is_system: is_system = True
     elif playlist_id == 0 or str(playlist_id) == 'system_all':
         is_system = True
@@ -160,7 +167,7 @@ def get_groups(playlist_id):
         # For system playlists, groups come from unique channel group names
         query = Channel.query
         if not p: # system_all
-            query = query.filter_by(owner_id=current_user.id)
+            query = query.filter(db.or_(Channel.owner_id == current_user.id, Channel.is_public == True))
         elif p.owner_id:
             query = query.filter_by(owner_id=p.owner_id)
             if "protected" in p.slug: query = query.filter_by(is_original=True)
@@ -186,8 +193,8 @@ def create_playlist_group():
         return jsonify({'status': 'error', 'message': 'Playlist ID and name required'}), 400
         
     p = PlaylistProfile.query.get_or_404(playlist_id)
-    if current_user.role == 'free' and p.owner_id != current_user.id:
-        abort(403)
+    check_playlist_access(p)
+
         
     group = PlaylistService.create_group(playlist_id, name)
     return jsonify({'status': 'ok', 'group_id': group.id})
@@ -203,6 +210,9 @@ def batch_add_to_playlist():
     if not playlist_id or not channel_ids:
         return jsonify({'status': 'error', 'message': 'Missing data'}), 400
         
+    p = PlaylistProfile.query.get_or_404(playlist_id)
+    check_playlist_access(p)
+    
     count = PlaylistService.batch_add_channels_to_playlist(playlist_id, channel_ids, group_id)
     return jsonify({'status': 'ok', 'added_count': count})
 
@@ -210,9 +220,7 @@ def batch_add_to_playlist():
 @login_required
 def delete_entry(entry_id):
     entry = PlaylistEntry.query.get_or_404(entry_id)
-    # RBAC
-    if current_user.role == 'free' and entry.playlist.owner_id != current_user.id:
-        abort(403)
+    check_playlist_access(entry.playlist)
         
     db.session.delete(entry)
     db.session.commit()
@@ -231,14 +239,16 @@ def get_entries(playlist_id):
     is_system_playlist = False
     if playlist_id > 0:
         p = PlaylistProfile.query.get(playlist_id)
-        if p and p.is_system:
-            is_system_playlist = True
+        if p:
+            check_playlist_access(p)
+            if p.is_system:
+                is_system_playlist = True
 
     if playlist_id == 0 or str(playlist_id) == 'system_all' or is_system_playlist:
         p = PlaylistProfile.query.get(playlist_id) if (playlist_id > 0 and playlist_id != 'system_all') else None
         query = Channel.query
         if not p: # system_all fallback
-            query = query.filter_by(owner_id=current_user.id)
+            query = query.filter(db.or_(Channel.owner_id == current_user.id, Channel.is_public == True))
         elif p.owner_id:
             query = query.filter_by(owner_id=p.owner_id)
             if "protected" in p.slug:
@@ -267,8 +277,7 @@ def get_entries(playlist_id):
     else:
         # Check accessibility for non-system playlists
         p = PlaylistProfile.query.get_or_404(playlist_id)
-        if current_user.role == 'free' and p.owner_id != current_user.id:
-            abort(403)
+        check_playlist_access(p)
             
         query = db.session.query(Channel, PlaylistEntry).join(PlaylistEntry, PlaylistEntry.channel_id == Channel.id)
         query = query.filter(PlaylistEntry.playlist_id == playlist_id)
@@ -345,6 +354,8 @@ def get_entries(playlist_id):
 @playlists_bp.route('/reorder/<int:playlist_id>', methods=['POST'])
 @login_required
 def reorder(playlist_id):
+    p = PlaylistProfile.query.get_or_404(playlist_id)
+    check_playlist_access(p)
     entry_ids = request.json.get('entry_ids', [])
     PlaylistService.reorder_entries(playlist_id, entry_ids)
     return jsonify({'status': 'ok'})
@@ -352,6 +363,8 @@ def reorder(playlist_id):
 @playlists_bp.route('/update-entry-group/<int:entry_id>', methods=['POST'])
 @login_required
 def update_entry_group(entry_id):
+    entry = PlaylistEntry.query.get_or_404(entry_id)
+    check_playlist_access(entry.playlist)
     data = request.json or {}
     group_id = data.get('group_id')
     if group_id == "" or group_id == 0: group_id = None
@@ -478,6 +491,8 @@ def publish_xml(slug):
 @playlists_bp.route('/<int:playlist_id>', methods=['DELETE'])
 @login_required
 def delete_playlist(playlist_id):
+    p = PlaylistProfile.query.get_or_404(playlist_id)
+    check_playlist_access(p)
     success, message = PlaylistService.delete_profile(playlist_id)
     if success:
         return jsonify({'status': 'ok', 'message': message})
@@ -487,6 +502,7 @@ def delete_playlist(playlist_id):
 @login_required
 def quick_check_playlist(playlist_id):
     profile = PlaylistProfile.query.get_or_404(playlist_id)
+    check_playlist_access(profile)
     
     # Read delay from request body (default: 5 seconds)
     data = request.get_json(silent=True) or {}
