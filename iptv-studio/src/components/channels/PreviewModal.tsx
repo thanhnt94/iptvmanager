@@ -25,7 +25,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ channel, onClose }) 
   if (!channel) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-slate-950/90 backdrop-blur-xl">
+    <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 md:p-8 bg-slate-950/90 backdrop-blur-xl">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

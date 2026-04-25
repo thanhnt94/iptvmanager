@@ -499,7 +499,7 @@ export const PlaylistEditor: React.FC = () => {
 
       {/* Group Assignment Modal */}
       {isGroupModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsGroupModalOpen(false)} />
            <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -564,7 +564,7 @@ export const PlaylistEditor: React.FC = () => {
 
       {/* Playlist Info Modal */}
       {isInfoModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsInfoModalOpen(false)} />
            <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
