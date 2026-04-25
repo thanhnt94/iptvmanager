@@ -201,6 +201,7 @@ export const Channels: React.FC = () => {
    const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
    const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
    const [checkingBatch, setCheckingBatch] = useState(false);
+   const [epgHints, setEpgHints] = useState<string[]>([]);
 
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -243,10 +244,18 @@ export const Channels: React.FC = () => {
       .catch(err => console.error("Playlists fetch error:", err));
   };
 
+  const fetchEpgHints = () => {
+    fetch('/api/epg/hints')
+      .then(res => res.json())
+      .then(data => setEpgHints(Array.isArray(data) ? data : []))
+      .catch(err => console.error("EPG hints fetch error:", err));
+  };
+
   useEffect(() => {
     fetchChannels();
     fetchFilters();
     fetchUserPlaylists();
+    fetchEpgHints();
   }, [fetchChannels]);
 
   const toggleSelect = (id: number) => {
@@ -719,6 +728,7 @@ export const Channels: React.FC = () => {
                                 type="text"
                                 defaultValue={ch.epg_id || ''}
                                 placeholder="e.g. discovery.us"
+                                list="epg-hints"
                                 onBlur={(e) => {
                                   if (e.target.value !== (ch.epg_id || '')) {
                                     handleQuickUpdate(ch.id, { epg_id: e.target.value });
@@ -925,6 +935,7 @@ export const Channels: React.FC = () => {
                           type="text"
                           defaultValue={ch.epg_id || ''}
                           placeholder="EPG ID"
+                          list="epg-hints"
                           onBlur={(e) => {
                             if (e.target.value !== (ch.epg_id || '')) {
                               handleQuickUpdate(ch.id, { epg_id: e.target.value });
@@ -1309,6 +1320,9 @@ export const Channels: React.FC = () => {
            </motion.div>
         </div>
       )}
+      <datalist id="epg-hints">
+        {epgHints.map(hint => <option key={hint} value={hint} />)}
+      </datalist>
     </div>
   );
 };
