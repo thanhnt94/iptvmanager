@@ -208,11 +208,18 @@ class PlaylistService:
                 
             if hide_die:
                 query = query.filter_by(status='live')
+            else:
+                from sqlalchemy import case
+                status_order = case((Channel.status == 'die', 1), else_=0)
+                query = query.order_by(status_order.asc(), Channel.name.asc())
             
             channels = query.all()
                 
             for ch in channels:
-                extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch.name}'
+                ch_name = ch.name
+                if not hide_die and ch.status == 'die':
+                    ch_name = f"[Unavailable] {ch.name}"
+                extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch_name}'
                 m3u_lines.append(extinf)
                 
                 wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
@@ -244,14 +251,23 @@ class PlaylistService:
                 m3u_lines.append(wrapper_url)
         else:
             # Regular playlist uses its entries
-            for entry in profile.entries:
+            entries = profile.entries
+            if not hide_die:
+                # Sort: live/unknown first (0), die last (1)
+                entries = sorted(entries, key=lambda e: (1 if e.channel.status == 'die' else 0, e.channel.name))
+                
+            for entry in entries:
                 ch = entry.channel
                 # Filter if hide_die is active
                 if hide_die and ch.status != 'live':
                     continue
                     
+                ch_name = ch.name
+                if not hide_die and ch.status == 'die':
+                    ch_name = f"[Unavailable] {ch.name}"
+                    
                 group_name = entry.group.name if entry.group else ch.group_name or ""
-                extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch.name}'
+                extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch_name}'
                 m3u_lines.append(extinf)
                 
                 wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
