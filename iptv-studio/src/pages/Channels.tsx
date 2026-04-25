@@ -672,8 +672,20 @@ export const Channels: React.FC = () => {
                                     handleQuickUpdate(ch.id, { stream_url: e.target.value });
                                   }
                                 }}
-                                className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all font-mono"
+                                className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-10 py-2 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all font-mono"
                               />
+                              <button 
+                                onClick={(e) => {
+                                  const input = e.currentTarget.parentElement?.querySelector('input');
+                                  if (input) {
+                                    input.value = '';
+                                    input.focus();
+                                  }
+                                }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <X size={14} />
+                              </button>
                            </div>
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -710,8 +722,20 @@ export const Channels: React.FC = () => {
                                     handleQuickUpdate(ch.id, { logo_url: e.target.value });
                                   }
                                 }}
-                                className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all"
+                                className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-9 pr-10 py-2 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-950 transition-all"
                               />
+                              <button 
+                                onClick={(e) => {
+                                  const input = e.currentTarget.parentElement?.querySelector('input');
+                                  if (input) {
+                                    input.value = '';
+                                    input.focus();
+                                  }
+                                }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <X size={14} />
+                              </button>
                            </div>
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -850,8 +874,20 @@ export const Channels: React.FC = () => {
                               handleQuickUpdate(ch.id, { stream_url: e.target.value });
                             }
                           }}
-                          className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-8 pr-3 py-1.5 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500/50 font-mono"
+                          className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-8 pr-10 py-1.5 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500/50 font-mono"
                         />
+                        <button 
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input');
+                            if (input) {
+                              input.value = '';
+                              input.focus();
+                            }
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 active:text-rose-400 p-1"
+                        >
+                          <X size={12} />
+                        </button>
                       </div>
                       <button 
                         disabled={savingId === ch.id}
@@ -883,8 +919,20 @@ export const Channels: React.FC = () => {
                               handleQuickUpdate(ch.id, { logo_url: e.target.value });
                             }
                           }}
-                          className="w-full bg-slate-950/40 border border-white/5 rounded-lg pl-7 pr-2 py-1.5 text-[9px] text-slate-300 focus:outline-none focus:border-indigo-500/50"
+                          className="w-full bg-slate-950/40 border border-white/5 rounded-lg pl-7 pr-10 py-1.5 text-[9px] text-slate-300 focus:outline-none focus:border-indigo-500/50"
                         />
+                        <button 
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input');
+                            if (input) {
+                              input.value = '';
+                              input.focus();
+                            }
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 active:text-rose-400 p-1"
+                        >
+                          <X size={12} />
+                        </button>
                       </div>
                    </div>
                    <button 
