@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion, Reorder } from 'framer-motion';
+import { motion, Reorder, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
   GripVertical, 
@@ -11,9 +11,17 @@ import {
   Plus,
   Tv,
   Layout,
-  Pencil
+  Pencil,
+  Eye,
+  Copy,
+  Zap,
+  RefreshCw,
+  Check,
+  XSquare
 } from 'lucide-react';
 import { ChannelForm } from '../components/forms/ChannelForm';
+import { PreviewModal } from '../components/channels/PreviewModal';
+import { getLogoUrl } from '../utils';
 
 interface PlaylistInfo {
   id: number;
@@ -30,6 +38,13 @@ interface Entry {
   logo_url: string;
   status: string;
   stream_url?: string;
+  play_links?: {
+    smart: string;
+    direct: string;
+    tracking: string;
+    hls: string;
+    ts: string;
+  };
 }
 
 export const PlaylistEditor: React.FC = () => {
@@ -54,6 +69,12 @@ export const PlaylistEditor: React.FC = () => {
 
   // Quick Channel Edit State
   const [editingChannelId, setEditingChannelId] = useState<number | null>(null);
+
+  // Selection & Action States
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [previewChannel, setPreviewChannel] = useState<any>(null);
+  const [checkingStatusId, setCheckingStatusId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -136,14 +157,114 @@ export const PlaylistEditor: React.FC = () => {
     }
   };
 
-  const handleUpdateGroup = async (groupId: number | null, customName?: string) => {
-    if (!editingEntry) return;
+  const handleDeleteEntry = async (entryId: number) => {
+    if (!confirm("Remove this channel from playlist?")) return;
+    try {
+      await fetch(`/api/playlists/entries/${entryId}`, { method: 'DELETE' });
+      setEntries(prev => prev.filter(e => e.id !== entryId));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.delete(entryId);
+        return next;
+      });
+    } catch (err) {
+      alert("Error removing entry");
+    }
+  };
+
+  const handleCheckStatus = async (item: Entry) => {
+    setCheckingStatusId(item.id);
+    try {
+      const res = await fetch('/api/health/check-single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel_id: item.channel_id })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        setEntries(prev => prev.map(e => e.id === item.id ? { ...e, status: data.data.status } : e));
+      }
+    } catch (err) {
+      console.error("Health check error:", err);
+    } finally {
+      setCheckingStatusId(null);
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === entries.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(entries.map(e => e.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Remove ${selectedIds.size} channels from this playlist?`)) return;
+    setProcessing(true);
+    try {
+      const ids = Array.from(selectedIds);
+      for (const entryId of ids) {
+        await fetch(`/api/playlists/entries/${entryId}`, { method: 'DELETE' });
+      }
+      setEntries(prev => prev.filter(e => !selectedIds.has(e.id)));
+      setSelectedIds(new Set());
+    } catch (err) {
+      alert("Error during bulk delete");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleBulkCheck = async () => {
+    setProcessing(true);
+    const itemsToCheck = entries.filter(e => selectedIds.has(e.id));
     
+    try {
+      // Check in sequence to avoid overloading
+      for (const item of itemsToCheck) {
+        const res = await fetch('/api/health/check-single', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel_id: item.channel_id })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          setEntries(prev => prev.map(e => e.id === item.id ? { ...e, status: data.data.status } : e));
+        }
+      }
+    } catch (err) {
+      console.error("Bulk check error:", err);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleBulkGroup = () => {
+    if (selectedIds.size === 0) return;
+    // Use first selected as template for modal
+    const firstId = Array.from(selectedIds)[0];
+    const item = entries.find(e => e.id === firstId);
+    if (item) {
+      setEditingEntry(item);
+      setIsGroupModalOpen(true);
+    }
+  };
+
+  // Override handleUpdateGroup to support bulk
+  const handleUpdateGroupBulk = async (groupId: number | null, customName?: string) => {
     setProcessing(true);
     try {
       let finalGroupId = groupId;
-      
-      // If user wants a new group, we create it
       if (!finalGroupId && customName) {
         const res = await fetch(`/api/playlists/groups`, {
           method: 'POST',
@@ -154,29 +275,23 @@ export const PlaylistEditor: React.FC = () => {
         if (data.status === 'ok') finalGroupId = data.group_id;
       }
 
-      await fetch(`/api/playlists/update-entry-group/${editingEntry.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ group_id: finalGroupId })
-      });
+      const ids = Array.from(selectedIds.size > 0 ? selectedIds : new Set(editingEntry ? [editingEntry.id] : []));
+      for (const entryId of ids) {
+        await fetch(`/api/playlists/update-entry-group/${entryId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ group_id: finalGroupId })
+        });
+      }
       
-      fetchPlaylistData(); // Refresh UI
+      fetchPlaylistData();
       setIsGroupModalOpen(false);
       setEditingEntry(null);
+      setSelectedIds(new Set());
     } catch (err) {
-       alert("Error updating group");
+       alert("Error updating groups");
     } finally {
       setProcessing(false);
-    }
-  };
-
-  const handleDeleteEntry = async (entryId: number) => {
-    if (!confirm("Remove this channel from playlist?")) return;
-    try {
-      await fetch(`/api/playlists/entries/${entryId}`, { method: 'DELETE' });
-      setEntries(prev => prev.filter(e => e.id !== entryId));
-    } catch (err) {
-      alert("Error removing entry");
     }
   };
 
@@ -231,7 +346,15 @@ export const PlaylistEditor: React.FC = () => {
       {/* Editor Surface */}
       <div className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6 backdrop-blur-xl">
          <div className="flex items-center justify-between px-6 mb-6">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Resource Sequence</span>
+            <div className="flex items-center gap-4">
+               <button 
+                 onClick={toggleSelectAll}
+                 className={`w-6 h-6 rounded-lg border transition-all flex items-center justify-center ${selectedIds.size === entries.length && entries.length > 0 ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-950/50 border-white/5 hover:border-indigo-500/30'}`}
+               >
+                  {selectedIds.size === entries.length && entries.length > 0 && <Check size={14} className="text-white" />}
+               </button>
+               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Resource Sequence ({selectedIds.size} selected)</span>
+            </div>
             <div className="flex items-center gap-4">
                <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -252,14 +375,20 @@ export const PlaylistEditor: React.FC = () => {
                  value={item}
                  className="group"
                >
-                  <div className="bg-slate-950/40 border border-white/5 hover:border-indigo-500/30 rounded-2xl p-4 flex items-center justify-between transition-all cursor-grab active:cursor-grabbing">
+                  <div className={`border rounded-2xl p-4 flex items-center justify-between transition-all cursor-grab active:cursor-grabbing ${selectedIds.has(item.id) ? 'bg-indigo-500/10 border-indigo-500/40' : 'bg-slate-950/40 border-white/5 hover:border-indigo-500/20'}`}>
                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
+                          className={`w-5 h-5 rounded-md border transition-all flex items-center justify-center ${selectedIds.has(item.id) ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10 group-hover:border-indigo-500/30'}`}
+                        >
+                           {selectedIds.has(item.id) && <Check size={12} className="text-white" />}
+                        </button>
                         <div className="text-slate-600 group-hover:text-indigo-500 transition-colors">
                            <GripVertical size={20} />
                         </div>
                         <div className="w-12 h-12 bg-slate-900 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center border border-white/5">
                            {item.logo_url ? (
-                              <img src={item.logo_url} alt="" className="w-full h-full object-contain p-2" />
+                              <img src={getLogoUrl(item.logo_url)} alt="" className="w-full h-full object-contain p-2" />
                            ) : (
                               <Tv className="text-slate-700" size={24} />
                            )}
@@ -271,31 +400,61 @@ export const PlaylistEditor: React.FC = () => {
                                  <Layout size={10} className="text-indigo-500/50" />
                                  {item.group_name}
                               </span>
-                              <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'live' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                              <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'live' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : item.status === 'die' ? 'bg-rose-500' : 'bg-slate-600'}`} />
+                              {item.status !== 'unknown' && <span className={`text-[9px] font-bold uppercase tracking-tighter ${item.status === 'live' ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>{item.status}</span>}
                            </div>
                         </div>
                      </div>
 
-                     <div className="flex items-center gap-2">
+                     <div className="flex items-center gap-1.5">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setPreviewChannel({ id: item.channel_id, name: item.name, stream_url: item.stream_url, play_links: item.play_links }); }}
+                          className="p-2 bg-slate-900 hover:bg-emerald-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          title="Preview"
+                        >
+                           <Eye size={14} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleCheckStatus(item); }}
+                          disabled={checkingStatusId === item.id}
+                          className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all disabled:opacity-50"
+                          title="Refresh Status"
+                        >
+                           {checkingStatusId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        </button>
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            navigator.clipboard.writeText(item.stream_url || ''); 
+                            setCopiedId(item.id); 
+                            setTimeout(() => setCopiedId(null), 2000); 
+                          }}
+                          className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          title="Copy Original Link"
+                        >
+                           {copiedId === item.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                        </button>
+                        <div className="w-px h-6 bg-white/5 mx-1" />
                         <button 
                           onClick={(e) => { e.stopPropagation(); setEditingChannelId(item.channel_id); }}
-                          className="p-2.5 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
-                          title="Quick Edit Channel"
+                          className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          title="Master Edit"
                         >
-                           <Pencil size={16} />
+                           <Pencil size={14} />
                         </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); setEditingEntry(item); setIsGroupModalOpen(true); }}
-                          className="p-2.5 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
-                          title="Change Group"
+                          className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          title="Move to Group"
                         >
-                           <FolderEdit size={16} />
+                           <FolderEdit size={14} />
                         </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); handleDeleteEntry(item.id); }}
-                          className="p-2.5 bg-slate-900 hover:bg-rose-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          className="p-2 bg-slate-900 hover:bg-rose-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                          title="Remove from Playlist"
                         >
-                           <Trash2 size={16} />
+                           <Trash2 size={14} />
                         </button>
                      </div>
                   </div>
@@ -329,20 +488,20 @@ export const PlaylistEditor: React.FC = () => {
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Existing Groups</label>
                     <div className="grid grid-cols-2 gap-2">
                        <button 
-                         onClick={() => handleUpdateGroup(null)}
-                         className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${!editingEntry?.group_name || editingEntry.group_name === 'Ungrouped' ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
-                       >
-                          None / Main
-                       </button>
-                       {groups.map(g => (
-                          <button 
-                             key={g.id}
-                             onClick={() => handleUpdateGroup(g.id)}
-                             className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${editingEntry?.group_name === g.name ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
-                          >
-                             {g.name}
-                          </button>
-                       ))}
+                          onClick={() => handleUpdateGroupBulk(null)}
+                          className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${!editingEntry?.group_name || editingEntry.group_name === 'Ungrouped' ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
+                        >
+                           None / Main
+                        </button>
+                        {groups.map(g => (
+                           <button 
+                              key={g.id}
+                              onClick={() => handleUpdateGroupBulk(g.id)}
+                              className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${editingEntry?.group_name === g.name ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
+                           >
+                              {g.name}
+                           </button>
+                        ))}
                     </div>
                  </div>
 
@@ -360,13 +519,13 @@ export const PlaylistEditor: React.FC = () => {
                        className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
                     />
                     <button 
-                      disabled={!newGroupName || processing}
-                      onClick={() => handleUpdateGroup(null, newGroupName)}
-                      className="w-full bg-white/5 hover:bg-white/10 text-indigo-400 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                    >
-                       {processing ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                       Create & Assign
-                    </button>
+                       disabled={!newGroupName || processing}
+                       onClick={() => handleUpdateGroupBulk(null, newGroupName)}
+                       className="w-full bg-white/5 hover:bg-white/10 text-indigo-400 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                     >
+                        {processing ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                        Create & Assign
+                     </button>
                  </div>
               </div>
 
@@ -430,6 +589,60 @@ export const PlaylistEditor: React.FC = () => {
           channelId={editingChannelId}
           onClose={() => setEditingChannelId(null)}
           onSuccess={() => { setEditingChannelId(null); fetchPlaylistData(); }}
+        />
+      )}
+
+      {/* Bulk Action Bar */}
+      <AnimatePresence>
+        {selectedIds.size > 0 && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[150] bg-slate-900/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-3 shadow-2xl flex items-center gap-4 min-w-[400px]"
+          >
+            <div className="bg-indigo-600 text-white px-4 py-2 rounded-2xl flex items-center gap-3">
+               <span className="text-xs font-black uppercase tracking-widest">{selectedIds.size} Selected</span>
+               <button onClick={() => setSelectedIds(new Set())} className="hover:text-white/70"><XSquare size={14} /></button>
+            </div>
+            
+            <div className="flex items-center gap-1">
+               <button 
+                 onClick={handleBulkCheck}
+                 disabled={processing}
+                 className="p-3 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-2xl transition-all flex flex-col items-center gap-1 min-w-[70px]"
+                 title="Check Status"
+               >
+                 {processing ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+                 <span className="text-[8px] font-black uppercase tracking-tighter">Status</span>
+               </button>
+               <button 
+                 onClick={handleBulkGroup}
+                 className="p-3 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-2xl transition-all flex flex-col items-center gap-1 min-w-[70px]"
+                 title="Change Group"
+               >
+                 <FolderEdit size={18} />
+                 <span className="text-[8px] font-black uppercase tracking-tighter">Group</span>
+               </button>
+               <button 
+                 onClick={handleBulkDelete}
+                 disabled={processing}
+                 className="p-3 text-slate-400 hover:text-rose-400 hover:bg-white/5 rounded-2xl transition-all flex flex-col items-center gap-1 min-w-[70px]"
+                 title="Remove"
+               >
+                 <Trash2 size={18} />
+                 <span className="text-[8px] font-black uppercase tracking-tighter">Remove</span>
+               </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Preview Modal */}
+      {previewChannel && (
+        <PreviewModal 
+          channel={previewChannel}
+          onClose={() => setPreviewChannel(null)}
         />
       )}
     </div>
