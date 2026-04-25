@@ -721,41 +721,6 @@ def player_ping():
     db.session.commit()
     return jsonify({'status': 'ok'})
 
-@channels_bp.route('/logo-proxy')
-def logo_proxy():
-    url = request.args.get('url')
-    if not url:
-        return abort(400)
-    
-    try:
-        # Use common UA to bypass simple bot blocks
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-            'Referer': url.rsplit('/', 1)[0] + '/' if '/' in url else url
-        }
-        # Allow 10s timeout, verify=False for slightly broken SSLs
-        resp = requests.get(url, headers=headers, timeout=10, verify=False, stream=True)
-        
-        if resp.status_code >= 400:
-            logger.warning(f"Logo Proxy failed for {url} with status {resp.status_code}")
-            return abort(resp.status_code)
-            
-        content = resp.raw.read()
-        return Response(
-            content,
-            content_type=resp.headers.get('Content-Type', 'image/jpeg'),
-            headers={
-                'Cache-Control': 'public, max-age=86400', # Cache for 1 day
-                'Access-Control-Allow-Origin': '*'
-            }
-        )
-    except requests.exceptions.Timeout:
-        logger.warning(f"Logo Proxy timeout for {url}")
-        return abort(504)
-    except Exception as e:
-        logger.error(f"Logo Proxy internal error for {url}: {e}")
-        return abort(502)
-
 @channels_bp.route('/scan-web', methods=['POST'])
 @login_required
 def scan_web():

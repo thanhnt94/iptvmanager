@@ -29,7 +29,8 @@ import {
   LayoutGrid,
   Link2,
   Image as ImageIcon,
-  Save
+  Save,
+  ArrowUpDown
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
@@ -37,7 +38,6 @@ import { PreviewModal } from '../components/channels/PreviewModal';
 import { useNavigate } from 'react-router-dom';
 import { getLogoUrl } from '../utils';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowUpDown } from 'lucide-react';
 
 interface Channel {
   id: number;
@@ -410,6 +410,7 @@ export const Channels: React.FC = () => {
       setSavingId(null);
     }
   };
+
 
    const updateParams = (updates: Record<string, string>) => {
      const newParams = new URLSearchParams(searchParams);
