@@ -505,34 +505,34 @@ export const Channels: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 lg:gap-6">
         <div className="flex-1">
-          <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-white">Channel <span className="text-indigo-500">Registry</span></h2>
-          <p className="text-slate-400 text-xs md:text-sm mt-1">Enterprise-grade distribution and health monitoring.</p>
+          <h2 className="text-xl md:text-3xl font-black tracking-tighter text-white">Channel <span className="text-indigo-500">Registry</span></h2>
+          <p className="text-slate-500 text-[10px] md:text-sm mt-0.5">Distribution and health monitoring system.</p>
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 md:flex-wrap">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 md:flex-wrap">
            {user.role !== 'free' && (
              <>
                <button 
                 onClick={cleanDead}
-                className="h-12 px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest text-rose-400 hover:bg-rose-500/10 transition-all border border-rose-500/20 shrink-0"
+                className="h-10 md:h-12 px-4 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 text-[9px] md:text-xs font-black uppercase tracking-widest text-rose-400 hover:bg-rose-500/10 transition-all border border-rose-500/20 shrink-0"
                >
-                  <Trash2 size={16} /> <span className="hidden md:inline">Clean Dead</span>
+                  <Trash2 size={14} /> <span className="hidden md:inline">Clean Dead</span>
                </button>
                <button 
                 onClick={() => navigate('/import')}
-                className="h-12 px-5 rounded-xl md:rounded-2xl flex items-center justify-center gap-3 text-[10px] md:text-xs font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/10 transition-all border border-indigo-500/20 shrink-0"
+                className="h-10 md:h-12 px-4 rounded-xl md:rounded-2xl flex items-center justify-center gap-3 text-[9px] md:text-xs font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/10 transition-all border border-indigo-500/20 shrink-0"
                >
-                  <CloudDownload size={16} /> <span className="hidden md:inline">Import Bulk</span>
+                  <CloudDownload size={14} /> <span className="hidden md:inline">Import Bulk</span>
                </button>
              </>
            )}
            <button 
             onClick={openAdd}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20 shrink-0"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white h-10 md:h-12 px-5 rounded-xl md:rounded-2xl font-black text-[9px] md:text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20 shrink-0"
            >
-              <Plus size={18} /> <span className="hidden md:inline">Add Channel</span>
+              <Plus size={16} /> <span className="hidden md:inline">Add Channel</span>
            </button>
         </div>
       </header>
@@ -800,73 +800,166 @@ export const Channels: React.FC = () => {
         </div>
       </div>
 
-      {/* Channels List - MOBILE CARDS */}
-      <div className="lg:hidden flex flex-col gap-4">
+      {/* Mobile Select All & Summary (Only in Standard View) */}
+      {viewMode === 'standard' && (
+        <div className="lg:hidden flex items-center justify-between px-2 mb-1">
+           <button 
+             onClick={toggleSelectAll}
+             className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-xl border border-white/5 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
+           >
+              <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedIds.length === channels.length && channels.length > 0 ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10'}`}>
+                 {selectedIds.length === channels.length && channels.length > 0 && <Check size={10} className="text-white" />}
+              </div>
+              {selectedIds.length === channels.length && channels.length > 0 ? 'Deselect All' : 'Select All'}
+           </button>
+           <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Total: {pagination?.total || 0}</span>
+        </div>
+      )}
+
+      {/* Channels List - MOBILE CARDS (Optimized for space) */}
+      <div className="lg:hidden flex flex-col gap-2 px-1">
         {loading ? (
           <div className="p-10 text-center glass rounded-3xl"><Loader2 className="animate-spin text-indigo-500 mx-auto" size={32} /></div>
         ) : channels.length === 0 ? (
           <div className="p-10 text-center glass rounded-3xl text-slate-500 font-bold uppercase tracking-widest text-xs">No Channels</div>
         ) : (
-          channels.map((ch, i) => (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              key={ch.id} 
-              className={`glass p-5 rounded-[2rem] space-y-5 relative overflow-hidden ${selectedIds.includes(ch.id) ? 'ring-2 ring-indigo-500/50 bg-indigo-500/5' : ''}`}
-              onClick={() => toggleSelect(ch.id)}
-            >
-              {selectedIds.includes(ch.id) && (
-                <div className="absolute top-4 right-4 w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center text-white shadow-lg">
-                  <Check size={14} />
+          channels.map((ch, i) => {
+            // Mobile Quick Links Mode
+            if (viewMode === 'links') {
+              return (
+                <div key={ch.id} className="glass p-3 rounded-2xl flex flex-col gap-2 border border-white/5">
+                   <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                         <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shrink-0">
+                           {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={16} />}
+                         </div>
+                         <span className="text-[11px] font-black text-white truncate leading-tight">{ch.name}</span>
+                      </div>
+                      <div className={`px-2 py-0.5 rounded-full border text-[7px] font-black uppercase tracking-tighter ${ch.status === 'live' ? 'border-emerald-500/20 text-emerald-400' : 'border-rose-500/20 text-rose-400'}`}>
+                        {ch.status}
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={12} />
+                        <input 
+                          type="text"
+                          defaultValue={ch.stream_url}
+                          onBlur={(e) => {
+                            if (e.target.value !== ch.stream_url) {
+                              handleQuickUpdate(ch.id, { stream_url: e.target.value });
+                            }
+                          }}
+                          className="w-full bg-slate-950/40 border border-white/5 rounded-xl pl-8 pr-3 py-1.5 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500/50 font-mono"
+                        />
+                      </div>
+                      <button 
+                        disabled={savingId === ch.id}
+                        className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg disabled:opacity-50"
+                      >
+                        {savingId === ch.id ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                      </button>
+                   </div>
                 </div>
-              )}
-              <div className="flex items-center gap-4">
-                 <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-white/5 flex items-center justify-center shrink-0">
-                   {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1.5" alt="" /> : <Tv className="text-slate-700" size={24} />}
-                 </div>
-                 <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-black text-white truncate">{ch.name}</h4>
-                      {ch.epg_id && <CalendarCheck className="text-indigo-400 shrink-0" size={14} />}
-                      {ch.is_original && <Shield className="text-indigo-400 shrink-0" size={14} />}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                       <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${
-                         ch.status === 'live' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                         ch.status === 'die' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
-                         'bg-slate-500/10 border-slate-500/20 text-slate-400'
-                       }`}>
-                         {getStatusIcon(ch.status)} {ch.status}
-                       </div>
-                       <span className="text-[10px] font-black text-slate-600 tracking-widest uppercase">{Math.round(ch.latency)}ms</span>
-                    </div>
-                 </div>
-              </div>
+              );
+            }
 
-              <div className="flex items-center justify-between bg-slate-950/40 p-2 rounded-2xl border border-white/5">
-                 {[
-                   { icon: <Eye size={20} />, onClick: () => setPreviewChannel(ch) },
-                   { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={20} /> : <Activity size={20} />, onClick: () => handleCheck(ch.id) },
-                   { icon: ch.is_original ? <Shield size={20} /> : <ShieldOff size={20} />, onClick: () => toggleProtection(ch.id), active: ch.is_original },
-                   { icon: <Settings2 size={20} />, onClick: () => openEdit(ch.id) },
-                   { icon: <Trash2 size={20} />, onClick: () => handleDelete(ch.id), danger: true }
-                 ].map((btn, idx) => (
+            // Mobile Quick Logos Mode
+            if (viewMode === 'logos') {
+              return (
+                <div key={ch.id} className="glass p-2 rounded-2xl flex items-center gap-3 border border-white/5">
+                   <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-white/10 p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
+                      {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain" alt="" /> : <Tv className="text-slate-800" size={24} />}
+                   </div>
+                   <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                      <span className="text-[10px] font-black text-white truncate uppercase tracking-tighter">{ch.name}</span>
+                      <div className="relative">
+                        <ImageIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={10} />
+                        <input 
+                          type="text"
+                          defaultValue={ch.logo_url || ''}
+                          onBlur={(e) => {
+                            if (e.target.value !== (ch.logo_url || '')) {
+                              handleQuickUpdate(ch.id, { logo_url: e.target.value });
+                            }
+                          }}
+                          className="w-full bg-slate-950/40 border border-white/5 rounded-lg pl-7 pr-2 py-1.5 text-[9px] text-slate-300 focus:outline-none focus:border-indigo-500/50"
+                        />
+                      </div>
+                   </div>
                    <button 
-                    key={idx} 
-                    onClick={btn.onClick}
-                    className={`p-3 rounded-xl transition-all ${
-                      btn.danger ? 'text-rose-500/40 hover:text-rose-400' :
-                      btn.active ? 'text-indigo-400' :
-                      'text-slate-500 hover:text-white'
-                    }`}
+                      disabled={savingId === ch.id}
+                      className="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl"
                    >
-                     {btn.icon}
+                     {savingId === ch.id ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
                    </button>
-                 ))}
-              </div>
-            </motion.div>
-          ))
+                </div>
+              );
+            }
+
+            // Mobile Standard View (Tightened Layout)
+            return (
+              <motion.div 
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.02 }}
+                key={ch.id} 
+                className={`glass p-3 rounded-[1.5rem] flex flex-col gap-2 relative overflow-hidden border transition-all ${selectedIds.includes(ch.id) ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-white/5'}`}
+              >
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3 min-w-0">
+                      <button 
+                        onClick={() => toggleSelect(ch.id)}
+                        className={`w-5 h-5 rounded border transition-all flex items-center justify-center shrink-0 ${selectedIds.includes(ch.id) ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10 hover:border-indigo-500/50'}`}
+                      >
+                         {selectedIds.includes(ch.id) && <Check size={12} className="text-white" />}
+                      </button>
+                      <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shrink-0">
+                        {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} className="w-full h-full object-contain p-1" alt="" /> : <Tv className="text-slate-700" size={18} />}
+                      </div>
+                      <div className="min-w-0">
+                         <div className="flex items-center gap-2">
+                           <h4 className="text-[12px] font-black text-white truncate leading-tight">{ch.name}</h4>
+                           {ch.epg_id && <CalendarCheck className="text-indigo-400 shrink-0" size={12} />}
+                         </div>
+                         <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className={`px-1.5 py-0.5 rounded-full border text-[7px] font-black uppercase tracking-widest ${
+                              ch.status === 'live' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                              ch.status === 'die' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
+                              'bg-slate-500/10 border-slate-500/20 text-slate-400'
+                            }`}>
+                              {ch.status}
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-600 tracking-widest uppercase">{Math.round(ch.latency)}ms</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="flex items-center justify-between bg-slate-950/40 px-1 py-1 rounded-xl border border-white/5">
+                   {[
+                     { icon: <Eye size={15} />, onClick: () => setPreviewChannel(ch) },
+                     { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={15} /> : <Activity size={15} />, onClick: () => handleCheck(ch.id) },
+                     { icon: ch.is_original ? <Shield size={15} /> : <ShieldOff size={15} />, onClick: () => toggleProtection(ch.id), active: ch.is_original },
+                     { icon: <Settings2 size={15} />, onClick: () => openEdit(ch.id) },
+                     { icon: <Trash2 size={15} />, onClick: () => handleDelete(ch.id), danger: true }
+                   ].map((btn, idx) => (
+                     <button 
+                      key={idx} 
+                      onClick={(e) => { e.stopPropagation(); btn.onClick(); }}
+                      className={`p-2 rounded-lg transition-all ${
+                        btn.danger ? 'text-rose-500/30 hover:text-rose-400' :
+                        btn.active ? 'text-indigo-400' :
+                        'text-slate-600 hover:text-white'
+                      }`}
+                     >
+                       {btn.icon}
+                     </button>
+                   ))}
+                </div>
+              </motion.div>
+            );
+          })
         )}
       </div>
 
@@ -965,7 +1058,7 @@ export const Channels: React.FC = () => {
 
       {/* Floating Bulk Action Bar */}
       <AnimatePresence>
-        {selectedIds.length > 0 && (
+        {viewMode === 'standard' && selectedIds.length > 0 && (
           <motion.div 
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
