@@ -207,7 +207,7 @@ class PlaylistService:
                 query = query.filter_by(is_public=True)
                 
             if hide_die:
-                query = query.filter_by(status='live')
+                query = query.filter(Channel.status != 'die')
             else:
                 from sqlalchemy import case
                 status_order = case((Channel.status == 'die', 1), else_=0)
@@ -217,7 +217,9 @@ class PlaylistService:
                 
             for ch in channels:
                 ch_name = ch.name
-                if not hide_die and ch.status == 'die':
+                if ch.status == 'unknown' or not ch.status:
+                    ch_name = f"[Unknown] {ch.name}"
+                elif not hide_die and ch.status == 'die':
                     ch_name = f"[Unavailable] {ch.name}"
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch_name}'
                 m3u_lines.append(extinf)
@@ -259,11 +261,13 @@ class PlaylistService:
             for entry in entries:
                 ch = entry.channel
                 # Filter if hide_die is active
-                if hide_die and ch.status != 'live':
+                if hide_die and ch.status == 'die':
                     continue
                     
                 ch_name = ch.name
-                if not hide_die and ch.status == 'die':
+                if ch.status == 'unknown' or not ch.status:
+                    ch_name = f"[Unknown] {ch.name}"
+                elif not hide_die and ch.status == 'die':
                     ch_name = f"[Unavailable] {ch.name}"
                     
                 group_name = entry.group.name if entry.group else ch.group_name or ""
