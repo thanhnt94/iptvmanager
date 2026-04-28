@@ -416,7 +416,14 @@ def publish_friendly(username, slug, mode, status):
     response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
     return response
 
-# --- ALIASES FOR 404 PREVENTION ---
+@playlists_bp.route('/publish/<slug>.m3u8')
+def publish_api_alias_catchall(slug):
+    """CATCH-ALL for /api/playlists/publish/<slug>.m3u8 to prevent 404s from any frontend/link."""
+    profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
+    # No more token requirement or 403/401 here - just return it!
+    token = request.args.get('token') or profile.security_token
+    m3u_content = PlaylistService.generate_m3u(profile.id, token=token)
+    return Response(m3u_content, mimetype='application/x-mpegurl')
 
 @publish_bp.route('/<slug>.m3u8')
 def publish_root_m3u8(slug):
@@ -426,12 +433,20 @@ def publish_root_m3u8(slug):
     m3u_content = PlaylistService.generate_m3u(profile.id, token=token)
     return Response(m3u_content, mimetype='application/x-mpegurl')
 
-@playlists_bp.route('/publish/public.m3u8')
-def publish_api_alias_public():
-    """Handles /api/playlists/publish/public.m3u8 which frontend seems to call."""
-    profile = PlaylistProfile.query.filter_by(slug='public').first_or_404()
-    token = request.args.get('token') or profile.security_token
-    m3u_content = PlaylistService.generate_m3u(profile.id, token=token)
+@publish_bp.route('/<username>/<slug>')
+def publish_ultra_simple(username, slug):
+    """The ULTIMATE simple route: /admin/all or /admin/protected"""
+    from app.modules.auth.models import User
+    user = User.query.filter_by(username=username).first_or_404()
+    
+    actual_slug = slug
+    if slug.lower() == 'all':
+        actual_slug = f"user-{user.id}-all"
+    elif slug.lower() == 'protected':
+        actual_slug = f"user-{user.id}-protected"
+        
+    profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first_or_404()
+    m3u_content = PlaylistService.generate_m3u(profile.id)
     return Response(m3u_content, mimetype='application/x-mpegurl')
 
 @publish_bp.route('/publish/<username>/<slug>.<ext>')
@@ -448,21 +463,14 @@ def publish_personalized(username, slug, ext):
         
     profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first_or_404()
     
-    token = request.args.get('token')
+    # TOKENS IGNORED
     hide_die = request.args.get('hide_die', 'false').lower() == 'true'
     mode = request.args.get('mode')
     
-    if profile.security_token and token != profile.security_token:
-        # Check if token is user's api_token
-        u = User.query.filter_by(api_token=token).first()
-        if not u or (profile.owner_id and profile.owner_id != u.id and u.role != 'admin'):
-            abort(403)
-            
     if ext == 'xml':
         return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
     else:
-        xml_url = url_for('publish.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
-        m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
+        m3u_content = PlaylistService.generate_m3u(profile.id, hide_die=hide_die, mode=mode)
         response = Response(m3u_content, mimetype='application/x-mpegurl')
         response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
         return response

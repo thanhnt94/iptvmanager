@@ -193,7 +193,8 @@ class PlaylistService:
 
         # Optimization: Pre-calculate base URLs to avoid calling url_for 45,000+ times
         # This makes generation O(N) string concat instead of O(N) heavy Flask routing
-        token_suffix = f"?token={token}" if token else ""
+        # TOKENS REMOVED as requested by user
+        token_suffix = ""
         
         # We use a dummy ID 999999999 to find the pattern and replace it
         dummy_id = 999999999
