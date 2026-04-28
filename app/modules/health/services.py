@@ -25,7 +25,10 @@ class HealthCheckService:
         """Checks the connectivity and technical specs of a single stream URL."""
         channel = Channel.query.get(channel_id)
         if not channel:
+            logger.error(f" [HEALTH-ERROR] Channel ID {channel_id} not found!")
             return
+            
+        logger.info(f" [HEALTH-START] Checking {channel.name} (Force={force}, Fast={fast_mode})")
             
         from app.modules.settings.services import SettingService
         if not SettingService.get('ENABLE_HEALTH_SYSTEM', True):

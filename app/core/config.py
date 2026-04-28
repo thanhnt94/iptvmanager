@@ -1,7 +1,9 @@
 import os
 
-# Absolute path to the IPTV root directory
+# Absolute path to the IPTV root directory (app/core/config.py -> app/core -> app -> root)
+# We use 3 levels up to reach Ecosystem root where Storage folder lives
 basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+print(f" [DEBUG] Config basedir: {basedir}")
 instance_path = os.path.join(basedir, 'instance')
 
 class Config:
@@ -9,6 +11,8 @@ class Config:
     
     # Centralized SQLite database for Ecosystem (Cross-platform path)
     DB_PATH = os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTVManager.db'))
+    # Print DB_PATH to verify across processes
+    print(f" [DEBUG] SQLALCHEMY_DATABASE_URI: sqlite:///{DB_PATH}")
     SQLALCHEMY_DATABASE_URI = f'sqlite:///{DB_PATH}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     

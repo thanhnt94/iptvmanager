@@ -8,6 +8,7 @@ scheduler = APScheduler()
 @shared_task(name='health.check_channel')
 def check_channel_task(channel_id, force=False, fast_mode=False):
     """Celery task for a single channel health check."""
+    logger.info(f" [TASK-RECEIVED] health.check_channel for ID: {channel_id}")
     from app.modules.health.services import HealthCheckService
     from app.modules.channels.models import Channel
     
