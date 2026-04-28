@@ -6,7 +6,7 @@ logger = logging.getLogger('iptv')
 scheduler = APScheduler()
 
 @shared_task(name='health.check_channel')
-def check_channel_task(channel_id, force=False, fast_mode=False, timeout=20):
+def check_channel_task(channel_id, force=False, fast_mode=False, timeout=10):
     """Celery task for a single channel health check."""
     logger.info(f" [TASK-RECEIVED] health.check_channel for ID: {channel_id}")
     from app.modules.health.services import HealthCheckService
@@ -47,7 +47,6 @@ def init_scheduler(app):
 def auto_scan_playlists_task():
     """
     Periodic task to trigger health checks for playlists with auto-scan enabled.
-    Evaluates based on user-defined specific time of day (in UTC+7) rather than intervals.
     """
     with scheduler.app.app_context():
         from app.modules.playlists.models import PlaylistProfile
@@ -61,34 +60,26 @@ def auto_scan_playlists_task():
             logger.debug("Auto-Scan: Global scanner is busy, skipping this cycle.")
             return
 
-        # 2. Get current time in UTC+7
         tz_utc7 = timezone(timedelta(hours=7))
         now_utc7 = datetime.now(tz_utc7)
         now_utc = datetime.utcnow()
         
-        # Find all playlists with auto-scan enabled
         playlists = PlaylistProfile.query.filter_by(auto_scan_enabled=True).all()
         
         for p in playlists:
             should_run = False
-            
-            # If no time is configured, fallback to default "00:00" behavior or skip
             scan_time_str = p.auto_scan_time or "00:00"
             
             try:
                 scan_hour, scan_minute = map(int, scan_time_str.split(':'))
                 scan_time_today = now_utc7.replace(hour=scan_hour, minute=scan_minute, second=0, microsecond=0)
                 
-                # Check if current time has passed the scheduled scan time today
                 if now_utc7 >= scan_time_today:
                     if not p.last_auto_scan_at:
                         should_run = True
                     else:
-                        # Convert last scan time (UTC) to UTC+7 to compare dates
                         last_scan_utc = p.last_auto_scan_at.replace(tzinfo=timezone.utc)
                         last_scan_utc7 = last_scan_utc.astimezone(tz_utc7)
-                        
-                        # If we haven't scanned today in UTC+7, we should run
                         if last_scan_utc7.date() < now_utc7.date():
                             should_run = True
             except Exception as e:
@@ -97,16 +88,12 @@ def auto_scan_playlists_task():
             
             if should_run:
                 logger.info(f" [AUTO-SCAN] Triggering scheduled check for playlist: {p.name} (#{p.id}) at {scan_time_str} UTC+7")
-                
-                # Update last_scan timestamp BEFORE starting to prevent double trigger on next 5m tick
                 p.last_auto_scan_at = now_utc
                 db.session.commit()
                 
-                # Start background scan (this spawns a thread)
                 HealthCheckService.start_background_scan(
                     scheduler.app,
                     mode='all',
                     playlist_id=p.id
                 )
-                # Since the global scanner handles one at a time, we break after starting the first due playlist
                 break
