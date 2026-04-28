@@ -26,8 +26,15 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 
 def create_app(config_class=Config):
     # Set static_folder to the Vite build output
-    static_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'app', 'static', 'dist')
+    # Set static_folder to the Vite build output (Absolute Path)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    static_folder = os.path.join(base_dir, 'app', 'static', 'dist')
+    
     app = Flask(__name__, static_folder=static_folder, static_url_path='')
+    
+    print(f" [SYSTEM] Static folder set to: {static_folder}")
+    if not os.path.exists(static_folder):
+        print(f" [WARNING] Static folder NOT FOUND at: {static_folder}")
     app.config.from_object(config_class)
     
     # Global Routing Optimization: Prevent trailing slash 404s
