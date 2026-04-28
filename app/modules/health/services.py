@@ -21,14 +21,14 @@ class HealthCheckService:
     _queue_lock = threading.Lock()
 
     @staticmethod
-    def check_stream(channel_id, force=False, fast_mode=False):
+    def check_stream(channel_id, force=False, fast_mode=False, timeout=20):
         """Checks the connectivity and technical specs of a single stream URL."""
         channel = Channel.query.get(channel_id)
         if not channel:
             logger.error(f" [HEALTH-ERROR] Channel ID {channel_id} not found!")
             return
             
-        logger.info(f" [HEALTH-START] Checking {channel.name} (Force={force}, Fast={fast_mode})")
+        logger.info(f" [HEALTH-START] Checking {channel.name} (Force={force}, Fast={fast_mode}, Timeout={timeout}s)")
             
         from app.modules.settings.services import SettingService
         if not SettingService.get('ENABLE_HEALTH_SYSTEM', True):
@@ -58,7 +58,7 @@ class HealthCheckService:
             
             # Try a quick HEAD first
             try:
-                response = requests.head(channel.stream_url, timeout=10, headers=headers, allow_redirects=True)
+                response = requests.head(channel.stream_url, timeout=min(10, timeout), headers=headers, allow_redirects=True)
                 latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                 ping_ok = response.status_code < 400
                 
@@ -67,13 +67,15 @@ class HealthCheckService:
                 if ping_ok and 'text/html' in ctype:
                     # Some sites use HTML for everything, but mostly it's a "Not Found" page
                     # Let's double check with a GET if it's small
-                    ping_ok = False 
+                    logger.debug(f" [HTTP-INFO] {channel.name} returned HTML, falling back to GET check.")
+                    ping_ok = False
             except:
                 # Fallback to a tiny GET
                 try:
-                    response = requests.get(channel.stream_url, timeout=20, headers=headers, stream=True)
+                    response = requests.get(channel.stream_url, timeout=timeout, headers=headers, stream=True)
                     latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                     ping_ok = response.status_code < 400
+                    logger.info(f" [HTTP-RES] {channel.name} returned {response.status_code} in {latency:.0f}ms")
                     
                     ctype = response.headers.get('Content-Type', '').lower()
                     if ping_ok and 'text/html' in ctype:
@@ -145,6 +147,7 @@ class HealthCheckService:
             channel.stream_format = None
             
         channel.last_checked_at = datetime.utcnow()
+        logger.debug(f" [DB-PRE-COMMIT] Attempting to save {channel.status.upper()} for {channel.name}...")
         db.session.commit()
         logger.info(f" [DB-SAVE] {channel.name} status updated to {channel.status.upper()} (Latency: {channel.latency}ms)")
         
@@ -551,9 +554,9 @@ class HealthCheckService:
         ch = Channel.query.get(channel_id)
         ch_name = ch.name if ch else f"ID:{channel_id}"
 
-        logger.info(f"Health: Triggering passive check for {ch_name} (Background Task)")
+        logger.info(f"Health: Triggering passive check for {ch_name} (Background Task, Timeout: 7s)")
         from app.modules.health.tasks import check_channel_task
-        check_channel_task.delay(channel_id, force=True, fast_mode=True)
+        check_channel_task.delay(channel_id, force=True, fast_mode=True, timeout=7)
 
     @staticmethod
     def check_all_channels():

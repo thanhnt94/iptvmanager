@@ -6,7 +6,7 @@ logger = logging.getLogger('iptv')
 scheduler = APScheduler()
 
 @shared_task(name='health.check_channel')
-def check_channel_task(channel_id, force=False, fast_mode=False):
+def check_channel_task(channel_id, force=False, fast_mode=False, timeout=20):
     """Celery task for a single channel health check."""
     logger.info(f" [TASK-RECEIVED] health.check_channel for ID: {channel_id}")
     from app.modules.health.services import HealthCheckService
@@ -15,7 +15,7 @@ def check_channel_task(channel_id, force=False, fast_mode=False):
     ch = Channel.query.get(channel_id)
     ch_name = ch.name if ch else f"ID:{channel_id}"
     
-    result = HealthCheckService.check_stream(channel_id, force=force, fast_mode=fast_mode)
+    result = HealthCheckService.check_stream(channel_id, force=force, fast_mode=fast_mode, timeout=timeout)
     
     status = result.get('status', 'unknown')
     latency = result.get('latency', 'N/A')
