@@ -30,6 +30,7 @@ def setup_logging(app):
     logger.addHandler(console_handler)
     
     # Attach to Flask logger as well
+    app.logger.setLevel(logging.DEBUG)
     app.logger.addHandler(file_handler)
     app.logger.addHandler(console_handler)
     
