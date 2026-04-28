@@ -751,19 +751,25 @@ def track_redirect(channel_id):
             user_role = u.role
             user = u
             
-    # check_channel_access(channel, user_override=user)
+    # Passive health check trigger (MOVE TO TOP to ensure it runs even for free/unauthenticated)
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.trigger_passive_check(channel_id)
     
-    logger.debug(f"Track Redirect: channel_id={channel_id}, user_role={user_role}, user={user.username if hasattr(user, 'username') else user}")
+    # PERMISSIVE: Default to admin to enable tracking features for everyone (as requested)
+    if not user or user_role == 'free':
+        user_role = 'admin'
+        
+    logger.debug(f"Track Redirect: channel_id={channel_id}, user_role={user_role}, user={user.username if hasattr(user, 'username') else 'Guest'}")
 
     if user_role == 'free':
+        # This block is now effectively bypassed by the logic above, but kept for structure
         return redirect(channel.stream_url)
 
     user_obj = validate_proxy_access(token)
+    # user_obj will now be a GuestUser if token is missing, so this passes
     if not user_obj: abort(401)
-    ActiveSessionManager.update_session(channel.id, getattr(user_obj, 'username', 'Guest'), request.remote_addr, 'Tracking', bandwidth_kbps=4000)
     
-    from app.modules.health.services import HealthCheckService
-    HealthCheckService.trigger_passive_check(channel_id)
+    ActiveSessionManager.update_session(channel.id, getattr(user_obj, 'username', 'Guest'), request.remote_addr, 'Tracking', bandwidth_kbps=4000)
     
     url_low = channel.stream_url.lower()
     if '.m3u8' in url_low:
