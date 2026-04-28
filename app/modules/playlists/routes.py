@@ -416,6 +416,24 @@ def publish_friendly(username, slug, mode, status):
     response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
     return response
 
+# --- ALIASES FOR 404 PREVENTION ---
+
+@publish_bp.route('/<slug>.m3u8')
+def publish_root_m3u8(slug):
+    """Handles requests like /user-1-all.m3u8 or /public.m3u8 at root."""
+    profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
+    token = request.args.get('token') or profile.security_token
+    m3u_content = PlaylistService.generate_m3u(profile.id, token=token)
+    return Response(m3u_content, mimetype='application/x-mpegurl')
+
+@playlists_bp.route('/publish/public.m3u8')
+def publish_api_alias_public():
+    """Handles /api/playlists/publish/public.m3u8 which frontend seems to call."""
+    profile = PlaylistProfile.query.filter_by(slug='public').first_or_404()
+    token = request.args.get('token') or profile.security_token
+    m3u_content = PlaylistService.generate_m3u(profile.id, token=token)
+    return Response(m3u_content, mimetype='application/x-mpegurl')
+
 @publish_bp.route('/publish/<username>/<slug>.<ext>')
 def publish_personalized(username, slug, ext):
     from app.modules.auth.models import User
