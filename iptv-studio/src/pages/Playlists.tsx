@@ -150,16 +150,22 @@ export const Playlists: React.FC = () => {
   const copyToClipboard = (playlist: Playlist, hideDie: boolean, mode: string) => {
     const baseUrl = window.location.origin;
     
-    // CLEAN SLUG: Convert user-1-all to just 'all'
+    // ULTIMATE CLEAN SLUG
     let friendlySlug = playlist.slug;
     if (friendlySlug.includes('-all')) friendlySlug = 'all';
     if (friendlySlug.includes('-protected')) friendlySlug = 'protected';
     
-    const status = hideDie ? 'live' : 'all';
     const finalMode = mode === 'default' ? 'smart' : mode;
+    const statusPart = hideDie ? '/live' : '';
     
-    // Pattern: /[username]/[slug]/[mode]/[status]
-    const url = `${baseUrl}/${playlist.owner_username}/${friendlySlug}/${finalMode}/${status}`;
+    // SMART SHORTENING
+    let modePart = '';
+    if (finalMode === 'tracking' || finalMode === 'track') modePart = '/track';
+    else if (finalMode === 'direct') modePart = '/direct';
+    else if (finalMode === 'smart' && hideDie) modePart = '/smart';
+    
+    // BACK TO /p/ STYLE
+    const url = `${baseUrl}/p/${playlist.owner_username}/${friendlySlug}${modePart}${statusPart}`;
     
     navigator.clipboard.writeText(url).then(() => {
       setCopiedId(`${playlist.id}-${mode}`);

@@ -39,6 +39,72 @@ def create_app(config_class=Config):
     
     # Global Routing Optimization: Prevent trailing slash 404s
     app.url_map.strict_slashes = False
+
+    # --- PRIORITY PLAYLIST ROUTES (M3U TEXT) ---
+    @app.route('/<username>/<slug>', defaults={'arg1': None, 'arg2': None})
+    @app.route('/p/<username>/<slug>', defaults={'arg1': None, 'arg2': None})
+    @app.route('/<username>/<slug>.m3u8', defaults={'arg1': None, 'arg2': None})
+    @app.route('/p/<username>/<slug>.m3u8', defaults={'arg1': None, 'arg2': None})
+    @app.route('/<username>/<slug>/<arg1>', defaults={'arg2': None})
+    @app.route('/p/<username>/<slug>/<arg1>', defaults={'arg2': None})
+    @app.route('/<username>/<slug>/<arg1>/<arg2>')
+    @app.route('/p/<username>/<slug>/<arg1>/<arg2>')
+    def global_ultra_simple_playlist(username, slug, arg1, arg2):
+        """The ULTIMATE simple route: Intelligent segment parsing."""
+        # Strip .m3u8
+        clean_slug = slug.replace('.m3u8', '')
+        
+        # GUARD: Prevent hijacking system paths
+        if username in ['assets', 'static', 'api', 'favicon.ico', 'logout', 'play', 'track', 'auth', 'auth-center', 'settings', 'ingestion', 'health']:
+            return handle_404(None)
+            
+        from app.modules.auth.models import User
+        from app.modules.playlists.models import PlaylistProfile
+        from app.modules.playlists.services import PlaylistService
+        
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            app.logger.debug(f" [M3U] No user found for: {username}")
+            return handle_404(None)
+        
+        actual_slug = clean_slug
+        if clean_slug.lower() == 'all':
+            actual_slug = f"user-{user.id}-all"
+        elif clean_slug.lower() == 'protected':
+            actual_slug = f"user-{user.id}-protected"
+            
+        profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first()
+        if not profile:
+            app.logger.debug(f" [M3U] No profile found for slug: {actual_slug}")
+            return handle_404(None)
+        
+        # Mode & Status Parsing
+        mode = 'smart'
+        hide_die = False
+        for arg in [arg1, arg2]:
+            if not arg: continue
+            arg_low = arg.lower()
+            if arg_low in ['tracking', 'track']: mode = 'tracking'
+            elif arg_low == 'direct': mode = 'direct'
+            elif arg_low == 'smart': mode = 'smart'
+            elif arg_low == 'live': hide_die = True
+            elif arg_low == 'all': hide_die = False
+
+        # Auto-generate EPG URL
+        xml_url = url_for('global_ultra_simple_playlist', username=username, slug=f"{clean_slug}.xml", _external=True)
+        if slug.endswith('.xml'):
+            return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
+
+        app.logger.info(f" [PRIORITY-HIT] Serving M3U: {username}/{slug} | Mode: {mode} | Live: {hide_die}")
+        m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, hide_die=hide_die, mode=mode)
+        return Response(m3u_content, mimetype='text/plain')
+
+    @app.route('/logout')
+    def global_logout():
+        """Perform logout and return home."""
+        from flask_login import logout_user
+        logout_user()
+        return redirect('/')
     
     # Ensure database directory exists
     db_path = app.config.get('DB_PATH')
@@ -137,45 +203,6 @@ def create_app(config_class=Config):
             return send_from_directory(app.static_folder, 'index.html')
         return redirect('/settings')
 
-    @app.route('/logout')
-    def global_logout():
-        """Perform logout and return home."""
-        from flask_login import logout_user
-        logout_user()
-        return redirect('/')
-
-    @app.route('/<username>/<slug>', defaults={'mode': 'smart', 'status': 'all'})
-    @app.route('/<username>/<slug>/<mode>', defaults={'status': 'all'})
-    @app.route('/<username>/<slug>/<mode>/<status>')
-    def global_ultra_simple_playlist(username, slug, mode, status):
-        """The ULTIMATE simple route with HIGHEST priority and multi-params."""
-        # GUARD: Prevent hijacking system paths
-        if username in ['assets', 'static', 'api', 'favicon.ico', 'admin', 'logout', 'play', 'track']:
-            abort(404)
-            
-        from app.modules.auth.models import User
-        from app.modules.playlists.models import PlaylistProfile
-        from app.modules.playlists.services import PlaylistService
-        
-        user = User.query.filter_by(username=username).first()
-        if not user: abort(404)
-        
-        actual_slug = slug
-        if slug.lower() == 'all':
-            actual_slug = f"user-{user.id}-all"
-        elif slug.lower() == 'protected':
-            actual_slug = f"user-{user.id}-protected"
-            
-        profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first()
-        if not profile: abort(404)
-        
-        # Parameters
-        hide_die = (status.lower() == 'live')
-        
-        app.logger.info(f" [PRIORITY] Serving playlist: {username}/{slug} | Mode: {mode} | Status: {status}")
-        m3u_content = PlaylistService.generate_m3u(profile.id, hide_die=hide_die, mode=mode)
-        return Response(m3u_content, mimetype='text/plain')
-
     @app.route('/api/player/playlists')
     @app.route('/api/player/channels/<int:playlist_id>')
     @login_required
@@ -237,7 +264,13 @@ def create_app(config_class=Config):
         if request.path.startswith(('/play/', '/track/', '/health/')):
              return jsonify({'error': 'Resource handle mismatch'}), 404
 
-        # 3. Default: Serve index.html to allow React Router to handle the path
+        # 3. GUARD: If it looks like a 2-segment playlist path that failed, don't serve SPA
+        # This prevents the redirect loop for /admin/all
+        parts = path.split('/')
+        if len(parts) >= 2 and not path.startswith('settings'):
+             return f"404 Not Found: The resource '{path}' does not exist on this server.", 404
+
+        # 4. Default: Serve index.html to allow React Router to handle the path
         return send_from_directory(app.static_folder, 'index.html')
 
     @app.errorhandler(Exception)

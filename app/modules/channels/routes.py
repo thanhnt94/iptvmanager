@@ -672,7 +672,7 @@ def play_hls(channel_id):
             else:
                 new_lines.append(line)
         
-        return Response('\n'.join(new_lines), mimetype='application/x-mpegurl')
+        return Response('\n'.join(new_lines), mimetype='text/plain')
     except Exception as e:
         logger.error(f"HLS Manifest Proxy Error: {e}", exc_info=True)
         abort(502)
@@ -701,7 +701,7 @@ def play_hls_direct():
                 new_lines.append(proxy_url)
             else:
                 new_lines.append(line)
-        return Response('\n'.join(new_lines), mimetype='application/x-mpegurl')
+        return Response('\n'.join(new_lines), mimetype='text/plain')
     except Exception as e:
         logger.error(f"Nested HLS Proxy Error: {e}")
         abort(502)

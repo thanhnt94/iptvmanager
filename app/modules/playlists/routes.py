@@ -412,7 +412,7 @@ def publish_friendly(username, slug, mode, status):
     
     xml_url = url_for('publish.publish_personalized', username=username, slug=slug, ext='xml', token=token, _external=True)
     m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
-    response = Response(m3u_content, mimetype='application/x-mpegurl')
+    response = Response(m3u_content, mimetype='text/plain')
     response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
     return response
 
@@ -423,7 +423,7 @@ def publish_api_alias_catchall(slug):
     # No more token requirement or 403/401 here - just return it!
     token = request.args.get('token') or profile.security_token
     m3u_content = PlaylistService.generate_m3u(profile.id, token=token)
-    return Response(m3u_content, mimetype='application/x-mpegurl')
+    return Response(m3u_content, mimetype='text/plain')
 
 @publish_bp.route('/<slug>.m3u8')
 def publish_root_m3u8(slug):
@@ -431,7 +431,7 @@ def publish_root_m3u8(slug):
     profile = PlaylistProfile.query.filter_by(slug=slug).first_or_404()
     token = request.args.get('token') or profile.security_token
     m3u_content = PlaylistService.generate_m3u(profile.id, token=token)
-    return Response(m3u_content, mimetype='application/x-mpegurl')
+    return Response(m3u_content, mimetype='text/plain')
 
 @publish_bp.route('/<username>/<slug>')
 def publish_ultra_simple(username, slug):
@@ -477,7 +477,7 @@ def publish_personalized(username, slug, ext):
         return Response(PlaylistService.generate_xmltv(profile.id), mimetype='text/xml')
     else:
         m3u_content = PlaylistService.generate_m3u(profile.id, hide_die=hide_die, mode=mode)
-        response = Response(m3u_content, mimetype='application/x-mpegurl')
+        response = Response(m3u_content, mimetype='text/plain')
         response.headers["Content-Disposition"] = f'inline; filename="{slug}.m3u8"'
         return response
 
@@ -511,7 +511,7 @@ def publish_user_special(username, ptype, ext):
         mode = request.args.get('mode')
         xml_url = url_for('publish.publish_user_special', username=username, ptype=ptype, ext='xml', token=token, _external=True)
         m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
-        return Response(m3u_content, mimetype='application/x-mpegurl')
+        return Response(m3u_content, mimetype='text/plain')
 
 @publish_bp.route('/publish/common/public.<ext>')
 def publish_common_public(ext):
@@ -530,7 +530,7 @@ def publish_common_public(ext):
         mode = request.args.get('mode')
         xml_url = url_for('publish.publish_common_public', ext='xml', token=token, _external=True)
         m3u_content = PlaylistService.generate_m3u(profile.id, epg_url=xml_url, token=token, hide_die=hide_die, mode=mode)
-        return Response(m3u_content, mimetype='application/x-mpegurl')
+        return Response(m3u_content, mimetype='text/plain')
 
 @publish_bp.route('/publish/<slug>.xml')
 def publish_xml(slug):
