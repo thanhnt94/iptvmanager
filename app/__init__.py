@@ -158,12 +158,14 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
     @app.before_request
     def log_request_info():
-        if request.path.startswith('/api'):
+        # Only log meaningful API requests, ignore high-frequency streaming segments
+        if request.path.startswith('/api') and not any(x in request.path for x in ['hls-segment', 'hls-direct', 'ts-segment']):
             app.logger.debug(f"API Request: {request.method} {request.path}")
 
     @app.after_request
     def log_response_info(response):
-        if request.path.startswith('/api'):
+        # Only log meaningful API responses, ignore high-frequency streaming segments
+        if request.path.startswith('/api') and not any(x in request.path for x in ['hls-segment', 'hls-direct', 'ts-segment']):
             app.logger.debug(f"API Response: {request.path} -> {response.status} ({response.content_type})")
         return response
     
