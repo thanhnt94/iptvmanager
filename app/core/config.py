@@ -17,9 +17,10 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Celery configuration
-    # Using SQLite as broker for zero-config 'one-click' run experience
     CELERY_BROKER_URL = 'sqla+sqlite:///' + os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTV_celery_broker.db'))
     CELERY_RESULT_BACKEND = 'db+sqlite:///' + os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTV_celery_results.db'))
+    # Print Celery Config to verify
+    print(f" [DEBUG] CELERY_BROKER_URL: {CELERY_BROKER_URL}")
     
     # Session Configuration
     SESSION_TYPE = 'sqlalchemy'
