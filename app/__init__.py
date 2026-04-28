@@ -179,6 +179,10 @@ def create_app(config_class=Config):
 
     # --- SPA ROUTING & ERROR HANDLING ---
 
+    @app.route('/assets/<path:filename>')
+    def serve_assets(filename):
+        return send_from_directory(os.path.join(app.static_folder, 'assets'), filename)
+
     @app.route('/')
     def index():
         if os.path.exists(os.path.join(app.static_folder, 'index.html')):
