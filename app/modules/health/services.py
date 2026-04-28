@@ -143,6 +143,7 @@ class HealthCheckService:
             
         channel.last_checked_at = datetime.utcnow()
         db.session.commit()
+        logger.info(f" [DB-SAVE] {channel.name} status updated to {channel.status.upper()} (Latency: {channel.latency}ms)")
         
         return {
             'status': channel.status,
@@ -495,6 +496,7 @@ class HealthCheckService:
                 
                 # Commit EVERY channel so frontend sees real-time progress
                 db.session.commit()
+                logger.debug(f" [SCAN-DB-COMMIT] Persistent status for {channel.name}: {new_status}")
                 
                 # Detailed Terminal Logging
                 progress_pct = (state.current / (state.total or 1)) * 100
