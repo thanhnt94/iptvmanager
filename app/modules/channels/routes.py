@@ -40,18 +40,18 @@ def validate_proxy_access(token=None):
     if user_obj:
         # Only VIP and Admin can use the VPS Proxy (TS/HLS)
         if user_obj.role in ['admin', 'vip']:
-            return user_obj.username
+            return user_obj
         else:
             return None # Deny proxy access for free users
             
     if token:
         playlist = PlaylistProfile.query.filter_by(security_token=token).first()
-        if playlist: return f"Playlist: {playlist.name}"
+        if playlist: return playlist
         
     from app.modules.auth.models import TrustedIP
     ip = request.remote_addr
     trusted = TrustedIP.query.filter_by(ip_address=ip).first()
-    if trusted: return f"Trusted IP: {ip}"
+    if trusted: return trusted
     return None
 
 # --- REST DATA APIs (Mounted at /api/channels) ---
@@ -594,11 +594,15 @@ def preview_channel():
 def play_hls(channel_id):
     channel = Channel.query.get_or_404(channel_id)
     token = request.args.get('token')
-    user = validate_proxy_access(token)
-    if not user: abort(401)
-    check_channel_access(channel, user_override=user)
+    user_obj = validate_proxy_access(token)
+    if not user_obj:
+        logger.warning(f"HLS Proxy Denied: Invalid token {token[:10] if token else 'None'}...")
+        abort(401)
+        
+    logger.debug(f"HLS Manifest Request: channel_id={channel_id}, user={getattr(user_obj, 'username', 'Unknown')}")
+    check_channel_access(channel, user_override=user_obj)
     
-    ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'HLS Proxy', bandwidth_kbps=4500)
+    ActiveSessionManager.update_session(channel.id, getattr(user_obj, 'username', 'Guest'), request.remote_addr, 'HLS Proxy', bandwidth_kbps=4500)
     
     from app.modules.health.services import HealthCheckService
     HealthCheckService.trigger_passive_check(channel_id)
@@ -682,7 +686,10 @@ def play_hls_direct():
 def proxy_hls_segment():
     url = request.args.get('url')
     token = request.args.get('token')
-    if not validate_proxy_access(token): abort(401)
+    user = validate_proxy_access(token)
+    if not user:
+        logger.warning(f"HLS Segment Denied: Invalid token {token[:10] if token else 'None'} for {url}")
+        abort(401)
     
     data = HLSEngine.get_segment(url)
     if not data: abort(404)
@@ -721,13 +728,15 @@ def track_redirect(channel_id):
             user = u
             
     check_channel_access(channel, user_override=user)
+    
+    logger.debug(f"Track Redirect: channel_id={channel_id}, user_role={user_role}, user={user.username if hasattr(user, 'username') else user}")
 
     if user_role == 'free':
         return redirect(channel.stream_url)
 
-    user = validate_proxy_access(token)
-    if not user: abort(401)
-    ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'Tracking', bandwidth_kbps=4000)
+    user_obj = validate_proxy_access(token)
+    if not user_obj: abort(401)
+    ActiveSessionManager.update_session(channel.id, getattr(user_obj, 'username', 'Guest'), request.remote_addr, 'Tracking', bandwidth_kbps=4000)
     
     from app.modules.health.services import HealthCheckService
     HealthCheckService.trigger_passive_check(channel_id)
