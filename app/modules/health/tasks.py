@@ -9,7 +9,24 @@ scheduler = APScheduler()
 def check_channel_task(channel_id, force=False, fast_mode=False):
     """Celery task for a single channel health check."""
     from app.modules.health.services import HealthCheckService
-    return HealthCheckService.check_stream(channel_id, force=force, fast_mode=fast_mode)
+    from app.modules.channels.models import Channel
+    
+    ch = Channel.query.get(channel_id)
+    ch_name = ch.name if ch else f"ID:{channel_id}"
+    
+    result = HealthCheckService.check_stream(channel_id, force=force, fast_mode=fast_mode)
+    
+    status = result.get('status', 'unknown')
+    latency = result.get('latency', 'N/A')
+    
+    if status == 'live':
+        logger.info(f"[Health Check] {ch_name} is LIVE | Latency: {latency}ms")
+    elif status == 'die':
+        logger.warning(f"[Health Check] {ch_name} is DIE | Error: {result.get('error_message')}")
+    else:
+        logger.debug(f"[Health Check] {ch_name} status: {status} (Reason: {result.get('skipped') or 'N/A'})")
+        
+    return result
 
 @shared_task(name='health.background_scan')
 def background_scan_task(mode='all', days=None, playlist_id=None, group=None, delay=None):

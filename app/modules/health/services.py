@@ -164,7 +164,14 @@ class HealthCheckService:
         results = []
         def check_worker(cid):
             with app.app_context():
-                return HealthCheckService.check_stream(cid, force=True, fast_mode=fast_mode)
+                res = HealthCheckService.check_stream(cid, force=True, fast_mode=fast_mode)
+                chan = Channel.query.get(cid)
+                name = chan.name if chan else f"ID:{cid}"
+                if res.get('status') == 'live':
+                    logger.info(f"[Health Check] {name} is LIVE")
+                elif res.get('status') == 'die':
+                    logger.warning(f"[Health Check] {name} is DIE | Error: {res.get('error_message')}")
+                return res
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             future_to_id = {executor.submit(check_worker, cid): cid for cid in channel_ids}
@@ -535,7 +542,11 @@ class HealthCheckService:
         if not SettingService.get('ENABLE_HEALTH_SYSTEM', True): return
         if not SettingService.get('ENABLE_PASSIVE_CHECK', True): return
 
-        logger.info(f"Health: Triggering passive check for channel {channel_id} (Background Task)")
+        from app.modules.channels.models import Channel
+        ch = Channel.query.get(channel_id)
+        ch_name = ch.name if ch else f"ID:{channel_id}"
+
+        logger.info(f"Health: Triggering passive check for {ch_name} (Background Task)")
         from app.modules.health.tasks import check_channel_task
         check_channel_task.delay(channel_id, force=True, fast_mode=True)
 
