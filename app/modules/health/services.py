@@ -535,6 +535,7 @@ class HealthCheckService:
         if not SettingService.get('ENABLE_HEALTH_SYSTEM', True): return
         if not SettingService.get('ENABLE_PASSIVE_CHECK', True): return
 
+        logger.info(f"Health: Triggering passive check for channel {channel_id} (Background Task)")
         from app.modules.health.tasks import check_channel_task
         check_channel_task.delay(channel_id, force=True, fast_mode=True)
 
