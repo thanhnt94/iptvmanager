@@ -640,7 +640,7 @@ def play_hls(channel_id):
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
         # Pass through query params if the source expects them (e.g. auth tokens)
         source_url = channel.stream_url
-        resp = requests.get(source_url, headers=headers, timeout=15, verify=False)
+        resp = requests.get(source_url, headers=headers, timeout=5, verify=False)
         
         if resp.status_code != 200:
             logger.error(f"HLS Source Error: {resp.status_code} for {source_url}")
