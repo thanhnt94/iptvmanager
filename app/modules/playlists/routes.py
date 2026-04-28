@@ -450,8 +450,10 @@ def publish_ultra_simple(username, slug):
         actual_slug = f"user-{user.id}-protected"
         
     profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first_or_404()
+    
+    current_app.logger.info(f"Serving ULTRA-SIMPLE playlist: {username}/{slug} (Mimetype: text/plain)")
     m3u_content = PlaylistService.generate_m3u(profile.id)
-    return Response(m3u_content, mimetype='application/x-mpegurl')
+    return Response(m3u_content, mimetype='text/plain')
 
 @publish_bp.route('/publish/<username>/<slug>.<ext>')
 def publish_personalized(username, slug, ext):

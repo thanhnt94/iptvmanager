@@ -147,13 +147,22 @@ export const Playlists: React.FC = () => {
     p.slug.toLowerCase().includes(search.toLowerCase())
   );
 
-  const copyToClipboard = (playlist: Playlist, _hideDie: boolean, _mode: string) => {
+  const copyToClipboard = (playlist: Playlist, hideDie: boolean, mode: string) => {
     const baseUrl = window.location.origin;
-    // ULTIMATE SIMPLE: /[username]/[slug]
-    const url = `${baseUrl}/${playlist.owner_username}/${playlist.slug}`;
+    
+    // CLEAN SLUG: Convert user-1-all to just 'all'
+    let friendlySlug = playlist.slug;
+    if (friendlySlug.includes('-all')) friendlySlug = 'all';
+    if (friendlySlug.includes('-protected')) friendlySlug = 'protected';
+    
+    const status = hideDie ? 'live' : 'all';
+    const finalMode = mode === 'default' ? 'smart' : mode;
+    
+    // Pattern: /[username]/[slug]/[mode]/[status]
+    const url = `${baseUrl}/${playlist.owner_username}/${friendlySlug}/${finalMode}/${status}`;
     
     navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(`${playlist.id}-${_mode}`);
+      setCopiedId(`${playlist.id}-${mode}`);
       setTimeout(() => setCopiedId(null), 2000);
     });
   };

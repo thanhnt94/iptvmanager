@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request, jsonify, send_from_directory, abort
+from flask import Flask, render_template, redirect, url_for, request, jsonify, send_from_directory, abort, Response
 import os
 import shutil
 import time
@@ -143,6 +143,38 @@ def create_app(config_class=Config):
         from flask_login import logout_user
         logout_user()
         return redirect('/')
+
+    @app.route('/<username>/<slug>', defaults={'mode': 'smart', 'status': 'all'})
+    @app.route('/<username>/<slug>/<mode>', defaults={'status': 'all'})
+    @app.route('/<username>/<slug>/<mode>/<status>')
+    def global_ultra_simple_playlist(username, slug, mode, status):
+        """The ULTIMATE simple route with HIGHEST priority and multi-params."""
+        # GUARD: Prevent hijacking system paths
+        if username in ['assets', 'static', 'api', 'favicon.ico', 'admin', 'logout', 'play', 'track']:
+            abort(404)
+            
+        from app.modules.auth.models import User
+        from app.modules.playlists.models import PlaylistProfile
+        from app.modules.playlists.services import PlaylistService
+        
+        user = User.query.filter_by(username=username).first()
+        if not user: abort(404)
+        
+        actual_slug = slug
+        if slug.lower() == 'all':
+            actual_slug = f"user-{user.id}-all"
+        elif slug.lower() == 'protected':
+            actual_slug = f"user-{user.id}-protected"
+            
+        profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first()
+        if not profile: abort(404)
+        
+        # Parameters
+        hide_die = (status.lower() == 'live')
+        
+        app.logger.info(f" [PRIORITY] Serving playlist: {username}/{slug} | Mode: {mode} | Status: {status}")
+        m3u_content = PlaylistService.generate_m3u(profile.id, hide_die=hide_die, mode=mode)
+        return Response(m3u_content, mimetype='text/plain')
 
     @app.route('/api/player/playlists')
     @app.route('/api/player/channels/<int:playlist_id>')
