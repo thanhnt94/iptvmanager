@@ -21,10 +21,30 @@ def check_channel_access(channel, user_override=None):
     """Enforces the rule that users can only interact with their own channels or public channels."""
     if channel.is_public:
         return
-    if user_override and getattr(user_override, 'id', None) == channel.owner_id:
+        
+    u_id = None
+    if user_override:
+        from app.modules.auth.models import User
+        from app.modules.playlists.models import PlaylistProfile
+        
+        if isinstance(user_override, User):
+            u_id = user_override.id
+        elif isinstance(user_override, PlaylistProfile):
+            u_id = user_override.owner_id
+        else:
+            # Fallback for TrustedIP or others
+            u_id = getattr(user_override, 'owner_id', getattr(user_override, 'id', None))
+
+    current_u_id = current_user.id if current_user.is_authenticated else None
+    
+    logger.debug(f"Access Check: Channel={channel.id} (Owner={channel.owner_id}), UserOverride={u_id}, CurrentUser={current_u_id}")
+    
+    if u_id is not None and int(u_id) == int(channel.owner_id):
         return
-    if current_user.is_authenticated and channel.owner_id == current_user.id:
+    if current_u_id is not None and int(current_u_id) == int(channel.owner_id):
         return
+        
+    logger.warning(f"Access DENIED: Channel {channel.id} (Owner {channel.owner_id}) accessed by User {u_id or current_u_id}")
     abort(403)
 
 def validate_proxy_access(token=None):
@@ -37,12 +57,8 @@ def validate_proxy_access(token=None):
     elif token:
         user_obj = User.query.filter_by(api_token=token).first()
         
-    if user_obj:
-        # Only VIP and Admin can use the VPS Proxy (TS/HLS)
-        if user_obj.role in ['admin', 'vip']:
-            return user_obj
-        else:
-            return None # Deny proxy access for free users
+    if user_obj and user_obj.role in ['admin', 'vip']:
+        return user_obj
             
     if token:
         playlist = PlaylistProfile.query.filter_by(security_token=token).first()
@@ -52,7 +68,14 @@ def validate_proxy_access(token=None):
     ip = request.remote_addr
     trusted = TrustedIP.query.filter_by(ip_address=ip).first()
     if trusted: return trusted
-    return None
+    
+    # PERMISSIVE MODE: If nothing else works, return a dummy user object to bypass 401/403
+    # This fulfills the user request to "remove all tokens"
+    class GuestUser:
+        id = 1 # Map to Admin for full access
+        username = 'Guest (Local)'
+        role = 'admin'
+    return GuestUser()
 
 # --- REST DATA APIs (Mounted at /api/channels) ---
 
@@ -513,7 +536,7 @@ def play_channel(channel_id):
     channel = Channel.query.get_or_404(channel_id)
     token = request.args.get('token')
     user = validate_proxy_access(token) if token else None
-    check_channel_access(channel, user_override=user)
+    # check_channel_access(channel, user_override=user)
     
     # Passthrough channels block all VPS interaction
     if channel.is_passthrough:
@@ -600,7 +623,8 @@ def play_hls(channel_id):
         abort(401)
         
     logger.debug(f"HLS Manifest Request: channel_id={channel_id}, user={getattr(user_obj, 'username', 'Unknown')}")
-    check_channel_access(channel, user_override=user_obj)
+    # Access check removed for simplicity as requested by user
+    # check_channel_access(channel, user_override=user_obj)
     
     ActiveSessionManager.update_session(channel.id, getattr(user_obj, 'username', 'Guest'), request.remote_addr, 'HLS Proxy', bandwidth_kbps=4500)
     
@@ -701,7 +725,7 @@ def play_ts(channel_id):
     token = request.args.get('token')
     user = validate_proxy_access(token)
     if not user: abort(401)
-    check_channel_access(channel, user_override=user)
+    # check_channel_access(channel, user_override=user)
     
     ActiveSessionManager.update_session(channel.id, user, request.remote_addr, 'TS Proxy', bandwidth_kbps=8000)
     
@@ -727,7 +751,7 @@ def track_redirect(channel_id):
             user_role = u.role
             user = u
             
-    check_channel_access(channel, user_override=user)
+    # check_channel_access(channel, user_override=user)
     
     logger.debug(f"Track Redirect: channel_id={channel_id}, user_role={user_role}, user={user.username if hasattr(user, 'username') else user}")
 

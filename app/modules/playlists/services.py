@@ -229,7 +229,7 @@ class PlaylistService:
                 query = query.filter_by(is_public=True)
                 
             if hide_die:
-                query = query.filter(Channel.status != 'die')
+                query = query.filter(db.or_(Channel.status != 'die', Channel.status == None))
             
             # Diagnostic logging
             from flask import current_app
@@ -298,8 +298,8 @@ class PlaylistService:
         epg_ids = set()
         
         if profile.is_system:
-            # System playlist handling
-            query = Channel.query.filter_by(status='live')
+            # System playlist handling: Include live and unknown channels for EPG
+            query = Channel.query.filter(db.or_(Channel.status != 'die', Channel.status == None))
             
             # 1. PERSONALized isolation
             if profile.owner_id:
