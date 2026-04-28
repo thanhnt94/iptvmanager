@@ -436,6 +436,10 @@ def publish_root_m3u8(slug):
 @publish_bp.route('/<username>/<slug>')
 def publish_ultra_simple(username, slug):
     """The ULTIMATE simple route: /admin/all or /admin/protected"""
+    # GUARD: Prevent hijacking static assets
+    if username in ['assets', 'static', 'api', 'favicon.ico']:
+        abort(404)
+        
     from app.modules.auth.models import User
     user = User.query.filter_by(username=username).first_or_404()
     

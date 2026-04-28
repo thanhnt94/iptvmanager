@@ -183,7 +183,7 @@ def create_app(config_class=Config):
         # 1. API 404 Prevention: Return JSON instead of HTML for any matched /api/* path
         # This only triggers if the request didn't match any blueprint route above.
         path = request.path.lstrip('/')
-        if path.startswith('api') or request.path.startswith('/api'):
+        if path.startswith(('api', 'assets', 'static')) or request.path.startswith('/api'):
             return jsonify({
                 'error': 'API Endpoint not found', 
                 'path': request.path,
