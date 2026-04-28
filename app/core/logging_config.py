@@ -21,7 +21,7 @@ def setup_logging(app):
     # Console Handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     
     # IPTV Logger
     logger = logging.getLogger('iptv')
