@@ -180,7 +180,7 @@ class PlaylistService:
     @staticmethod
     def generate_m3u(playlist_id, epg_url=None, token=None, hide_die=False, mode=None):
         """Generates M3U8 string for a playlist with wrapped playback URLs."""
-        from flask import url_for
+        from flask import url_for, current_app
         from app.modules.playlists.models import PlaylistProfile
         profile = PlaylistProfile.query.get(playlist_id)
         if not profile or not profile.is_active:
@@ -190,79 +190,82 @@ class PlaylistService:
         if epg_url:
             header += f' x-tvg-url="{epg_url}" url-tvg="{epg_url}"'
         m3u_lines = [header]
+
+        # Optimization: Pre-calculate base URLs to avoid calling url_for 45,000+ times
+        # This makes generation O(N) string concat instead of O(N) heavy Flask routing
+        token_suffix = f"?token={token}" if token else ""
         
+        # We use a dummy ID 999999999 to find the pattern and replace it
+        dummy_id = 999999999
+        url_track = url_for('channels.track_redirect', channel_id=dummy_id, _external=True).replace(str(dummy_id), "{cid}")
+        url_play = url_for('channels.play_channel', channel_id=dummy_id, _external=True).replace(str(dummy_id), "{cid}")
+        url_hls = url_for('channels.play_hls', channel_id=dummy_id, _external=True).replace(str(dummy_id), "{cid}")
+        
+        def get_wrapped_url(ch, mode_override=None):
+            m = mode_override or ch.proxy_type or 'default'
+            is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
+            
+            if m == 'direct' or ch.is_passthrough or m == 'none':
+                return ch.stream_url
+            
+            target_template = url_play
+            if m == 'tracking' or (m == 'default' and is_flv) or (m == 'smart' and is_flv):
+                target_template = url_track
+            elif m == 'hls':
+                target_template = url_hls
+            
+            return target_template.replace("{cid}", str(ch.id)) + token_suffix
+
         # Determine which channels to include
         if profile.is_system:
-            # System playlist handling
             query = Channel.query
-            
-            # 1. Handle PERSONALized system playlists (All, Protected)
             if profile.owner_id:
+                owner_id_int = int(profile.owner_id)
                 if "protected" in profile.slug:
-                    query = query.filter_by(owner_id=profile.owner_id, is_original=True)
-                else: # e.g. "All Channels"
-                    query = query.filter(db.or_(Channel.owner_id == profile.owner_id, Channel.is_public == True))
-            
-            # 2. Handle GLOBAL system playlists (Public/Community)
+                    query = query.filter(Channel.owner_id == owner_id_int, Channel.is_original == True)
+                else:
+                    query = query.filter(db.or_(Channel.owner_id == owner_id_int, Channel.is_public == True))
+            else:
                 query = query.filter_by(is_public=True)
                 
             if hide_die:
                 query = query.filter(Channel.status != 'die')
-            else:
-                from sqlalchemy import case
-                status_order = case((Channel.status == 'die', 1), else_=0)
-                query = query.order_by(status_order.asc(), Channel.name.asc())
+            
+            # Diagnostic logging
+            from flask import current_app
+            current_app.logger.info(f"M3U Generation for {profile.slug}: Filters applied. Fetching channels...")
+            
+            from sqlalchemy import case
+            # 1. Owner's channels first (0) vs Public (1)
+            # 2. Status: Live (0) -> Unknown (1) -> Die (2)
+            # 3. Name (A-Z)
+            sort_logic = [
+                case((Channel.owner_id == profile.owner_id, 0), else_=1).asc(),
+                case((Channel.status == 'live', 0), (Channel.status == 'unknown', 1), (Channel.status == 'die', 2), else_=1).asc(),
+                Channel.name.asc()
+            ]
+            query = query.order_by(*sort_logic)
             
             channels = query.all()
-                
             for ch in channels:
                 ch_name = ch.name
                 if ch.status == 'unknown' or not ch.status:
                     ch_name = f"[Unknown] {ch.name}"
                 elif not hide_die and ch.status == 'die':
                     ch_name = f"[Unavailable] {ch.name}"
+                
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch_name}'
                 m3u_lines.append(extinf)
-                
-                wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
-                
-                # Determine URL based on forced mode or channel default
-                is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
-                
-                if mode == 'direct' or ch.is_passthrough:
-                    wrapper_url = ch.stream_url
-                elif mode == 'tracking':
-                    wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                elif mode == 'smart':
-                    if is_flv:
-                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                    else:
-                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
-                else:
-                    # Fallback to channel specific setting
-                    ptype = ch.proxy_type or 'default'
-                    if ptype == 'none' or ptype == 'direct' or ch.is_passthrough:
-                        wrapper_url = ch.stream_url
-                    elif ptype == 'tracking' or (ptype == 'default' and is_flv):
-                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                    elif ptype == 'hls':
-                        wrapper_url = url_for('channels.play_hls', **wrapper_params)
-                    else:
-                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
-                
-                m3u_lines.append(wrapper_url)
+                m3u_lines.append(get_wrapped_url(ch, mode))
         else:
-            # Regular playlist uses its entries
             entries = profile.entries
             if not hide_die:
-                # Sort: live/unknown first (0), die last (1)
-                entries = sorted(entries, key=lambda e: (1 if e.channel.status == 'die' else 0, e.channel.name))
+                priority = {'live': 0, 'unknown': 1, 'die': 2}
+                entries = sorted(entries, key=lambda e: (priority.get(e.channel.status or 'unknown', 1), e.channel.name))
                 
             for entry in entries:
                 ch = entry.channel
-                # Filter if hide_die is active
-                if hide_die and ch.status == 'die':
-                    continue
+                if hide_die and ch.status == 'die': continue
                     
                 ch_name = ch.name
                 if ch.status == 'unknown' or not ch.status:
@@ -273,34 +276,7 @@ class PlaylistService:
                 group_name = entry.group.name if entry.group else ch.group_name or ""
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch_name}'
                 m3u_lines.append(extinf)
-                
-                wrapper_params = {'channel_id': ch.id, 'token': token, '_external': True} if token else {'channel_id': ch.id, '_external': True}
-
-                # Determine URL based on forced mode or channel default
-                is_flv = ch.stream_url and '.flv' in ch.stream_url.lower().split('?')[0]
-
-                if mode == 'direct' or ch.is_passthrough:
-                    wrapper_url = ch.stream_url
-                elif mode == 'tracking':
-                    wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                elif mode == 'smart':
-                    if is_flv:
-                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                    else:
-                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
-                else:
-                    # Fallback to channel specific setting
-                    ptype = ch.proxy_type or 'default'
-                    if ptype == 'none' or ptype == 'direct' or ch.is_passthrough:
-                        wrapper_url = ch.stream_url
-                    elif ptype == 'tracking' or (ptype == 'default' and is_flv):
-                        wrapper_url = url_for('channels.track_redirect', **wrapper_params)
-                    elif ptype == 'hls':
-                        wrapper_url = url_for('channels.play_hls', **wrapper_params)
-                    else:
-                        wrapper_url = url_for('channels.play_channel', **wrapper_params)
-                
-                m3u_lines.append(wrapper_url)
+                m3u_lines.append(get_wrapped_url(ch, mode))
             
         return "\r\n".join(m3u_lines)
 

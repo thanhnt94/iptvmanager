@@ -1,22 +1,25 @@
-import sys
-import os
-
-# Add the project root to sys.path
-sys.path.append(os.getcwd())
-
 from app import create_app
-from app.modules.playlists.models import PlaylistProfile
 from app.modules.channels.models import Channel
+from app.modules.playlists.models import PlaylistProfile
 from app.core.database import db
 
 app = create_app()
 with app.app_context():
-    print(f"Total Playlists: {PlaylistProfile.query.count()}")
-    playlists = PlaylistProfile.query.all()
-    for p in playlists:
-        print(f" - ID: {p.id}, Name: {p.name}, Slug: {p.slug}")
+    print("--- Database Check ---")
+    total = Channel.query.count()
+    print(f"Total channels in DB: {total}")
     
-    print(f"Total Channels: {Channel.query.count()}")
-    channels = Channel.query.limit(5).all()
-    for c in channels:
-        print(f" - ID: {c.id}, Name: {c.name}")
+    user1_channels = Channel.query.filter_by(owner_id=1).count()
+    print(f"Channels owned by user 1: {user1_channels}")
+    
+    public_channels = Channel.query.filter_by(is_public=True).count()
+    print(f"Public channels: {public_channels}")
+    
+    unknown_owner = Channel.query.filter(Channel.owner_id == None).count()
+    print(f"Channels with NO owner: {unknown_owner}")
+    
+    profile = PlaylistProfile.query.filter_by(slug='user-1-all').first()
+    if profile:
+        print(f"Profile 'user-1-all' found. Owner: {profile.owner_id}")
+    else:
+        print("Profile 'user-1-all' NOT found!")

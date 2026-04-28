@@ -114,9 +114,10 @@ def list_playlists():
         owner = User.query.get(p.owner_id) if p.owner_id else None
         owner_name = owner.username if owner else 'system'
         
-        # Calculate live/die stats
+        # Calculate live/die/unknown stats
         live_count = 0
         die_count = 0
+        unknown_count = 0
         if p.is_system:
             stat_query = Channel.query
             if p.slug == 'public': stat_query = stat_query.filter_by(is_public=True)
@@ -125,11 +126,13 @@ def list_playlists():
                 if "protected" in p.slug: stat_query = stat_query.filter_by(is_original=True)
             live_count = stat_query.filter_by(status='live').count()
             die_count = stat_query.filter_by(status='die').count()
+            unknown_count = stat_query.filter(db.or_(Channel.status == 'unknown', Channel.status == None)).count()
         else:
             for entry in p.entries:
                 if entry.channel:
                     if entry.channel.status == 'live': live_count += 1
                     elif entry.channel.status == 'die': die_count += 1
+                    else: unknown_count += 1
         
         res.append({
             'id': p.id,
@@ -140,6 +143,7 @@ def list_playlists():
             'channel_count': count,
             'live_count': live_count,
             'die_count': die_count,
+            'unknown_count': unknown_count,
             'created_at': p.created_at.strftime('%Y-%m-%d'),
             'owner_username': owner_name,
             'auto_scan_enabled': p.auto_scan_enabled,
@@ -263,9 +267,14 @@ def get_entries(playlist_id):
         if group: query = query.filter(Channel.group_name == group)
         
         if sort_mode == 'status':
-            # Case statement to sort 'live' first, then others
+            # Priority: Live (0) -> Unknown (1) -> Die (2)
             from sqlalchemy import case
-            status_order = case((Channel.status == 'live', 1), (Channel.status == 'die', 3), else_=2)
+            status_order = case(
+                (Channel.status == 'live', 0),
+                (Channel.status == 'unknown', 1),
+                (Channel.status == 'die', 2),
+                else_=1
+            )
             query = query.order_by(status_order.asc(), Channel.name.asc())
         elif sort_mode == 'default':
             query = query.order_by(Channel.id.asc())
@@ -287,8 +296,14 @@ def get_entries(playlist_id):
         if group: query = query.filter(Channel.group_name == group)
 
         if sort_mode == 'status':
+            # Priority: Live (0) -> Unknown (1) -> Die (2)
             from sqlalchemy import case
-            status_order = case((Channel.status == 'live', 1), (Channel.status == 'die', 3), else_=2)
+            status_order = case(
+                (Channel.status == 'live', 0),
+                (Channel.status == 'unknown', 1),
+                (Channel.status == 'die', 2),
+                else_=1
+            )
             query = query.order_by(status_order.asc(), Channel.name.asc())
         elif sort_mode == 'alphabetical':
             query = query.order_by(Channel.name.asc())
@@ -378,7 +393,15 @@ def update_entry_group(entry_id):
 def publish_friendly(username, slug, mode, status):
     from app.modules.auth.models import User
     user = User.query.filter_by(username=username).first_or_404()
-    profile = PlaylistProfile.query.filter_by(slug=slug, owner_id=user.id).first_or_404()
+    
+    # Alias Handling: Allow using 'all' or 'protected' instead of 'user-1-all'
+    actual_slug = slug
+    if slug.lower() == 'all':
+        actual_slug = f"user-{user.id}-all"
+    elif slug.lower() == 'protected':
+        actual_slug = f"user-{user.id}-protected"
+        
+    profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first_or_404()
     
     # Parameters from path
     hide_die = (status == 'live')
@@ -397,7 +420,15 @@ def publish_friendly(username, slug, mode, status):
 def publish_personalized(username, slug, ext):
     from app.modules.auth.models import User
     user = User.query.filter_by(username=username).first_or_404()
-    profile = PlaylistProfile.query.filter_by(slug=slug, owner_id=user.id).first_or_404()
+    
+    # Alias Handling
+    actual_slug = slug
+    if slug.lower() == 'all':
+        actual_slug = f"user-{user.id}-all"
+    elif slug.lower() == 'protected':
+        actual_slug = f"user-{user.id}-protected"
+        
+    profile = PlaylistProfile.query.filter_by(slug=actual_slug, owner_id=user.id).first_or_404()
     
     token = request.args.get('token')
     hide_die = request.args.get('hide_die', 'false').lower() == 'true'

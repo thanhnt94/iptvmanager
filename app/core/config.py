@@ -13,8 +13,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Celery configuration
-    CELERY_BROKER_URL = 'redis://localhost:6379/0'
-    CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+    # Using SQLite as broker for zero-config 'one-click' run experience
+    CELERY_BROKER_URL = 'sqla+sqlite:///' + os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTV_celery_broker.db'))
+    CELERY_RESULT_BACKEND = 'db+sqlite:///' + os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTV_celery_results.db'))
     
     # Session Configuration
     SESSION_TYPE = 'sqlalchemy'

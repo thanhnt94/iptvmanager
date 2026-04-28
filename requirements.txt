@@ -7,8 +7,9 @@ pandas
 openpyxl
 requests
 m3u8
-celery
-redis
+celery==5.4.0
+redis==5.0.1
+eventlet
 python-dotenv
 psycopg2-binary
 sqlalchemy-utils

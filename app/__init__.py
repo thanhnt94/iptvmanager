@@ -48,6 +48,10 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     
+    # Initialize Celery
+    from app.core.celery_app import celery_init_app
+    app.celery_app = celery_init_app(app)
+    
     # Initialize Server-side Session
     from flask_session import Session
     app.config['SESSION_SQLALCHEMY'] = db

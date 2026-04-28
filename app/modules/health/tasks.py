@@ -1,8 +1,22 @@
 from flask_apscheduler import APScheduler
+from celery import shared_task
 import logging
 
 logger = logging.getLogger('iptv')
 scheduler = APScheduler()
+
+@shared_task(name='health.check_channel')
+def check_channel_task(channel_id, force=False, fast_mode=False):
+    """Celery task for a single channel health check."""
+    from app.modules.health.services import HealthCheckService
+    return HealthCheckService.check_stream(channel_id, force=force, fast_mode=fast_mode)
+
+@shared_task(name='health.background_scan')
+def background_scan_task(mode='all', days=None, playlist_id=None, group=None, delay=None):
+    """Celery task for a full or scoped background scan."""
+    from app.modules.health.services import HealthCheckService
+    from flask import current_app
+    HealthCheckService._run_scan_logic(current_app, mode, days, playlist_id, group, delay)
 
 def init_scheduler(app):
     """
