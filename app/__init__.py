@@ -156,18 +156,7 @@ def create_app(config_class=Config):
     from flask_login import LoginManager
     login_manager = LoginManager()
     login_manager.init_app(app)
-    @app.before_request
-    def log_request_info():
-        # Only log meaningful API requests, ignore high-frequency streaming segments
-        if request.path.startswith('/api') and not any(x in request.path for x in ['hls-segment', 'hls-direct', 'ts-segment']):
-            app.logger.debug(f"API Request: {request.method} {request.path}")
-
-    @app.after_request
-    def log_response_info(response):
-        # Only log meaningful API responses, ignore high-frequency streaming segments
-        if request.path.startswith('/api') and not any(x in request.path for x in ['hls-segment', 'hls-direct', 'ts-segment']):
-            app.logger.debug(f"API Response: {request.path} -> {response.status} ({response.content_type})")
-        return response
+    # Noisy API logging removed to focus on health checks and ingestion
     
     @login_manager.unauthorized_handler
     def handle_unauthorized():

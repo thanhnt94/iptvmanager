@@ -68,7 +68,7 @@ class HealthCheckService:
             except:
                 # Fallback to a tiny GET
                 try:
-                    response = requests.get(channel.stream_url, timeout=10, headers=headers, stream=True)
+                    response = requests.get(channel.stream_url, timeout=20, headers=headers, stream=True)
                     latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                     ping_ok = response.status_code < 400
                     
@@ -228,7 +228,7 @@ class HealthCheckService:
         ]
         
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 streams = data.get('streams', [])
