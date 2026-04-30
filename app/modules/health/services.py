@@ -327,19 +327,12 @@ class HealthCheckService:
     def _is_stop_requested():
         """Checks if the user has requested to stop the current scan."""
         try:
-            # VERY AGGRESSIVE REFRESH: Force SQLAlchemy to drop everything and re-read from disk
-            db.session.remove() 
-            db.session.begin() # Start fresh transaction
-            
-            # Use direct query to bypass any object-level caching
-            status = db.session.query(ScannerStatus).first()
-            requested = status and status.stop_requested
-            
-            db.session.commit() # End transaction
-            return requested
+            # Use a direct scalar query to avoid detaching or expiring other objects (like the 45k channels)
+            # This is safe for SQLite cross-process and won't cause DetachedInstanceError
+            from sqlalchemy import text
+            result = db.session.execute(text("SELECT stop_requested FROM health_scanner_status LIMIT 1")).scalar()
+            return bool(result)
         except Exception as e:
-            try: db.session.rollback()
-            except: pass
             logger.error(f"Error checking stop signal: {e}")
             return False
 
