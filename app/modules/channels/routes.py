@@ -841,5 +841,53 @@ def scan_web():
         return jsonify({'error': 'URL is required'}), 400
         
     logger.info(f"User {current_user.username} initiating {'DEEP ' if deep else ''}web scan for: {url}")
-    res = ExtractorService.extract_direct_url(url, deep_scan=deep)
-    return jsonify(res)
+    from app.modules.channels.tasks import single_media_scan_task
+    task = single_media_scan_task.delay(url, deep_scan=deep)
+    return jsonify({'task_id': task.id})
+
+@channels_bp.route('/bulk-scan', methods=['POST'])
+@login_required
+def start_bulk_scan():
+    if current_user.role not in ['admin', 'vip']:
+        return jsonify({'error': 'Premium feature. VIP or Admin required.'}), 403
+        
+    data = request.json or {}
+    url = data.get('url')
+    deep = data.get('deep', False)
+    
+    if not url:
+        return jsonify({'error': 'URL is required'}), 400
+        
+    from app.modules.channels.tasks import bulk_media_scan_task
+    task = bulk_media_scan_task.delay(url, deep_scan=deep)
+    return jsonify({'task_id': task.id})
+
+@channels_bp.route('/bulk-scan/status/<task_id>', methods=['GET'])
+@login_required
+def get_bulk_scan_status(task_id):
+    celery = current_app.celery_app
+    task = celery.AsyncResult(task_id)
+    
+    if task.state == 'PENDING':
+        response = {
+            'state': task.state,
+            'current': 0,
+            'total': 0,
+            'status': 'Pending...'
+        }
+    elif task.state != 'FAILURE':
+        response = {
+            'state': task.state,
+            'current': task.info.get('current', 0) if isinstance(task.info, dict) else 0,
+            'total': task.info.get('total', 0) if isinstance(task.info, dict) else 0,
+            'status': task.info.get('status', '') if isinstance(task.info, dict) else '',
+            'result': task.info if task.state == 'SUCCESS' else None
+        }
+    else:
+        response = {
+            'state': task.state,
+            'current': 1,
+            'total': 1,
+            'status': str(task.info),
+        }
+    return jsonify(response)

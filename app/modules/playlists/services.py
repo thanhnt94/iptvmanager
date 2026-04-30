@@ -218,6 +218,15 @@ class PlaylistService:
             return target_template.replace("{cid}", str(ch.id)) + token_suffix
 
         # Determine which channels to include
+        if profile.is_dynamic:
+            from app.modules.playlists.models import DiscoveryChannel
+            discovery_items = DiscoveryChannel.query.filter_by(playlist_id=playlist_id).order_by(DiscoveryChannel.id.asc()).all()
+            for item in discovery_items:
+                # Direct links for discovery items as they are temporary/dynamic
+                m3u_lines.append(f'#EXTINF:-1 tvg-name="{item.name}" group-title="Website Discovery",{item.name}')
+                m3u_lines.append(item.stream_url)
+            return "\n".join(m3u_lines)
+
         if profile.is_system:
             query = Channel.query
             if profile.owner_id:
@@ -469,6 +478,96 @@ class PlaylistService:
             db.session.commit()
             return True
         return False
+
+    @staticmethod
+    def create_dynamic_profile(name, website_url, scanner_type, owner_id):
+        """Creates a new dynamic playlist linked to a website."""
+        token = secrets.token_hex(16)
+        slug = f"dynamic-{secrets.token_hex(4)}"
+        profile = PlaylistProfile(
+            name=name, 
+            slug=slug, 
+            website_url=website_url, 
+            scanner_type=scanner_type,
+            is_dynamic=True,
+            owner_id=owner_id,
+            security_token=token
+        )
+        db.session.add(profile)
+        db.session.commit()
+        return profile
+
+    @staticmethod
+    def sync_dynamic_playlist(playlist_id):
+        """Triggers the background task to sync a dynamic playlist."""
+        from app.modules.playlists.models import PlaylistProfile
+        profile = PlaylistProfile.query.get(playlist_id)
+        if not profile or not profile.is_dynamic:
+            return False, "Not a dynamic playlist"
+        
+        # Trigger Celery task
+        from app.modules.channels.tasks import sync_dynamic_playlist_task
+        sync_dynamic_playlist_task.delay(playlist_id)
+        
+        profile.is_scanning = True
+        profile.current_scanning_name = "Initiating sync..."
+        db.session.commit()
+        return True, "Sync started"
+
+    @staticmethod
+    def bulk_save_raw_channels(playlist_id, channels_data, owner_id):
+        """
+        Takes raw channel data (name, stream_url), ensures channels exist in the DB,
+        and adds them to the specified playlist.
+        """
+        from app.modules.channels.models import Channel
+        from app.modules.playlists.models import PlaylistEntry, PlaylistProfile
+        
+        added_count = 0
+        playlist = PlaylistProfile.query.get(playlist_id)
+        if not playlist:
+            return 0
+
+        # Get existing channel URLs in this playlist to avoid duplicates
+        existing_urls = db.session.query(Channel.stream_url).join(
+            PlaylistEntry, PlaylistEntry.channel_id == Channel.id
+        ).filter(PlaylistEntry.playlist_id == playlist_id).all()
+        existing_urls = {u[0] for u in existing_urls}
+
+        for data in channels_data:
+            name = data.get('name')
+            url = data.get('stream_url')
+            if not name or not url:
+                continue
+            
+            if url in existing_urls:
+                continue
+
+            # Find or create channel
+            channel = Channel.query.filter_by(stream_url=url).first()
+            if not channel:
+                channel = Channel(
+                    name=name,
+                    stream_url=url,
+                    owner_id=owner_id,
+                    is_public=False,
+                    status='unknown'
+                )
+                db.session.add(channel)
+                db.session.flush() # Get ID
+
+            # Add to playlist
+            entry = PlaylistEntry(
+                playlist_id=playlist_id,
+                channel_id=channel.id,
+                order_index=len(playlist.entries) + 1
+            )
+            db.session.add(entry)
+            added_count += 1
+            existing_urls.add(url)
+
+        db.session.commit()
+        return added_count
 
     @staticmethod
     def delete_profile(playlist_id):

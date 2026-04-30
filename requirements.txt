@@ -24,3 +24,4 @@ numpy<2.0.0
 cloudscraper
 playwright
 playwright-stealth
+beautifulsoup4

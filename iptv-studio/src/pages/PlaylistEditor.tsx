@@ -39,6 +39,7 @@ interface Entry {
   logo_url: string;
   status: string;
   is_passthrough: boolean;
+  is_discovery?: boolean;
   stream_url?: string;
   play_links?: {
     smart: string;
@@ -108,6 +109,7 @@ export const PlaylistEditor: React.FC = () => {
         group_name: ch.group || 'Ungrouped',
         logo_url: ch.logo_url,
         status: ch.status,
+        is_discovery: ch.is_discovery || false,
         stream_url: ch.play_links?.original || ''
       }));
       setEntries(mapped);
@@ -469,13 +471,15 @@ export const PlaylistEditor: React.FC = () => {
                            {copiedId === item.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                         </button>
                         <div className="w-px h-6 bg-white/5 mx-1" />
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setEditingChannelId(item.channel_id); }}
-                          className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
-                          title="Master Edit"
-                        >
-                           <Pencil size={14} />
-                        </button>
+                        {(!item.is_discovery && item.group_name !== 'Website Discovery') && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setEditingChannelId(item.channel_id); }}
+                            className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
+                            title="Master Edit"
+                          >
+                             <Pencil size={14} />
+                          </button>
+                        )}
                         <button 
                           onClick={(e) => { e.stopPropagation(); setEditingEntry(item); setIsGroupModalOpen(true); }}
                           className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"

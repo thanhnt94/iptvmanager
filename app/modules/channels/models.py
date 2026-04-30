@@ -8,7 +8,7 @@ class Channel(db.Model):
     name = db.Column(db.String(255), nullable=False)
     logo_url = db.Column(db.String(512))
     group_name = db.Column(db.String(128))
-    stream_url = db.Column(db.String(512), unique=True, nullable=False)
+    stream_url = db.Column(db.String(512), nullable=False)
     epg_id = db.Column(db.String(128))
     status = db.Column(db.String(50), default='unknown') # live, die, unknown
     stream_type = db.Column(db.String(20), default='unknown') # live, vod, unknown
@@ -24,6 +24,8 @@ class Channel(db.Model):
     last_checked_at = db.Column(db.DateTime)
     is_original = db.Column(db.Boolean, default=False)
     is_passthrough = db.Column(db.Boolean, default=False)
+    is_dynamic = db.Column(db.Boolean, default=False)
+    dynamic_origin_url = db.Column(db.String(512)) # The page URL this was extracted from
     
     # Permission fields
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'))

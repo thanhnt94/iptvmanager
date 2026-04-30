@@ -1,25 +1,25 @@
 from app import create_app
-from app.modules.channels.models import Channel
-from app.modules.playlists.models import PlaylistProfile
 from app.core.database import db
+from sqlalchemy import text
 
 app = create_app()
 with app.app_context():
-    print("--- Database Check ---")
-    total = Channel.query.count()
-    print(f"Total channels in DB: {total}")
-    
-    user1_channels = Channel.query.filter_by(owner_id=1).count()
-    print(f"Channels owned by user 1: {user1_channels}")
-    
-    public_channels = Channel.query.filter_by(is_public=True).count()
-    print(f"Public channels: {public_channels}")
-    
-    unknown_owner = Channel.query.filter(Channel.owner_id == None).count()
-    print(f"Channels with NO owner: {unknown_owner}")
-    
-    profile = PlaylistProfile.query.filter_by(slug='user-1-all').first()
-    if profile:
-        print(f"Profile 'user-1-all' found. Owner: {profile.owner_id}")
-    else:
-        print("Profile 'user-1-all' NOT found!")
+    try:
+        # Check index names
+        result = db.session.execute(text("PRAGMA index_list('channels')"))
+        indexes = result.fetchall()
+        print("Indexes on channels table:")
+        for idx in indexes:
+            print(f" - {idx[1]} (Unique: {idx[2]})")
+            if idx[2] == 1: # Unique
+                # Try to drop it. Note: SQLite doesn't allow dropping automatic unique constraint indexes directly 
+                # unless they were created as named indexes. 
+                # If it's a PRIMARY KEY or a UNIQUE constraint on column definition, we might need a table rebuild.
+                pass
+        
+        # SQLite constraint removal is tricky. 
+        # A simpler way for the user: Just handle it in code by checking existence.
+        # But user said they don't want to compare.
+        
+    except Exception as e:
+        print(f"Error: {e}")

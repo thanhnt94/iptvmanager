@@ -97,37 +97,33 @@ def list_playlists():
         owner = User.query.get(p.owner_id) if p.owner_id else None
         owner_name = owner.username if owner else 'system'
         
+        # Calculate channel count and stats
         count = 0
-        if p.is_system:
-            query = Channel.query
-            if p.slug == 'public':
-                query = query.filter_by(is_public=True)
-            elif p.owner_id:
-                query = query.filter_by(owner_id=p.owner_id)
-                if "protected" in p.slug:
-                    query = query.filter_by(is_original=True)
-            
-            count = query.count()
-        else:
-            count = len(p.entries)
-            
-        owner = User.query.get(p.owner_id) if p.owner_id else None
-        owner_name = owner.username if owner else 'system'
-        
-        # Calculate live/die/unknown stats
         live_count = 0
         die_count = 0
         unknown_count = 0
+        
         if p.is_system:
             stat_query = Channel.query
-            if p.slug == 'public': stat_query = stat_query.filter_by(is_public=True)
+            if p.slug == 'public': 
+                stat_query = stat_query.filter_by(is_public=True)
             elif p.owner_id:
                 stat_query = stat_query.filter_by(owner_id=p.owner_id)
-                if "protected" in p.slug: stat_query = stat_query.filter_by(is_original=True)
+                if "protected" in p.slug: 
+                    stat_query = stat_query.filter_by(is_original=True)
+            
+            count = stat_query.count()
             live_count = stat_query.filter_by(status='live').count()
             die_count = stat_query.filter_by(status='die').count()
             unknown_count = stat_query.filter(db.or_(Channel.status == 'unknown', Channel.status == None)).count()
+        elif getattr(p, 'is_dynamic', False):
+            count = len(p.discovery_items)
+            for item in p.discovery_items:
+                if item.status == 'live': live_count += 1
+                elif item.status == 'die': die_count += 1
+                else: unknown_count += 1
         else:
+            count = len(p.entries)
             for entry in p.entries:
                 if entry.channel:
                     if entry.channel.status == 'live': live_count += 1
@@ -140,6 +136,10 @@ def list_playlists():
             'slug': p.slug,
             'security_token': p.security_token,
             'is_system': p.is_system,
+            'is_dynamic': getattr(p, 'is_dynamic', False),
+            'website_url': getattr(p, 'website_url', ''),
+            'scanner_type': getattr(p, 'scanner_type', 'generic'),
+            'last_synced_at': p.last_synced_at.strftime('%Y-%m-%d %H:%M') if getattr(p, 'last_synced_at', None) else None,
             'channel_count': count,
             'live_count': live_count,
             'die_count': die_count,
@@ -153,6 +153,48 @@ def list_playlists():
             'current_scanning_name': p.current_scanning_name
         })
     return jsonify(res)
+
+@playlists_bp.route('/dynamic', methods=['POST'])
+@login_required
+def create_dynamic_playlist():
+    data = request.get_json()
+    name = data.get('name')
+    url = data.get('website_url')
+    scanner = data.get('scanner_type', 'generic')
+    
+    if not name or not url:
+        return jsonify({"status": "error", "message": "Name and Website URL are required"}), 400
+        
+    profile = PlaylistService.create_dynamic_profile(name, url, scanner, current_user.id)
+    return jsonify({
+        "status": "success",
+        "playlist": {
+            "id": profile.id,
+            "name": profile.name,
+            "website_url": profile.website_url,
+            "scanner_type": profile.scanner_type
+        }
+    })
+
+@playlists_bp.route('/<int:playlist_id>/sync', methods=['POST'])
+@login_required
+def sync_playlist(playlist_id):
+    success, message = PlaylistService.sync_dynamic_playlist(playlist_id)
+    if success:
+        return jsonify({"status": "success", "message": message})
+    return jsonify({"status": "error", "message": message}), 400
+
+@playlists_bp.route('/dynamic/types', methods=['GET'])
+@login_required
+def get_scanner_types():
+    return jsonify({
+        "status": "success",
+        "types": [
+            {"id": "colatv", "name": "ColaTV Sports"},
+            {"id": "hoiquan", "name": "HoiQuanTV (hoiquan3.live)"},
+            {"id": "generic", "name": "Generic Website (Auto-detect)"}
+        ]
+    })
 
 @playlists_bp.route('/groups/<int:playlist_id>', methods=['GET'])
 @login_required
@@ -220,6 +262,21 @@ def batch_add_to_playlist():
     count = PlaylistService.batch_add_channels_to_playlist(playlist_id, channel_ids, group_id)
     return jsonify({'status': 'ok', 'added_count': count})
 
+@playlists_bp.route('/<int:playlist_id>/channels/bulk', methods=['POST'])
+@login_required
+def bulk_save_channels_to_playlist(playlist_id):
+    p = PlaylistProfile.query.get_or_404(playlist_id)
+    check_playlist_access(p)
+    data = request.json or {}
+    channels_data = data.get('channels', [])
+    
+    if not channels_data:
+        return jsonify({'status': 'error', 'message': 'No channels provided'}), 400
+        
+    count = PlaylistService.bulk_save_raw_channels(playlist_id, channels_data, current_user.id)
+    return jsonify({'status': 'success', 'added_count': count})
+
+
 @playlists_bp.route('/entries/<int:entry_id>', methods=['DELETE'])
 @login_required
 def delete_entry(entry_id):
@@ -240,16 +297,42 @@ def get_entries(playlist_id):
     hide_die = request.args.get('hide_die', 'false').lower() == 'true'
     sort_mode = request.args.get('sort', 'alphabetical')
 
-    is_system_playlist = False
+    p = None
     if playlist_id > 0:
-        p = PlaylistProfile.query.get(playlist_id)
-        if p:
-            check_playlist_access(p)
-            if p.is_system:
-                is_system_playlist = True
+        p = PlaylistProfile.query.get_or_404(playlist_id)
+        check_playlist_access(p)
+
+    # [NEW] Handle dynamic playlists: they use DiscoveryChannel, not standard entries
+    if p and p.is_dynamic:
+        from app.modules.playlists.models import DiscoveryChannel
+        query = DiscoveryChannel.query.filter_by(playlist_id=playlist_id)
+        if search: query = query.filter(DiscoveryChannel.name.ilike(f'%{search}%'))
+        query = query.order_by(DiscoveryChannel.id.asc())
+        pagination = query.paginate(page=page, per_page=per_page)
+        
+        channels = []
+        for item in pagination.items:
+            channels.append({
+                'id': item.id,
+                'channel_id': item.id,
+                'is_discovery': True,
+                'name': item.name,
+                'logo_url': None,
+                'group': 'Website Discovery',
+                'status': item.status,
+                'play_url': item.stream_url,
+                'play_links': {
+                    'smart': item.stream_url,
+                    'original': item.stream_url
+                }
+            })
+        return jsonify({'channels': channels, 'has_more': pagination.has_next})
+
+    is_system_playlist = p.is_system if p else (playlist_id == 0 or str(playlist_id) == 'system_all')
 
     if playlist_id == 0 or str(playlist_id) == 'system_all' or is_system_playlist:
         p = PlaylistProfile.query.get(playlist_id) if (playlist_id > 0 and playlist_id != 'system_all') else None
+        
         query = Channel.query
         if not p: # system_all fallback
             query = query.filter(db.or_(Channel.owner_id == current_user.id, Channel.is_public == True))

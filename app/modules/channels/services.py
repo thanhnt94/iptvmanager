@@ -608,6 +608,7 @@ class ExtractorService:
         logger.info(f"Starting {'DEEP ' if deep_scan else ''}extraction for URL: {web_url}")
         results = []
         seen_urls = set()
+        page_title = "Unknown Source"
 
         # 1. Playwright Ultra Scan (JS Rendering + Network Sniffing)
         if deep_scan:
@@ -635,7 +636,7 @@ class ExtractorService:
                     
                     # 1.1 RESOURCE BLOCKING: Skip heavy assets to save RAM/Time
                     def block_aggressively(route):
-                        if route.request.resource_type in ["image", "stylesheet", "font", "media"]:
+                        if route.request.resource_type in ["image", "stylesheet", "font"]:
                             # We only need script and fetch/xhr for sniffing
                             return route.abort()
                         return route.continue_()
@@ -655,10 +656,14 @@ class ExtractorService:
                     def handle_request(request):
                         try:
                             req_url = request.url
+                            # [DEBUG] Log suspicious requests for movie sites
+                            if any(x in req_url.lower() for x in ['.m3u8', '.mpd', '.mp4', 'playlist', 'getlink', 'player']):
+                                logger.debug(f"Ultra Scan (Sniffer) monitoring: {req_url}")
+
                             # Check for common stream extensions or patterns
                             if any(ext in req_url.lower() for ext in ['.m3u8', '.mpd', 'master.m3u8', 'index.m3u8', 'playlist.m3u8']):
                                 if req_url not in seen_urls:
-                                    logger.info(f"Ultra Scan (Network) caught: {req_url}")
+                                    logger.info(f"Ultra Scan (Network) CAUGHT: {req_url}")
                                     network_found.append(req_url)
                                     found_event.append(True) # Signal we found something
                         except:
@@ -671,11 +676,29 @@ class ExtractorService:
                     # 1.3 TIMEOUT ALIGNMENT: 30s is standard Gunicorn limit
                     try:
                         # Wait for network idle or early exit find
-                        # Use a manual wait loop to support early exit
                         page.goto(web_url, wait_until='domcontentloaded', timeout=30000)
                         
-                        # Active waiting for 5s OR early finding
-                        for _ in range(25): # 25 * 200ms = 5s
+                        # [NEW] Interaction Logic: Click common play/server buttons to trigger stream loading
+                        logger.info("Ultra Scan: Attempting to trigger player via interaction...")
+                        try:
+                            # 1. Look for large play buttons or server buttons
+                            play_selectors = [
+                                "div[class*='play']", "button[class*='play']", 
+                                "a[class*='play']", ".btn-server", ".list-server li",
+                                ".server-item", "#play-button", ".play-icon"
+                            ]
+                            
+                            # Click the first one found or iterate a few
+                            for selector in play_selectors:
+                                if page.locator(selector).first.is_visible():
+                                    logger.info(f"Ultra Scan: Clicking interaction target: {selector}")
+                                    page.locator(selector).first.click(timeout=3000)
+                                    page.wait_for_timeout(1000) # Give it time to react
+                        except Exception as ix:
+                            logger.debug(f"Ultra Scan interaction attempt skipped: {ix}")
+
+                        # Active waiting for 8s (longer for movies) OR early finding
+                        for _ in range(40): # 40 * 200ms = 8s
                             if found_event: 
                                 logger.info("Ultra Scan: Early exit triggered (Stream found)")
                                 break
@@ -686,6 +709,9 @@ class ExtractorService:
 
                     # Final DOM scan fallback
                     html = page.content()
+                    try:
+                        page_title = page.title()
+                    except: pass
                     browser.close()
                     
                     # Process network findings
@@ -757,8 +783,110 @@ class ExtractorService:
             logger.error(f"CloudScraper extraction error for {web_url}: {str(e)}", exc_info=True)
 
         if results:
-            return {'success': True, 'links': results}
+            return {
+                'success': True, 
+                'title': page_title,
+                'links': results
+            }
         return {'success': False, 'error': 'No media streams found on this page.'}
+
+    @staticmethod
+    def discover_links(site_url):
+        """Finds interesting sub-links on a page using Playwright for JS rendering support."""
+        from playwright.sync_api import sync_playwright
+        from playwright_stealth import Stealth
+        from urllib.parse import urljoin
+        from bs4 import BeautifulSoup
+
+        logger.info(f" [DISCOVERY-START] URL: {site_url}")
+        links = []
+        seen_hrefs = set()
+
+        try:
+            with sync_playwright() as p:
+                logger.debug(" [DISCOVERY] Launching browser...")
+                browser = p.chromium.launch(headless=True, args=['--no-sandbox'])
+                context = browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36')
+                page = context.new_page()
+                stealth = Stealth()
+                stealth.apply_stealth_sync(page)
+
+                # Resource blocking
+                page.route("**/*.{png,jpg,jpeg,gif,svg,css,woff,woff2}", lambda route: route.abort())
+
+                logger.info(f" [DISCOVERY] Navigating to: {site_url}")
+                page.goto(site_url, wait_until='domcontentloaded', timeout=30000)
+                
+                # Wait for any potential content
+                page.wait_for_timeout(5000)
+                
+                html = page.content()
+                logger.debug(f" [DISCOVERY] Page loaded. HTML length: {len(html)}")
+                
+                soup = BeautifulSoup(html, 'html.parser')
+                browser.close()
+
+                # 1. Specialized Sports Patterns
+                cards = soup.select('a.link-match')
+                logger.info(f" [DISCOVERY] Found {len(cards)} 'a.link-match' elements.")
+                
+                for card in cards:
+                    href = card.get('href')
+                    if not href: continue
+                    full_url = urljoin(site_url, href)
+                    blv_el = card.find_parent().select_one('a.blv-link') if card.find_parent() else None
+                    blv_name = blv_el.get_text(strip=True) if blv_el else None
+                    title = card.get_text(strip=True) or full_url
+                    
+                    if full_url not in seen_hrefs:
+                        links.append({'url': full_url, 'title': title, 'blv': blv_name})
+                        seen_hrefs.add(full_url)
+
+                # 2. Generic Fallback Crawler (Matches, Movies, Episodes)
+                if len(links) < 3:
+                    logger.info(" [DISCOVERY] Low count using specialized selectors. Switching to Generic Crawler...")
+                    all_links = soup.find_all('a', href=True)
+                    logger.debug(f" [DISCOVERY] Total <a> tags found: {len(all_links)}")
+                    
+                    for a in all_links:
+                        href = a['href']
+                        text = a.get_text(strip=True)
+                        full_url = urljoin(site_url, href)
+                        
+                        if any(x in href.lower() for x in ['facebook', 'twitter', 'ads', 'telegram', 'bet', 'policy', 'about']):
+                            continue
+                            
+                        is_likely_content = False
+                        h_low = href.lower()
+                        t_low = text.lower()
+                        
+                        # Match/Live patterns
+                        if any(x in h_low for x in ['truc-tiep', '/live', '/match', 'stream']):
+                            is_likely_content = True
+                        # Movie/Episode patterns
+                        elif any(x in h_low for x in ['xem-phim', 'tap-', 'full-hd']):
+                            is_likely_content = True
+                        # Text based heuristics
+                        elif any(x in t_low for x in ['xem ngay', 'trực tiếp', 'tập ']):
+                            is_likely_content = True
+                            
+                        if is_likely_content and full_url not in seen_hrefs:
+                            # Try to find BLV for generic links
+                            blv_name = None
+                            if 'blv' in t_low: blv_name = text
+                            
+                            links.append({
+                                'url': full_url,
+                                'title': text or full_url,
+                                'blv': blv_name
+                            })
+                            seen_hrefs.add(full_url)
+
+            logger.info(f" [DISCOVERY-FINISHED] Found {len(links)} unique content links.")
+            return links
+        except Exception as e:
+            logger.error(f" [DISCOVERY-ERROR] Failed: {e}", exc_info=True)
+            return []
 
     @staticmethod
     def _scan_html_for_links(html):

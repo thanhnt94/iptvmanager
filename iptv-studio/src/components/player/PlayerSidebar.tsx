@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Search, 
   Library, 
@@ -15,7 +16,9 @@ import {
   CalendarCheck,
   ArrowDownAZ,
   ArrowDownUp,
-  Activity
+  Activity,
+  Globe,
+  FolderTree
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLogoUrl } from '../../utils';
@@ -33,6 +36,9 @@ function useDebounce<T>(value: T, delay: number): T {
 interface Playlist {
   id: number | string;
   name: string;
+  is_system?: boolean;
+  is_dynamic?: boolean;
+  owner_username?: string;
 }
 
 interface Channel {
@@ -63,6 +69,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   onEditChannel
 }) => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [activeTab, setActiveTab] = useState<'personal' | 'system' | 'dynamic'>('personal');
   const [selectedPlaylist, setSelectedPlaylist] = useState<number | string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -77,39 +84,32 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // Fetch initial playlists
   useEffect(() => {
     setLoading(true);
-    const timeout = setTimeout(() => {
-      if (loading) setLoading(false);
-    }, 5000); // 5s absolute fail-safe
-
     fetch('/api/playlists')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
+      .then(res => res.json())
       .then(data => {
-        clearTimeout(timeout);
         if (Array.isArray(data)) {
           setPlaylists(data);
-          if (data.length > 0) {
-            setSelectedPlaylist(data[0].id);
-          } else {
-            setLoading(false);
-          }
-        } else {
-          throw new Error("Invalid format");
+          // Auto-select first playlist of the active tab if possible
+          const filtered = data.filter(p => {
+            if (activeTab === 'system') return p.is_system && !p.owner_username?.includes('user-');
+            if (activeTab === 'dynamic') return p.is_dynamic;
+            return !p.is_system && !p.is_dynamic;
+          });
+          if (filtered.length > 0) setSelectedPlaylist(filtered[0].id);
+          else setSelectedPlaylist(null);
         }
       })
       .catch(err => {
-        clearTimeout(timeout);
         console.error("Playlists fetch error:", err);
         setError("Source catalog unreachable");
-        setLoading(false);
-      });
-  }, []);
+      })
+      .finally(() => setLoading(false));
+  }, [activeTab]);
 
   // Fetch categories when playlist changes
   useEffect(() => {
@@ -199,13 +199,41 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   return (
     <div className={`w-full lg:w-80 flex-1 lg:flex-none lg:h-full flex flex-col bg-slate-950/80 backdrop-blur-3xl border-t lg:border-t-0 lg:border-r border-white/5 overflow-hidden animate-in fade-in lg:slide-in-from-left duration-500 shadow-2xl z-20 ${className}`}>
       {/* Search & Select */}
-      <div className="p-4 lg:p-6 space-y-3 lg:space-y-5 bg-white/[0.02] border-b border-white/5 shadow-inner">
+      <div className="p-4 lg:p-6 space-y-4 bg-white/[0.02] border-b border-white/5 shadow-inner">
          <div className="flex items-center justify-between">
             <h5 className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] flex items-center gap-2">
               <Library size={12} className="text-indigo-400" />
               Library Explorer
             </h5>
-            <div className={`w-1.5 h-1.5 rounded-full ${loading ? 'bg-indigo-500 animate-pulse' : 'bg-emerald-500'}`} />
+            <button 
+              onClick={() => navigate('/scanner')}
+              className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all shadow-lg"
+              title="Open Media Scanner"
+            >
+               <Search size={12} />
+            </button>
+         </div>
+
+         {/* Tabs inside sidebar */}
+         <div className="flex bg-slate-900/60 p-1 rounded-xl border border-white/5">
+            <button 
+              onClick={() => setActiveTab('personal')}
+              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${activeTab === 'personal' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+               Personal
+            </button>
+            <button 
+              onClick={() => setActiveTab('system')}
+              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${activeTab === 'system' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+               System
+            </button>
+            <button 
+              onClick={() => setActiveTab('dynamic')}
+              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${activeTab === 'dynamic' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+               Dynamic
+            </button>
          </div>
          
          <div className="space-y-2 lg:space-y-3">
@@ -213,7 +241,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
             <div className="grid grid-cols-2 gap-2">
               {/* Playlist Selector */}
               <div className="relative group">
-                <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} />
+                {activeTab === 'dynamic' ? <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} /> : activeTab === 'system' ? <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} /> : <FolderTree className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} />}
                 <select 
                   value={selectedPlaylist ?? ''} 
                   onChange={e => {
@@ -222,7 +250,16 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                   }}
                   className="w-full bg-slate-900/60 border border-white/5 rounded-xl pl-8 pr-2 py-2 text-[10px] text-white font-black focus:outline-none focus:ring-1 focus:ring-indigo-500/20 appearance-none hover:bg-slate-900 transition-all cursor-pointer truncate"
                 >
-                   {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                   {playlists.filter(p => {
+                      if (activeTab === 'system') return p.is_system && !p.owner_username?.includes('user-');
+                      if (activeTab === 'dynamic') return p.is_dynamic;
+                      return !p.is_system && !p.is_dynamic;
+                   }).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                   {playlists.filter(p => {
+                      if (activeTab === 'system') return p.is_system && !p.owner_username?.includes('user-');
+                      if (activeTab === 'dynamic') return p.is_dynamic;
+                      return !p.is_system && !p.is_dynamic;
+                   }).length === 0 && <option value="">No Playlists</option>}
                 </select>
                 <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-white/20 rotate-90" size={12} />
               </div>
