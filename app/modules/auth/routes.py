@@ -13,9 +13,37 @@ def me():
         'id': current_user.id,
         'username': current_user.username,
         'email': current_user.email,
+        'full_name': current_user.full_name,
         'role': current_user.role,
+        'api_token': current_user.api_token,
         'avatar_initial': current_user.username[0].upper()
     })
+
+@auth_bp.route('/profile', methods=['PATCH'])
+@login_required
+def update_profile():
+    data = request.json
+    success, message = AuthService.update_profile(
+        current_user.id,
+        data.get('full_name'),
+        data.get('email')
+    )
+    if success:
+        return jsonify({'status': 'ok', 'message': message})
+    return jsonify({'status': 'error', 'message': message}), 400
+
+@auth_bp.route('/change-password', methods=['POST'])
+@login_required
+def change_password():
+    data = request.json
+    success, message = AuthService.change_password(
+        current_user.id,
+        data.get('old_password'),
+        data.get('new_password')
+    )
+    if success:
+        return jsonify({'status': 'ok', 'message': message})
+    return jsonify({'status': 'error', 'message': message}), 400
 
 @auth_bp.route('/config', methods=['GET'])
 def get_config():

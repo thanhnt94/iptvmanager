@@ -175,8 +175,11 @@ def create_app(config_class=Config):
     def load_user(user_id):
         return AuthService.get_user_by_id(user_id)
     
-    # Initialize Scheduler
-    init_scheduler(app)
+    # Initialize Scheduler (unless skipped via env)
+    if os.environ.get('SKIP_SCHEDULER') != '1':
+        init_scheduler(app)
+    else:
+        app.logger.info(" [SYSTEM] Skipping APScheduler initialization for this process.")
     
     # --- GLOBAL SYSTEM APIs ---
 
@@ -338,7 +341,15 @@ def create_app(config_class=Config):
                         app.logger.info(f"Auto-detected {tool} at: {found_path}")
                         SettingService.set(key, found_path, description=f"Auto-detected {tool} path")
 
-            db.session.commit()
+            # 5. Clean up stale scanner state on startup
+            from app.modules.health.models import ScannerStatus
+            scanner_state = ScannerStatus.get_singleton()
+            if scanner_state.is_running or scanner_state.stop_requested:
+                app.logger.info(" [SYSTEM] Cleaning up stale scanner state on startup...")
+                scanner_state.is_running = False
+                scanner_state.stop_requested = False
+                db.session.commit()
+
             app.logger.info("Database initialization complete.")
         except Exception as e:
             app.logger.error(f"Database initialization failed: {str(e)}")

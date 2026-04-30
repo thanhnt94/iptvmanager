@@ -16,7 +16,9 @@ import {
   ToggleRight,
   Activity,
   Code,
-  HardDrive
+  HardDrive,
+  Zap,
+  Server
 } from 'lucide-react';
 
 interface Setting {
@@ -35,17 +37,26 @@ interface UserRecord {
 }
 
 export const AdminPortal: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'security' | 'maintenance'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'security' | 'maintenance' | 'tasks'>('users');
   const [settings, setSettings] = useState<Setting[]>([]);
   const [usersList, setUsersList] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [tasksInfo, setTasksInfo] = useState<any>(null);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'free' });
 
   useEffect(() => {
     fetchInitialData();
+    
+    // Auto-poll tasks if on tasks tab
+    let interval: any;
+    if (activeTab === 'tasks') {
+      fetchTasks();
+      interval = setInterval(fetchTasks, 5000);
+    }
+    return () => clearInterval(interval);
   }, [activeTab]);
 
   const fetchInitialData = async () => {
@@ -62,6 +73,57 @@ export const AdminPortal: React.FC = () => {
       console.error("Fetch error:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch('/api/health/admin/tasks');
+      if (res.ok) {
+        const data = await res.json();
+        setTasksInfo(data);
+      }
+    } catch (err) {
+      console.error("Task fetch error:", err);
+    }
+  };
+
+  const handlePurgeQueue = async () => {
+    if (!confirm('Are you sure you want to PURGE the entire task queue? All pending scans will be lost.')) return;
+    try {
+      const res = await fetch('/api/health/admin/tasks/purge', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        showMsg('success', `Purged ${data.purged_count} tasks`);
+        fetchTasks();
+      }
+    } catch (err) {
+      showMsg('error', 'Purge failed');
+    }
+  };
+
+  const handleResetScanner = async () => {
+    if (!confirm('Hard Reset Scanner Engine? Use this ONLY if the UI is stuck and normal Stop fails.')) return;
+    try {
+      const res = await fetch('/api/health/admin/tasks/reset', { method: 'POST' });
+      if (res.ok) {
+        showMsg('success', 'Scanner engine reset to IDLE');
+        setTimeout(fetchTasks, 500);
+      }
+    } catch (err) {
+      showMsg('error', 'Reset failed');
+    }
+  };
+
+  const handleStopTask = async () => {
+    try {
+      const res = await fetch('/api/health/stop', { method: 'POST' });
+      if (res.ok) {
+        showMsg('success', 'Stop signal sent to scanner');
+        setTimeout(fetchTasks, 500);
+      }
+    } catch (err) {
+      showMsg('error', 'Stop failed');
     }
   };
 
@@ -180,6 +242,7 @@ export const AdminPortal: React.FC = () => {
             { id: 'system', label: 'System', icon: <SettingsIcon size={16} /> },
             { id: 'security', label: 'Security', icon: <ShieldCheck size={16} /> },
             { id: 'maintenance', label: 'Maintenance', icon: <Database size={16} /> },
+            { id: 'tasks', label: 'Tasks', icon: <Server size={16} /> },
           ].map(tab => (
             <button
               key={tab.id}
@@ -540,6 +603,122 @@ export const AdminPortal: React.FC = () => {
                         Restore Registry
                       </button>
                     </div>
+                </div>
+              )}
+
+              {activeTab === 'tasks' && (
+                <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+                   {/* Controls Bar */}
+                   <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/40 p-6 rounded-3xl border border-white/5">
+                      <div className="flex items-center gap-4">
+                         <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                            <Server size={20} />
+                         </div>
+                         <div>
+                            <h3 className="font-black text-white text-lg">Celery Fleet Manager</h3>
+                            <p className="text-slate-500 text-xs">Monitor and control background workers.</p>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                         <button 
+                            onClick={handlePurgeQueue}
+                            className="px-4 py-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 text-xs font-bold transition-all"
+                         >
+                            Purge Queue
+                         </button>
+                         <button 
+                            onClick={handleResetScanner}
+                            className="px-4 py-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 text-xs font-bold transition-all"
+                         >
+                            Reset Engine
+                         </button>
+                         <button 
+                            onClick={fetchTasks}
+                            className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white border border-white/10 transition-all"
+                         >
+                            <RefreshCw size={18} />
+                         </button>
+                      </div>
+                   </div>
+
+                   {/* Scanner Summary */}
+                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="bg-slate-950/50 p-6 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Scanner Status</p>
+                         <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${tasksInfo?.scanner?.is_running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`} />
+                            <span className="text-xl font-black text-white">{tasksInfo?.scanner?.is_running ? 'RUNNING' : 'IDLE'}</span>
+                         </div>
+                      </div>
+                      <div className="bg-slate-950/50 p-6 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Active Tasks</p>
+                         <span className="text-3xl font-black text-indigo-400">
+                            {Math.max(
+                               Object.values(tasksInfo?.active || {}).flat().length, 
+                               tasksInfo?.scanner?.is_running ? 1 : 0
+                            )}
+                         </span>
+                      </div>
+                      <div className="bg-slate-950/50 p-6 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Queued</p>
+                         <span className="text-3xl font-black text-amber-400">
+                            {Object.values(tasksInfo?.reserved || {}).flat().length}
+                         </span>
+                      </div>
+                      <div className="bg-slate-950/50 p-6 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Scheduled</p>
+                         <span className="text-3xl font-black text-emerald-400">
+                            {Object.values(tasksInfo?.scheduled || {}).flat().length}
+                         </span>
+                      </div>
+                   </div>
+
+                   {/* Detailed Task List */}
+                   <div className="bg-slate-900/40 rounded-3xl border border-white/5 overflow-hidden">
+                      <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                         <h4 className="font-black text-white uppercase tracking-tighter">Active Job Stream</h4>
+                         <Activity size={16} className="text-indigo-400" />
+                      </div>
+                      <div className="p-0">
+                         {Object.keys(tasksInfo?.active || {}).length > 0 ? (
+                            Object.entries(tasksInfo.active).map(([worker, tasks]: [string, any]) => (
+                               <div key={worker} className="p-6 border-b border-white/5 last:border-0">
+                                  <p className="text-[10px] text-slate-500 font-bold mb-4">Worker: <span className="text-indigo-400">{worker}</span></p>
+                                  <div className="space-y-3">
+                                     {tasks.map((t: any) => (
+                                        <div key={t.id} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/5">
+                                           <div className="flex items-center gap-3">
+                                              <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                                                 <Zap size={16} />
+                                              </div>
+                                              <div>
+                                                 <p className="text-xs font-black text-white">{t.name}</p>
+                                                 <p className="text-[10px] text-slate-500 font-mono">{t.id.substring(0, 12)}...</p>
+                                              </div>
+                                           </div>
+                                           <div className="flex items-center gap-2">
+                                              <span className="text-[10px] px-2 py-1 rounded-md bg-indigo-500/10 text-indigo-400 font-black uppercase tracking-widest">Running</span>
+                                              <button 
+                                                 onClick={handleStopTask}
+                                                 className="text-[10px] px-2 py-1 rounded-md bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 font-black uppercase tracking-widest transition-all"
+                                              >
+                                                 Stop
+                                              </button>
+                                           </div>
+                                        </div>
+                                     ))}
+                                  </div>
+                               </div>
+                            ))
+                         ) : (
+                            <div className="p-20 flex flex-col items-center justify-center text-center">
+                               <Server size={40} className="text-slate-800 mb-4" />
+                               <p className="text-slate-500 font-bold">No active background tasks</p>
+                               <p className="text-[10px] text-slate-600 mt-2">The fleet is currently on standby.</p>
+                            </div>
+                         )}
+                      </div>
+                   </div>
                 </div>
               )}
             </>

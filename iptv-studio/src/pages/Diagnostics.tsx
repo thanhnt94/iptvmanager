@@ -88,7 +88,7 @@ export const Diagnostics: React.FC = () => {
         const res = await fetch('/api/health/status');
         const data = await res.json();
         if (isMounted) setStatus(data);
-        const delay = data.is_running ? 2000 : 8000;
+        const delay = data.is_running ? 2000 : 20000;
         timeoutId = setTimeout(poll, delay);
       } catch (err) {
         console.error("Status fetch error:", err);

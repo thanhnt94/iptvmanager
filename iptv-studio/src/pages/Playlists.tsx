@@ -20,7 +20,8 @@ import {
   Globe,
   FolderTree,
   Wifi,
-  XSquare
+  XSquare,
+  ChevronDown
 } from 'lucide-react';
 
 interface Playlist {
@@ -98,43 +99,47 @@ export const Playlists: React.FC = () => {
   // Use a ref to track the previous running state to avoid infinite effect loops
   const wasRunningRef = React.useRef(false);
 
+  const fetchScannerStatus = async () => {
+    try {
+      const res = await fetch('/api/health/status');
+      if (!res.ok) return null;
+      const data = await res.json();
+      
+      // If scan is running, refresh the full list to get updated current_scanning_name from DB
+      if (data.is_running) {
+        fetchPlaylists();
+      }
+      
+      // If scan just finished (transition from running to not running)
+      if (wasRunningRef.current && !data.is_running) {
+        fetchPlaylists();
+      }
+      
+      wasRunningRef.current = data.is_running;
+      setScannerStatus(data);
+      return data;
+    } catch (err) {
+      console.error("Scanner status fetch error:", err);
+      return null;
+    }
+  };
+
   // Polling for Scanner Status - Safe recursive approach
   useEffect(() => {
     let timeoutId: any;
     let isMounted = true;
 
-    const poll = async () => {
+    const pollLoop = async () => {
       if (!isMounted) return;
-      try {
-        const res = await fetch('/api/health/status');
-        if (!res.ok) return;
-        const data = await res.json();
-        
-        if (!isMounted) return;
+      const data = await fetchScannerStatus();
+      if (!isMounted) return;
 
-        // If scan is running, refresh the full list to get updated current_scanning_name from DB
-        if (data.is_running) {
-          fetchPlaylists();
-        }
-        
-        // If scan just finished (transition from running to not running)
-        if (wasRunningRef.current && !data.is_running) {
-          fetchPlaylists();
-        }
-        
-        wasRunningRef.current = data.is_running;
-        setScannerStatus(data);
-        
-        // Dynamic interval: Poll faster if scanning
-        const delay = data.is_running ? 3000 : 10000;
-        timeoutId = setTimeout(poll, delay);
-      } catch (err) {
-        console.error("Scanner status poll error:", err);
-        if (isMounted) timeoutId = setTimeout(poll, 10000);
-      }
+      // Dynamic interval: Poll every 3s if scanning, every 30s if idle
+      const delay = data?.is_running ? 3000 : 30000;
+      timeoutId = setTimeout(pollLoop, delay);
     };
 
-    poll(); // Start loop
+    pollLoop(); // Start loop
 
     return () => {
       isMounted = false;
@@ -236,12 +241,26 @@ export const Playlists: React.FC = () => {
     setPlaylists(prev => prev.map(p => p.id === id ? { ...p, is_scanning: true, current_scanning_name: 'Initiating...' } : p));
 
     try {
+      // Immediate UI response: Force status to running
+      setScannerStatus(prev => ({
+        ...prev,
+        is_running: true,
+        playlist_id: id as number,
+        current: 0,
+        total: 100,
+        current_name: 'Initializing engine...'
+      } as any));
+
       const res = await fetch(`/api/playlists/${id}/quick-check`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ delay })
       });
       const data = await res.json();
+      
+      // Trigger an immediate poll to get real server state
+      setTimeout(fetchScannerStatus, 500);
+
       if (data.status === 'ok') {
         setCheckResult({ id, live: data.live, die: data.die, total: data.total, updated: data.updated });
         setTimeout(() => setCheckResult(prev => prev?.id === id ? null : prev), 8000);
@@ -400,7 +419,7 @@ export const Playlists: React.FC = () => {
                               <div className="flex items-center gap-2 overflow-hidden">
                                 <Activity size={12} className="text-indigo-400 animate-pulse shrink-0" />
                                 <span className="text-[10px] text-slate-300 font-bold truncate">
-                                  {item.current_scanning_name || scannerStatus?.current_name || 'Preparing...'}
+                                  {scannerStatus?.current_name || item.current_scanning_name || 'Preparing...'}
                                 </span>
                               </div>
                               <span className="text-[10px] text-indigo-400 font-black tracking-widest">
@@ -554,34 +573,41 @@ export const Playlists: React.FC = () => {
                            <XSquare size={16} className="animate-pulse" />
                          </button>
                        ) : (
-                         <div className="relative">
-                           <button 
-                              onClick={() => setScanDelayMenu(scanDelayMenu === item.id ? null : item.id)}
-                              disabled={checkingId === item.id}
-                              className={`p-2 rounded-xl transition-all border ${
-                                checkingId === item.id 
-                                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
-                                  : 'hover:bg-emerald-500/10 hover:text-emerald-400 text-slate-500 border-transparent hover:border-emerald-500/20'
-                              }`}
-                              title="Quick Signal Check"
-                            >
-                               {checkingId === item.id 
-                                 ? <Loader2 size={16} className="animate-spin" /> 
-                                 : <Wifi size={16} />}
+                         <div className="flex items-center">
+                            <button 
+                               onClick={() => handleQuickCheck(item.id, 1)}
+                               disabled={checkingId === item.id}
+                               className={`p-2 rounded-l-xl transition-all border ${
+                                 checkingId === item.id 
+                                   ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
+                                   : 'hover:bg-emerald-500/10 hover:text-emerald-400 text-slate-500 border-white/5 hover:border-emerald-500/20'
+                               }`}
+                               title="Quick 1s Scan"
+                             >
+                                {checkingId === item.id 
+                                  ? <Loader2 size={16} className="animate-spin" /> 
+                                  : <Wifi size={16} />}
                             </button>
+                            <button
+                               onClick={() => setScanDelayMenu(scanDelayMenu === item.id ? null : item.id)}
+                               className="p-2 rounded-r-xl border-y border-r border-white/5 hover:bg-white/5 text-slate-500 transition-all"
+                            >
+                               <ChevronDown size={10} />
+                            </button>
+                            
                             {scanDelayMenu === item.id && (
                               <>
                                 <div className="fixed inset-0 z-40" onClick={() => setScanDelayMenu(null)} />
-                                <div className="absolute right-0 top-full mt-2 z-50 bg-slate-900 border border-white/10 rounded-xl shadow-2xl p-2 min-w-[140px] animate-in fade-in zoom-in-95 duration-200">
-                                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-2 py-1 mb-1">Scan Delay</p>
+                                <div className="absolute right-0 top-full mt-2 z-50 bg-slate-950 border border-white/10 rounded-2xl shadow-2xl p-2 min-w-[140px] animate-in fade-in zoom-in-95 duration-200">
+                                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-3 py-2 mb-1 border-b border-white/5">Set Scan Delay</p>
                                    {[0, 1, 3, 5, 10, 30].map(d => (
                                      <button
                                        key={d}
                                        onClick={() => handleQuickCheck(item.id, d)}
-                                       className="w-full text-left px-3 py-2 text-xs font-bold text-slate-300 hover:bg-indigo-500/10 hover:text-indigo-400 rounded-lg transition-all flex items-center justify-between"
+                                       className="w-full text-left px-3 py-2.5 text-[11px] font-bold text-slate-300 hover:bg-indigo-500/10 hover:text-indigo-400 rounded-xl transition-all flex items-center justify-between"
                                      >
-                                       <span>{d === 0 ? 'No delay' : `${d}s / channel`}</span>
-                                       {d === 5 && <span className="text-[8px] text-indigo-500 font-black">DEFAULT</span>}
+                                       <span>{d === 0 ? 'Instant' : `${d}s delay`}</span>
+                                       {d === 1 && <span className="text-[8px] text-indigo-500 font-black">FAST</span>}
                                      </button>
                                    ))}
                                 </div>

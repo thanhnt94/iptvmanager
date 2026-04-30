@@ -1,8 +1,9 @@
 from flask_apscheduler import APScheduler
 from celery import shared_task
 import logging
+from celery.utils.log import get_task_logger
 
-logger = logging.getLogger('iptv')
+logger = get_task_logger('iptv')
 scheduler = APScheduler()
 
 @shared_task(name='health.check_channel')
@@ -46,7 +47,7 @@ def init_scheduler(app):
     scheduler.init_app(app)
     scheduler.start()
 
-@scheduler.task('interval', id='auto_scan_playlists', minutes=5)
+@scheduler.task('interval', id='auto_scan_playlists', seconds=10)
 def auto_scan_playlists_task():
     """
     Periodic task to trigger health checks for playlists with auto-scan enabled.

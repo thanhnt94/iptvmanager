@@ -107,6 +107,8 @@ def list_channels():
         query = query.order_by(Channel.created_at.desc())
     elif sort == 'oldest':
         query = query.order_by(Channel.created_at.asc())
+    elif sort == 'last_checked':
+        query = query.order_by(Channel.last_checked_at.desc().nullslast())
     else:
         query = query.order_by(Channel.name)
 
@@ -454,7 +456,7 @@ def check_channel(id):
     ch = Channel.query.get_or_404(id)
     check_channel_access(ch)
     from app.modules.health.services import HealthCheckService
-    result = HealthCheckService.check_stream(id)
+    result = HealthCheckService.check_stream(id, force=True)
     return jsonify(result)
 
 @channels_bp.route('/toggle-protection/<int:id>', methods=['POST'])

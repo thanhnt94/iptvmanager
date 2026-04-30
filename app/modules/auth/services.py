@@ -88,6 +88,37 @@ class AuthService:
         return False
 
     @staticmethod
+    def update_profile(user_id, full_name, email):
+        user = User.query.get(user_id)
+        if not user:
+            return False, "User not found"
+        
+        # Check email uniqueness if changed
+        if email and email != user.email:
+            if User.query.filter_by(email=email).first():
+                return False, "Email already in use"
+            user.email = email
+            
+        if full_name is not None:
+            user.full_name = full_name
+            
+        db.session.commit()
+        return True, "Profile updated"
+
+    @staticmethod
+    def change_password(user_id, old_password, new_password):
+        user = User.query.get(user_id)
+        if not user:
+            return False, "User not found"
+        
+        if not user.check_password(old_password):
+            return False, "Incorrect old password"
+            
+        user.set_password(new_password)
+        db.session.commit()
+        return True, "Password changed"
+
+    @staticmethod
     def get_user_by_id(user_id):
         return User.query.get(int(user_id))
 

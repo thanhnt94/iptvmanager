@@ -64,3 +64,77 @@ def batch_check():
         
     results = HealthCheckService.batch_check_streams(ids, fast_mode=fast_mode)
     return jsonify({'status': 'ok', 'results': results})
+
+@health_bp.route('/admin/tasks', methods=['GET'])
+@login_required
+def admin_tasks():
+    """Admin-only: Returns detailed Celery and Scanner status."""
+    from flask_login import current_user
+    if current_user.role != 'admin':
+        return jsonify({"status": "error", "message": "Admin only"}), 403
+        
+    celery = current_app.celery_app
+    # Note: inspect() might have limited info on SQLite broker but good for active tasks
+    i = celery.control.inspect()
+    active = i.active() or {}
+    scheduled = i.scheduled() or {}
+    reserved = i.reserved() or {}
+    
+    scanner_status = HealthCheckService.get_status()
+    
+    # FIX for SQLite: If scanner is running but Celery reports 0 active tasks,
+    # inject a synthetic task so the UI shows what's happening.
+    if scanner_status and scanner_status.get('is_running') and not any(active.values()):
+        active['InternalWorker'] = [{
+            'id': 'scanner-process',
+            'name': f"Health Scan: {scanner_status.get('current_name') or 'Initializing'}",
+            'time_start': None,
+            'args': [],
+            'kwargs': {'playlist_id': scanner_status.get('playlist_id')}
+        }]
+    
+    return jsonify({
+        "status": "ok",
+        "active": active,
+        "scheduled": scheduled,
+        "reserved": reserved,
+        "scanner": scanner_status or {}
+    })
+
+@health_bp.route('/admin/tasks/purge', methods=['POST'])
+@login_required
+def purge_tasks():
+    """Admin-only: Clears all pending tasks in the Celery queue."""
+    from flask_login import current_user
+    if current_user.role != 'admin':
+        return jsonify({"status": "error", "message": "Admin only"}), 403
+        
+    celery = current_app.celery_app
+    count = celery.control.purge()
+    
+    # Also signal any running scan to stop
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.stop_scan()
+    
+    return jsonify({"status": "ok", "purged_count": count})
+
+@health_bp.route('/admin/tasks/reset', methods=['POST'])
+@login_required
+def reset_scanner():
+    """Admin-only: Forces scanner state to IDLE and stops current logic."""
+    from flask_login import current_user
+    if current_user.role != 'admin':
+        return jsonify({"status": "error", "message": "Admin only"}), 403
+    
+    from app.modules.health.models import ScannerStatus
+    from app.core.database import db
+    
+    db.session.rollback()
+    state = ScannerStatus.get_singleton()
+    state.is_running = False
+    state.stop_requested = True # Force stop signal to any zombie worker
+    state.current = 0
+    state.total = 0
+    db.session.commit()
+    
+    return jsonify({"status": "ok", "message": "Scanner engine reset successfully"})

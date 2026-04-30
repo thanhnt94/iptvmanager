@@ -32,10 +32,14 @@ class ScannerStatus(db.Model):
 
     @classmethod
     def get_singleton(cls):
-        """Ensures we only have one scanner status record."""
+        """Ensures we only have one scanner status record. Thread-safe(ish) for SQLite."""
         status = cls.query.first()
         if not status:
-            status = cls(is_running=False)
-            db.session.add(status)
-            db.session.commit()
+            try:
+                status = cls(is_running=False)
+                db.session.add(status)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                status = cls.query.first()
         return status

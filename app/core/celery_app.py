@@ -15,4 +15,12 @@ def celery_init_app(app: Flask) -> Celery:
     }))
     celery_app.set_default()
     app.extensions["celery"] = celery_app
+
+    # Use the app's logging setup for Celery workers
+    from celery.signals import setup_logging
+    @setup_logging.connect
+    def on_setup_logging(**kwargs):
+        from app.core.logging_config import setup_logging as init_logs
+        init_logs(app)
+
     return celery_app

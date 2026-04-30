@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   Search,
-  FolderTree
+  FolderTree,
+  Settings
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -40,6 +41,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
     { icon: <Calendar size={20} />, label: 'EPG Registry', path: '/epg' },
     { icon: <CloudDownload size={20} />, label: 'Ingestion', path: '/import' },
     { icon: <Activity size={20} />, label: 'Diagnostics', path: '/diagnostics' },
+    { icon: <Settings size={20} />, label: 'Account Settings', path: '/profile' },
   ];
 
   if (user.role === 'admin' || user.role === 'vip') {
@@ -124,10 +126,10 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
              <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-black uppercase border border-white/5">
                {user.username[0]}
              </div>
-             <div className="flex-1 overflow-hidden">
-                <p className="text-sm font-black text-white truncate leading-none mb-1">{user.username}</p>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">{user.role}</p>
-             </div>
+             <NavLink to="/profile" className="flex-1 overflow-hidden group">
+                <p className="text-sm font-black text-white truncate leading-none mb-1 group-hover:text-indigo-400 transition-colors">{user.username}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">View Profile</p>
+             </NavLink>
              <button onClick={() => window.location.href = '/logout'} className="p-2.5 hover:bg-white/5 rounded-xl hover:text-rose-400 transition-colors">
                <LogOut size={18} />
              </button>

@@ -1,8 +1,8 @@
 import os
 
-# Absolute path to the IPTV root directory (app/core/config.py -> app/core -> app -> root)
-# We use 3 levels up to reach Ecosystem root where Storage folder lives
-basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+# Absolute path to the IPTV root directory (c:\Code\Ecosystem\IPTV)
+# We go up 2 levels from app/core/config.py to reach IPTV/
+basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 print(f" [DEBUG] Config basedir: {basedir}")
 instance_path = os.path.join(basedir, 'instance')
 
@@ -10,15 +10,18 @@ class Config:
     SECRET_KEY = 'dev-key-12345'
     
     # Centralized SQLite database for Ecosystem (Cross-platform path)
-    DB_PATH = os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTVManager.db'))
+    # We expect Storage to be NEXT to IPTV folder or inside it. 
+    # Let's assume it's next to IPTV (c:\Code\Ecosystem\Storage)
+    ECOSYSTEM_ROOT = os.path.abspath(os.path.join(basedir, '..'))
+    DB_PATH = os.path.abspath(os.path.join(ECOSYSTEM_ROOT, 'Storage', 'database', 'IPTVManager.db'))
     # Print DB_PATH to verify across processes
     print(f" [DEBUG] SQLALCHEMY_DATABASE_URI: sqlite:///{DB_PATH}")
     SQLALCHEMY_DATABASE_URI = f'sqlite:///{DB_PATH}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # Celery configuration
-    CELERY_BROKER_URL = 'sqla+sqlite:///' + os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTV_celery_broker.db'))
-    CELERY_RESULT_BACKEND = 'db+sqlite:///' + os.path.abspath(os.path.join(basedir, 'Storage', 'database', 'IPTV_celery_results.db'))
+    # Celery configuration (Unique filenames to avoid cross-app conflicts)
+    CELERY_BROKER_URL = 'sqla+sqlite:///' + os.path.abspath(os.path.join(ECOSYSTEM_ROOT, 'Storage', 'database', 'iptv_manager_unique_broker.db'))
+    CELERY_RESULT_BACKEND = 'db+sqlite:///' + os.path.abspath(os.path.join(ECOSYSTEM_ROOT, 'Storage', 'database', 'iptv_manager_unique_results.db'))
     # Print Celery Config to verify
     print(f" [DEBUG] CELERY_BROKER_URL: {CELERY_BROKER_URL}")
     

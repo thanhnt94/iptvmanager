@@ -617,7 +617,8 @@ export const Channels: React.FC = () => {
               options={[
                 { value: 'name', label: 'Alphabetical' },
                 { value: 'newest', label: 'Newest First' },
-                { value: 'oldest', label: 'Oldest First' }
+                { value: 'oldest', label: 'Oldest First' },
+                { value: 'last_checked', label: 'Recently Checked' }
               ]}
               minWidth="160px"
             />

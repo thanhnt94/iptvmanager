@@ -14,6 +14,7 @@ import { AdminPortal } from './pages/AdminPortal';
 import { MediaScanner } from './pages/MediaScanner';
 import { GroupManager } from './pages/GroupManager';
 import { PlaylistEditor } from './pages/PlaylistEditor';
+import { ProfilePage } from './pages/Profile';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -64,6 +65,7 @@ const App: React.FC = () => {
                   <Route path="/player" element={<Player user={user} />} />
                   <Route path="/import" element={<Import />} />
                   <Route path="/diagnostics" element={<Diagnostics />} />
+                  <Route path="/profile" element={<ProfilePage />} />
                   
                   <Route 
                     path="/scanner" 

@@ -2,6 +2,17 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
+class PollingFilter(logging.Filter):
+    def filter(self, record):
+        try:
+            # Silence frequent polling logs from Werkzeug
+            msg = record.getMessage()
+            if any(path in msg for path in ['/api/health/status', '/api/playlists', '/api/health/scanner-status']):
+                return False
+        except:
+            pass
+        return True
+
 def setup_logging(app):
     """Sets up unified logging for the IPTV Manager."""
     log_dir = 'logs'
@@ -18,21 +29,28 @@ def setup_logging(app):
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)
     
-    # Console Handler
+    # Console Handler (Sạch sẽ hơn, chỉ hiện thông báo quan trọng)
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.INFO)
     
     # IPTV Logger
     logger = logging.getLogger('iptv')
     logger.setLevel(logging.DEBUG)
+    logger.propagate = True
+    
+    # Refresh handlers
+    logger.handlers = []
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     
-    # Attach to Flask logger as well
-    app.logger.setLevel(logging.DEBUG)
-    app.logger.addHandler(file_handler)
-    app.logger.addHandler(console_handler)
+    if app:
+        app.logger.handlers = []
+        app.logger.addHandler(file_handler)
+        app.logger.addHandler(console_handler)
+        app.logger.setLevel(logging.DEBUG)
+
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
     
     logger.info("IPTV Logging system initialized.")
     return logger
