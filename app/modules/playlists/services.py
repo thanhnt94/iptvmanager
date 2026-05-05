@@ -257,36 +257,48 @@ class PlaylistService:
             query = query.order_by(*sort_logic)
             
             channels = query.all()
-            for ch in channels:
-                ch_name = ch.name
-                if ch.status == 'unknown' or not ch.status:
-                    ch_name = f"[Unknown] {ch.name}"
-                elif not hide_die and ch.status == 'die':
-                    ch_name = f"[Unavailable] {ch.name}"
+            for channel_obj in channels:
+                if not channel_obj: continue
+                ch_status = getattr(channel_obj, 'status', 'unknown') or 'unknown'
+                ch_name = channel_obj.name
+                if ch_status == 'unknown':
+                    ch_name = f"[Unknown] {channel_obj.name}"
+                elif not hide_die and ch_status == 'die':
+                    ch_name = f"[Unavailable] {channel_obj.name}"
                 
-                extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch_name}'
+                extinf = f'#EXTINF:-1 tvg-id="{channel_obj.epg_id or ""}" tvg-logo="{channel_obj.logo_url or ""}" group-title="{channel_obj.group_name or ""}",{ch_name}'
                 m3u_lines.append(extinf)
-                m3u_lines.append(get_wrapped_url(ch, mode))
+                m3u_lines.append(get_wrapped_url(channel_obj, mode))
         else:
             entries = profile.entries
             if not hide_die:
                 priority = {'live': 0, 'unknown': 1, 'die': 2}
-                entries = sorted(entries, key=lambda e: (priority.get(e.channel.status or 'unknown', 1), e.channel.name))
+                entries = sorted(entries, key=lambda e: (priority.get(getattr(e.channel, 'status', 'die') or 'die', 2), e.channel.name if e.channel else ''))
                 
             for entry in entries:
-                ch = entry.channel
-                if hide_die and ch.status == 'die': continue
+                try:
+                    channel_obj = entry.channel
+                    if not channel_obj:
+                        current_app.logger.warning(f"M3U: Skipping entry {entry.id} - missing channel")
+                        continue
                     
-                ch_name = ch.name
-                if ch.status == 'unknown' or not ch.status:
-                    ch_name = f"[Unknown] {ch.name}"
-                elif not hide_die and ch.status == 'die':
-                    ch_name = f"[Unavailable] {ch.name}"
-                    
-                group_name = entry.group.name if entry.group else ch.group_name or ""
-                extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch_name}'
-                m3u_lines.append(extinf)
-                m3u_lines.append(get_wrapped_url(ch, mode))
+                    ch_status = getattr(channel_obj, 'status', 'unknown') or 'unknown'
+                    if hide_die and ch_status == 'die': 
+                        continue
+                        
+                    ch_name = channel_obj.name
+                    if ch_status == 'unknown':
+                        ch_name = f"[Unknown] {channel_obj.name}"
+                    elif not hide_die and ch_status == 'die':
+                        ch_name = f"[Unavailable] {channel_obj.name}"
+                        
+                    group_name = entry.group.name if entry.group else channel_obj.group_name or ""
+                    extinf = f'#EXTINF:-1 tvg-id="{channel_obj.epg_id or ""}" tvg-logo="{channel_obj.logo_url or ""}" group-title="{group_name}",{ch_name}'
+                    m3u_lines.append(extinf)
+                    m3u_lines.append(get_wrapped_url(channel_obj, mode))
+                except Exception as e:
+                    current_app.logger.error(f"M3U: Crash on entry {getattr(entry, 'id', '?')}: {e}")
+                    continue
             
         return "\r\n".join(m3u_lines)
 
@@ -332,15 +344,16 @@ class PlaylistService:
         else:
             # Playlist entries (skipping dead ones)
             for entry in profile.entries:
-                ch = entry.channel
-                if ch.status == 'die':
+                channel_obj = entry.channel
+                if not channel_obj: continue
+                if getattr(channel_obj, 'status', 'die') == 'die':
                     continue
-                if ch.epg_id:
-                    epg_ids.add(ch.epg_id)
-                    c_node = ET.SubElement(root, 'channel', id=ch.epg_id)
-                    ET.SubElement(c_node, 'display-name').text = ch.name
-                    if ch.logo_url:
-                        ET.SubElement(c_node, 'icon', src=ch.logo_url)
+                if channel_obj.epg_id:
+                    epg_ids.add(channel_obj.epg_id)
+                    c_node = ET.SubElement(root, 'channel', id=channel_obj.epg_id)
+                    ET.SubElement(c_node, 'display-name').text = channel_obj.name
+                    if channel_obj.logo_url:
+                        ET.SubElement(c_node, 'icon', src=channel_obj.logo_url)
 
         # 2. Add <programme> entries (last 24h to next 7 days)
         if epg_ids:

@@ -150,6 +150,24 @@ export const Playlists: React.FC = () => {
     };
   }, []);
 
+  const handleHealthScan = async (playlist: Playlist) => {
+    try {
+      const res = await fetch('/api/health/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlist_id: playlist.id, mode: 'playlist' })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        fetchScannerStatus();
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      alert("Failed to start health scan");
+    }
+  };
+
   const handleSync = async (playlist: Playlist) => {
     try {
       const res = await fetch(`/api/playlists/${playlist.id}/sync`, { method: 'POST' });
@@ -340,6 +358,16 @@ export const Playlists: React.FC = () => {
                         </p>
                       </div>
                   </div>
+                  {!item.is_dynamic && (
+                      <button 
+                        onClick={() => handleHealthScan(item)}
+                        disabled={isThisPlaylistScanning}
+                        className={`p-2.5 rounded-xl border transition-all ${isThisPlaylistScanning ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-slate-800 border-white/5 hover:bg-indigo-500/10 hover:text-indigo-400 hover:border-indigo-500/20'}`}
+                        title="Run Health Scan (Check Live/Die)"
+                      >
+                        <Activity size={16} className={isThisPlaylistScanning ? 'animate-pulse' : ''} />
+                      </button>
+                  )}
                   {item.is_dynamic && (
                       <button 
                         onClick={() => handleSync(item)}
@@ -457,12 +485,20 @@ export const Playlists: React.FC = () => {
                                 className="absolute bottom-full right-0 mb-3 w-48 bg-slate-900 border border-white/10 rounded-2xl p-2 shadow-2xl z-[100]"
                               >
                                   <p className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-slate-500 border-b border-white/5 mb-1">Playlist Tools</p>
-                                  <button 
-                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 text-slate-300 transition-colors"
-                                  >
-                                    <ExternalLink size={14} />
-                                    <span className="text-[10px] font-black uppercase tracking-tight">Open Player</span>
-                                  </button>
+                                    <button 
+                                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 text-slate-300 transition-colors"
+                                      onClick={() => navigate(`/player?playlist=${item.id}`)}
+                                    >
+                                      <ExternalLink size={14} />
+                                      <span className="text-[10px] font-black uppercase tracking-tight">Open Player</span>
+                                    </button>
+                                    <button 
+                                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-indigo-500/10 text-indigo-400 transition-colors"
+                                      onClick={() => handleHealthScan(item)}
+                                    >
+                                      <Activity size={14} />
+                                      <span className="text-[10px] font-black uppercase tracking-tight">Run Health Scan</span>
+                                    </button>
                                   {!item.is_system && (
                                     <button 
                                       onClick={() => handleDelete(item.id)}
