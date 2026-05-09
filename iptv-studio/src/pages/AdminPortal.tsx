@@ -43,12 +43,14 @@ export const AdminPortal: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [tasksInfo, setTasksInfo] = useState<any>(null);
+  const [taskBackend, setTaskBackend] = useState<{active_backend: string, celery_available: boolean, configured_preference: string, thread_tasks: any[]} | null>(null);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'free' });
 
   useEffect(() => {
     fetchInitialData();
+    fetchTaskBackend();
     
     // Auto-poll tasks if on tasks tab
     let interval: any;
@@ -82,9 +84,36 @@ export const AdminPortal: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setTasksInfo(data);
+        if (data.dispatcher) setTaskBackend(data.dispatcher);
       }
     } catch (err) {
       console.error("Task fetch error:", err);
+    }
+  };
+
+  const fetchTaskBackend = async () => {
+    try {
+      const res = await fetch('/api/health/admin/task-backend');
+      if (res.ok) {
+        setTaskBackend(await res.json());
+      }
+    } catch (err) {
+      console.error('Failed to load task backend status:', err);
+    }
+  };
+
+  const handleSetBackend = async (backend: string) => {
+    try {
+      const res = await fetch('/api/health/admin/task-backend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backend })
+      });
+      if (!res.ok) throw new Error('API Error');
+      showMsg('success', `Task backend set to: ${backend.toUpperCase()}`);
+      fetchTaskBackend();
+    } catch (err) {
+      showMsg('error', 'Failed to update task backend');
     }
   };
 
@@ -358,155 +387,204 @@ export const AdminPortal: React.FC = () => {
                 </div>
               )}
 
-               {activeTab === 'system' && (
-                 <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">System Configuration</h2>
-                        <p className="text-sm text-slate-400">Advanced tuning for diagnostics, scanning, and proxy performance</p>
-                      </div>
-                    </div>
+                {activeTab === 'system' && (
+                  <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+                     <div className="flex items-center justify-between">
+                       <div>
+                         <h2 className="text-2xl font-black text-white tracking-tight">System Configuration</h2>
+                         <p className="text-sm text-slate-400">Advanced tuning for diagnostics, scanning, and proxy performance</p>
+                       </div>
+                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      {/* Health & Diagnostics Group */}
-                      <div className="space-y-6">
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 ml-1">Health & Diagnostics</h3>
-                        <div className="glass-light p-6 rounded-[2rem] border border-white/5 space-y-6">
-                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                            <div className="flex items-center gap-3">
-                              <Activity size={18} className="text-indigo-400" />
-                              <div>
-                                <p className="text-xs font-bold text-white">Diagnostics Master Switch</p>
-                                <p className="text-[9px] text-slate-500">Enable/Disable all health services</p>
-                              </div>
-                            </div>
-                            <button onClick={() => handleToggle('ENABLE_HEALTH_SYSTEM', getSettingValue('ENABLE_HEALTH_SYSTEM') as boolean)} className={`transition-all ${getSettingValue('ENABLE_HEALTH_SYSTEM') ? 'text-indigo-500' : 'text-slate-700'}`}>
-                              {getSettingValue('ENABLE_HEALTH_SYSTEM') ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                            </button>
-                          </div>
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                       {/* Health & Diagnostics Group */}
+                       <div className="space-y-6">
+                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 ml-1">Health & Diagnostics</h3>
+                         <div className="glass-light p-6 rounded-[2rem] border border-white/5 space-y-6">
+                           <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                             <div className="flex items-center gap-3">
+                               <Activity size={18} className="text-indigo-400" />
+                               <div>
+                                 <p className="text-xs font-bold text-white">Diagnostics Master Switch</p>
+                                 <p className="text-[9px] text-slate-500">Enable/Disable all health services</p>
+                               </div>
+                             </div>
+                             <button onClick={() => handleToggle('ENABLE_HEALTH_SYSTEM', getSettingValue('ENABLE_HEALTH_SYSTEM') as boolean)} className={`transition-all ${getSettingValue('ENABLE_HEALTH_SYSTEM') ? 'text-indigo-500' : 'text-slate-700'}`}>
+                               {getSettingValue('ENABLE_HEALTH_SYSTEM') ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                             </button>
+                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <ShieldCheck size={14} className="text-emerald-400" />
-                                <span className="text-[10px] font-bold text-slate-300">Passive Check</span>
-                              </div>
-                              <button onClick={() => handleToggle('ENABLE_PASSIVE_CHECK', getSettingValue('ENABLE_PASSIVE_CHECK') as boolean)} className={`transition-all ${getSettingValue('ENABLE_PASSIVE_CHECK') ? 'text-emerald-500' : 'text-slate-700'}`}>
-                                {getSettingValue('ENABLE_PASSIVE_CHECK') ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                              </button>
-                            </div>
-                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Code size={14} className="text-blue-400" />
-                                <span className="text-[10px] font-bold text-slate-300">FFprobe Details</span>
-                              </div>
-                              <button onClick={() => handleToggle('ENABLE_FFPROBE_DETAIL', getSettingValue('ENABLE_FFPROBE_DETAIL') as boolean)} className={`transition-all ${getSettingValue('ENABLE_FFPROBE_DETAIL') ? 'text-blue-500' : 'text-slate-700'}`}>
-                                {getSettingValue('ENABLE_FFPROBE_DETAIL') ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                              </button>
-                            </div>
-                          </div>
+                           <div className="grid grid-cols-2 gap-4">
+                             <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
+                               <div className="flex items-center gap-2">
+                                 <ShieldCheck size={14} className="text-emerald-400" />
+                                 <span className="text-[10px] font-bold text-slate-300">Passive Check</span>
+                               </div>
+                               <button onClick={() => handleToggle('ENABLE_PASSIVE_CHECK', getSettingValue('ENABLE_PASSIVE_CHECK') as boolean)} className={`transition-all ${getSettingValue('ENABLE_PASSIVE_CHECK') ? 'text-emerald-500' : 'text-slate-700'}`}>
+                                 {getSettingValue('ENABLE_PASSIVE_CHECK') ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                               </button>
+                             </div>
+                             <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
+                               <div className="flex items-center gap-2">
+                                 <Code size={14} className="text-blue-400" />
+                                 <span className="text-[10px] font-bold text-slate-300">FFprobe Details</span>
+                               </div>
+                               <button onClick={() => handleToggle('ENABLE_FFPROBE_DETAIL', getSettingValue('ENABLE_FFPROBE_DETAIL') as boolean)} className={`transition-all ${getSettingValue('ENABLE_FFPROBE_DETAIL') ? 'text-blue-500' : 'text-slate-700'}`}>
+                                 {getSettingValue('ENABLE_FFPROBE_DETAIL') ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                               </button>
+                             </div>
+                           </div>
 
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Heartbeat TTL (Minutes)</label>
-                            <input 
-                              type="number" 
-                              defaultValue={getSettingValue('HEARTBEAT_TTL_MINUTES') as number || 5}
-                              onBlur={(e) => handleSaveSetting('HEARTBEAT_TTL_MINUTES', e.target.value)}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" 
-                            />
-                          </div>
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Heartbeat TTL (Minutes)</label>
+                             <input 
+                               type="number" 
+                               defaultValue={getSettingValue('HEARTBEAT_TTL_MINUTES') as number || 5}
+                               onBlur={(e) => handleSaveSetting('HEARTBEAT_TTL_MINUTES', e.target.value)}
+                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50" 
+                             />
+                           </div>
+                         </div>
+                       </div>
+
+                       {/* Automation & Scheduling Group */}
+                       <div className="space-y-6">
+                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500 ml-1">Automation & Scheduling</h3>
+                         <div className="glass-light p-6 rounded-[2rem] border border-white/5 space-y-6">
+                           <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                             <div className="flex items-center gap-3">
+                               <RefreshCw size={18} className="text-blue-400" />
+                               <div>
+                                 <p className="text-xs font-bold text-white">Automated Background Scan</p>
+                                 <p className="text-[9px] text-slate-500">Periodic cluster health verification</p>
+                               </div>
+                             </div>
+                             <button onClick={() => handleToggle('ENABLE_AUTO_SCAN', getSettingValue('ENABLE_AUTO_SCAN') as boolean)} className={`transition-all ${getSettingValue('ENABLE_AUTO_SCAN') ? 'text-blue-500' : 'text-slate-700'}`}>
+                               {getSettingValue('ENABLE_AUTO_SCAN') ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                             </button>
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-4">
+                             <div className="space-y-2">
+                               <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Interval (Min)</label>
+                               <input 
+                                 type="number" 
+                                 defaultValue={getSettingValue('AUTO_SCAN_INTERVAL') as number || 60}
+                                 onBlur={(e) => handleSaveSetting('AUTO_SCAN_INTERVAL', e.target.value)}
+                                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50" 
+                               />
+                             </div>
+                             <div className="space-y-2">
+                               <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Scan Delay (Sec)</label>
+                               <input 
+                                 type="number" 
+                                 defaultValue={getSettingValue('SCAN_DELAY_SECONDS') as number || 2}
+                                 onBlur={(e) => handleSaveSetting('SCAN_DELAY_SECONDS', e.target.value)}
+                                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50" 
+                               />
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+
+                       {/* Proxy Performance Group */}
+                       <div className="space-y-6 lg:col-span-2">
+                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 ml-1">Proxy & Performance Tuning</h3>
+                         <div className="glass-light p-8 rounded-[2rem] border border-white/5">
+                           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                             <div className="space-y-2">
+                               <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">TS Buffer (KB)</label>
+                               <input 
+                                 type="number" 
+                                 defaultValue={getSettingValue('TS_BUFFER_SIZE') as number || 1024}
+                                 onBlur={(e) => handleSaveSetting('TS_BUFFER_SIZE', e.target.value)}
+                                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50" 
+                               />
+                             </div>
+                             <div className="space-y-2">
+                               <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">HLS Cache (Sec)</label>
+                               <input 
+                                 type="number" 
+                                 defaultValue={getSettingValue('HLS_CACHE_TTL') as number || 10}
+                                 onBlur={(e) => handleSaveSetting('HLS_CACHE_TTL', e.target.value)}
+                                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50" 
+                               />
+                             </div>
+                             <div className="space-y-2">
+                               <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Max Segments</label>
+                               <input 
+                                 type="number" 
+                                 defaultValue={getSettingValue('HLS_MAX_SEGMENTS') as number || 5}
+                                 onBlur={(e) => handleSaveSetting('HLS_MAX_SEGMENTS', e.target.value)}
+                                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50" 
+                               />
+                             </div>
+                           </div>
+
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Global User-Agent Override</label>
+                             <input 
+                               type="text" 
+                               defaultValue={getSettingValue('CUSTOM_USER_AGENT') as string || ''}
+                               onBlur={(e) => handleSaveSetting('CUSTOM_USER_AGENT', e.target.value)}
+                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 font-mono" 
+                               placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."
+                             />
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Task Engine Group */}
+                     <div className="space-y-6">
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 ml-1">Task Engine Backend</h3>
+                        <div className="glass-light p-8 rounded-[2rem] border border-white/5 space-y-8">
+                           <div className="flex flex-col md:flex-row gap-4">
+                              {[
+                                { id: 'auto', label: 'Auto (Detect)', color: 'amber', desc: 'Auto-fallback if Celery is offline' },
+                                { id: 'celery', label: 'Force Celery', color: 'indigo', desc: 'Requires separate worker process' },
+                                { id: 'thread', label: 'Force Thread', color: 'emerald', desc: 'Zero RAM overhead, local threads' }
+                              ].map(b => (
+                                <button
+                                  key={b.id}
+                                  onClick={() => handleSetBackend(b.id)}
+                                  className={`flex-1 p-5 rounded-2xl border transition-all text-left ${
+                                    (taskBackend?.configured_preference || 'auto') === b.id
+                                      ? `bg-${b.color}-500/10 border-${b.color}-500/30 shadow-lg shadow-${b.color}-500/5`
+                                      : 'bg-white/5 border-white/5 hover:bg-white/10'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                     <div className={`w-1.5 h-1.5 rounded-full ${(taskBackend?.configured_preference || 'auto') === b.id ? `bg-${b.color}-400` : 'bg-slate-600'}`} />
+                                     <span className={`text-[10px] font-black uppercase tracking-widest ${(taskBackend?.configured_preference || 'auto') === b.id ? 'text-white' : 'text-slate-500'}`}>{b.label}</span>
+                                  </div>
+                                  <p className="text-[9px] text-slate-500 font-bold leading-relaxed">{b.desc}</p>
+                                </button>
+                              ))}
+                           </div>
+                           
+                           {taskBackend && (
+                              <div className="flex items-center gap-6 p-4 bg-white/5 rounded-2xl border border-white/5">
+                                 <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${taskBackend.active_backend === 'celery' ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`} />
+                                    <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Active: <span className="text-white">{taskBackend.active_backend.toUpperCase()}</span></span>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${taskBackend.celery_available ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                    <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Celery: <span className={taskBackend.celery_available ? 'text-emerald-400' : 'text-rose-400'}>{taskBackend.celery_available ? 'Online' : 'Offline'}</span></span>
+                                 </div>
+                                 {taskBackend.thread_tasks.length > 0 && (
+                                    <div className="flex items-center gap-2 ml-auto">
+                                       <RefreshCw size={12} className="text-amber-400 animate-spin" />
+                                       <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest">{taskBackend.thread_tasks.length} Threads Active</span>
+                                    </div>
+                                 )}
+                              </div>
+                           )}
                         </div>
-                      </div>
-
-                      {/* Automation & Scheduling Group */}
-                      <div className="space-y-6">
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500 ml-1">Automation & Scheduling</h3>
-                        <div className="glass-light p-6 rounded-[2rem] border border-white/5 space-y-6">
-                          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                            <div className="flex items-center gap-3">
-                              <RefreshCw size={18} className="text-blue-400" />
-                              <div>
-                                <p className="text-xs font-bold text-white">Automated Background Scan</p>
-                                <p className="text-[9px] text-slate-500">Periodic cluster health verification</p>
-                              </div>
-                            </div>
-                            <button onClick={() => handleToggle('ENABLE_AUTO_SCAN', getSettingValue('ENABLE_AUTO_SCAN') as boolean)} className={`transition-all ${getSettingValue('ENABLE_AUTO_SCAN') ? 'text-blue-500' : 'text-slate-700'}`}>
-                              {getSettingValue('ENABLE_AUTO_SCAN') ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Interval (Min)</label>
-                              <input 
-                                type="number" 
-                                defaultValue={getSettingValue('AUTO_SCAN_INTERVAL') as number || 60}
-                                onBlur={(e) => handleSaveSetting('AUTO_SCAN_INTERVAL', e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50" 
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Scan Delay (Sec)</label>
-                              <input 
-                                type="number" 
-                                defaultValue={getSettingValue('SCAN_DELAY_SECONDS') as number || 2}
-                                onBlur={(e) => handleSaveSetting('SCAN_DELAY_SECONDS', e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50" 
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Proxy Performance Group */}
-                      <div className="space-y-6 lg:col-span-2">
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 ml-1">Proxy & Performance Tuning</h3>
-                        <div className="glass-light p-8 rounded-[2rem] border border-white/5">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                            <div className="space-y-2">
-                              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">TS Buffer (KB)</label>
-                              <input 
-                                type="number" 
-                                defaultValue={getSettingValue('TS_BUFFER_SIZE') as number || 1024}
-                                onBlur={(e) => handleSaveSetting('TS_BUFFER_SIZE', e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50" 
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">HLS Cache (Sec)</label>
-                              <input 
-                                type="number" 
-                                defaultValue={getSettingValue('HLS_CACHE_TTL') as number || 10}
-                                onBlur={(e) => handleSaveSetting('HLS_CACHE_TTL', e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50" 
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Max Segments</label>
-                              <input 
-                                type="number" 
-                                defaultValue={getSettingValue('HLS_MAX_SEGMENTS') as number || 5}
-                                onBlur={(e) => handleSaveSetting('HLS_MAX_SEGMENTS', e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50" 
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Global User-Agent Override</label>
-                            <input 
-                              type="text" 
-                              defaultValue={getSettingValue('CUSTOM_USER_AGENT') as string || ''}
-                              onBlur={(e) => handleSaveSetting('CUSTOM_USER_AGENT', e.target.value)}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 font-mono" 
-                              placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                 </div>
-               )}
+                     </div>
+                  </div>
+                )}
 
               {activeTab === 'security' && (
                 <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
@@ -615,8 +693,17 @@ export const AdminPortal: React.FC = () => {
                             <Server size={20} />
                          </div>
                          <div>
-                            <h3 className="font-black text-white text-lg">Celery Fleet Manager</h3>
-                            <p className="text-slate-500 text-xs">Monitor and control background workers.</p>
+                             <h3 className="font-black text-white text-lg">Celery Fleet Manager</h3>
+                             <div className="flex items-center gap-2">
+                                <p className="text-slate-500 text-xs">Monitor and control background workers.</p>
+                                {taskBackend && (
+                                   <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
+                                      taskBackend.active_backend === 'celery' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/20 text-emerald-400'
+                                   }`}>
+                                      Engine: {taskBackend.active_backend}
+                                   </div>
+                                )}
+                             </div>
                          </div>
                       </div>
                       <div className="flex items-center gap-3">

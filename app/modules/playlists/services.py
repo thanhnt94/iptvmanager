@@ -518,9 +518,10 @@ class PlaylistService:
         if not profile or not profile.is_dynamic:
             return False, "Not a dynamic playlist"
         
-        # Trigger Celery task
+        # Trigger background task via dispatcher (Celery or Thread)
         from app.modules.channels.tasks import sync_dynamic_playlist_task
-        sync_dynamic_playlist_task.delay(playlist_id)
+        from app.core.task_dispatcher import TaskDispatcher
+        TaskDispatcher.dispatch(sync_dynamic_playlist_task, playlist_id)
         
         profile.is_scanning = True
         profile.current_scanning_name = "Initiating sync..."

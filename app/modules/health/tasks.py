@@ -52,7 +52,8 @@ def auto_sync_epg_task():
     with scheduler.app.app_context():
         logger.info(" [AUTO-EPG] Triggering scheduled EPG sync for all sources.")
         from app.modules.channels.tasks import sync_epg_all_task
-        sync_epg_all_task.delay()
+        from app.core.task_dispatcher import TaskDispatcher
+        TaskDispatcher.dispatch(sync_epg_all_task)
 
 @scheduler.task('interval', id='auto_scan_playlists', seconds=10)
 def auto_scan_playlists_task():

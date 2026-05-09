@@ -842,7 +842,8 @@ def scan_web():
         
     logger.info(f"User {current_user.username} initiating {'DEEP ' if deep else ''}web scan for: {url}")
     from app.modules.channels.tasks import single_media_scan_task
-    task = single_media_scan_task.delay(url, deep_scan=deep)
+    from app.core.task_dispatcher import TaskDispatcher
+    task = TaskDispatcher.dispatch(single_media_scan_task, url, deep_scan=deep)
     return jsonify({'task_id': task.id})
 
 @channels_bp.route('/bulk-scan', methods=['POST'])
@@ -859,14 +860,23 @@ def start_bulk_scan():
         return jsonify({'error': 'URL is required'}), 400
         
     from app.modules.channels.tasks import bulk_media_scan_task
-    task = bulk_media_scan_task.delay(url, deep_scan=deep)
+    from app.core.task_dispatcher import TaskDispatcher
+    task = TaskDispatcher.dispatch(bulk_media_scan_task, url, deep_scan=deep)
     return jsonify({'task_id': task.id})
 
 @channels_bp.route('/bulk-scan/status/<task_id>', methods=['GET'])
 @login_required
 def get_bulk_scan_status(task_id):
-    celery = current_app.celery_app
-    task = celery.AsyncResult(task_id)
+    from app.core.task_dispatcher import TaskDispatcher
+    task = TaskDispatcher.get_task_result(task_id)
+    
+    if task is None:
+        return jsonify({
+            'state': 'UNKNOWN',
+            'current': 0,
+            'total': 0,
+            'status': 'Task not found'
+        })
     
     if task.state == 'PENDING':
         response = {

@@ -43,6 +43,10 @@ def _init_default_settings():
     if SettingService.get('HLS_MAX_SEGMENTS') is None:
         SettingService.set('HLS_MAX_SEGMENTS', '50', type='int', description='Max HLS segments per channel in RAM.')
 
+    # Task Engine Settings
+    if SettingService.get('TASK_BACKEND') is None:
+        SettingService.set('TASK_BACKEND', 'auto', type='string', description='Task execution backend: auto (recommended), celery, or thread.')
+
     # End of initialization logic
 
 @settings_bp.route('/admin/save', methods=['POST'])

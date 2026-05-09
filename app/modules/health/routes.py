@@ -68,22 +68,43 @@ def batch_check():
 @health_bp.route('/admin/tasks', methods=['GET'])
 @login_required
 def admin_tasks():
-    """Admin-only: Returns detailed Celery and Scanner status."""
+    """Admin-only: Returns detailed task backend and scanner status."""
     from flask_login import current_user
     if current_user.role != 'admin':
         return jsonify({"status": "error", "message": "Admin only"}), 403
-        
-    celery = current_app.celery_app
-    # Note: inspect() might have limited info on SQLite broker but good for active tasks
-    i = celery.control.inspect()
-    active = i.active() or {}
-    scheduled = i.scheduled() or {}
-    reserved = i.reserved() or {}
+    
+    from app.core.task_dispatcher import TaskDispatcher
+    dispatcher_info = TaskDispatcher.get_status_info()
+    
+    active = {}
+    scheduled = {}
+    reserved = {}
+    
+    # If Celery is available, get its info
+    if dispatcher_info['celery_available']:
+        try:
+            celery = current_app.celery_app
+            i = celery.control.inspect()
+            active = i.active() or {}
+            scheduled = i.scheduled() or {}
+            reserved = i.reserved() or {}
+        except Exception:
+            pass
+    
+    # Inject thread tasks as active tasks if using thread backend
+    thread_tasks = dispatcher_info.get('thread_tasks', [])
+    if thread_tasks:
+        active['ThreadWorker'] = [{
+            'id': t['id'],
+            'name': t['name'],
+            'time_start': t.get('started_at'),
+            'args': [],
+            'kwargs': {}
+        } for t in thread_tasks]
     
     scanner_status = HealthCheckService.get_status()
     
-    # FIX for SQLite: If scanner is running but Celery reports 0 active tasks,
-    # inject a synthetic task so the UI shows what's happening.
+    # FIX: If scanner is running but no active tasks shown, inject synthetic task
     if scanner_status and scanner_status.get('is_running') and not any(active.values()):
         active['InternalWorker'] = [{
             'id': 'scanner-process',
@@ -98,7 +119,8 @@ def admin_tasks():
         "active": active,
         "scheduled": scheduled,
         "reserved": reserved,
-        "scanner": scanner_status or {}
+        "scanner": scanner_status or {},
+        "dispatcher": dispatcher_info
     })
 
 @health_bp.route('/admin/tasks/purge', methods=['POST'])
@@ -108,9 +130,15 @@ def purge_tasks():
     from flask_login import current_user
     if current_user.role != 'admin':
         return jsonify({"status": "error", "message": "Admin only"}), 403
-        
-    celery = current_app.celery_app
-    count = celery.control.purge()
+    
+    count = 0
+    from app.core.task_dispatcher import TaskDispatcher
+    if TaskDispatcher._is_celery_available():
+        try:
+            celery = current_app.celery_app
+            count = celery.control.purge()
+        except Exception:
+            pass
     
     # Also signal any running scan to stop
     from app.modules.health.services import HealthCheckService
@@ -138,3 +166,37 @@ def reset_scanner():
     db.session.commit()
     
     return jsonify({"status": "ok", "message": "Scanner engine reset successfully"})
+
+@health_bp.route('/admin/task-backend', methods=['GET'])
+@login_required
+def get_task_backend_status():
+    """Returns current task backend status for admin panel."""
+    from flask_login import current_user
+    if current_user.role != 'admin':
+        return jsonify({"status": "error", "message": "Admin only"}), 403
+    
+    from app.core.task_dispatcher import TaskDispatcher
+    return jsonify(TaskDispatcher.get_status_info())
+
+@health_bp.route('/admin/task-backend', methods=['POST'])
+@login_required
+def set_task_backend():
+    """Sets the task backend preference."""
+    from flask_login import current_user
+    if current_user.role != 'admin':
+        return jsonify({"status": "error", "message": "Admin only"}), 403
+    
+    data = request.json or {}
+    backend = data.get('backend', 'auto')
+    
+    if backend not in ('auto', 'celery', 'thread'):
+        return jsonify({"status": "error", "message": "Invalid backend. Use: auto, celery, thread"}), 400
+    
+    from app.modules.settings.services import SettingService
+    SettingService.set('TASK_BACKEND', backend, type='string', description='Task execution backend: auto, celery, or thread')
+    
+    # Invalidate dispatcher cache to force re-detection
+    from app.core.task_dispatcher import TaskDispatcher
+    TaskDispatcher.invalidate_cache()
+    
+    return jsonify({"status": "ok", "backend": backend})

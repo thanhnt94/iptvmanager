@@ -12,7 +12,9 @@ import {
   Database,
   Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Radio
 } from 'lucide-react';
 
 interface SystemSetting {
@@ -26,6 +28,7 @@ export const SettingsPage: React.FC = () => {
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [taskBackend, setTaskBackend] = useState<{active_backend: string, celery_available: boolean, configured_preference: string, thread_tasks: any[]} | null>(null);
 
   const fetchSettings = async () => {
     try {
@@ -41,7 +44,35 @@ export const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     fetchSettings();
+    fetchTaskBackend();
   }, []);
+
+  const fetchTaskBackend = async () => {
+    try {
+      const res = await fetch('/api/health/admin/task-backend');
+      if (res.ok) {
+        const data = await res.json();
+        setTaskBackend(data);
+      }
+    } catch (err) {
+      console.error('Failed to load task backend status:', err);
+    }
+  };
+
+  const handleSetBackend = async (backend: string) => {
+    try {
+      const res = await fetch('/api/health/admin/task-backend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backend })
+      });
+      if (!res.ok) throw new Error('API Error');
+      showMsg('success', `Task backend set to: ${backend.toUpperCase()}`);
+      fetchTaskBackend();
+    } catch (err) {
+      showMsg('error', 'Failed to update task backend');
+    }
+  };
 
   const handleToggle = async (key: string, currentValue: boolean) => {
     const newValue = !currentValue;
@@ -236,6 +267,117 @@ export const SettingsPage: React.FC = () => {
                     </div>
                 </div>
              </div>
+          </section>
+
+          {/* Task Engine Section */}
+          <section className="glass-card rounded-[3rem] p-10 relative overflow-hidden border border-white/5 shadow-2xl">
+             <div className="absolute top-0 left-0 w-96 h-96 bg-amber-500/5 blur-[120px] -translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+             
+             <div className="flex items-center gap-4 mb-10">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-400 border border-amber-500/20 shadow-lg shadow-amber-500/10">
+                   <Zap size={24} />
+                </div>
+                <div>
+                   <h3 className="text-lg font-black text-white uppercase italic tracking-tight">Task Engine</h3>
+                   <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-1">Background task execution backend — optimize for your VPS resources</p>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Auto */}
+                <button
+                  onClick={() => handleSetBackend('auto')}
+                  className={`group relative p-6 rounded-[2rem] border transition-all text-left ${
+                    (taskBackend?.configured_preference || 'auto') === 'auto'
+                      ? 'bg-amber-500/10 border-amber-500/30 shadow-lg shadow-amber-500/5'
+                      : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <Radio size={18} className={`${
+                      (taskBackend?.configured_preference || 'auto') === 'auto' ? 'text-amber-400' : 'text-slate-600'
+                    }`} />
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest">Auto</h4>
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black uppercase tracking-widest">Recommended</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-black uppercase opacity-60">
+                    Auto-detects Celery worker availability. Falls back to lightweight threading if Celery is offline.
+                  </p>
+                </button>
+
+                {/* Celery */}
+                <button
+                  onClick={() => handleSetBackend('celery')}
+                  className={`group relative p-6 rounded-[2rem] border transition-all text-left ${
+                    taskBackend?.configured_preference === 'celery'
+                      ? 'bg-indigo-500/10 border-indigo-500/30 shadow-lg shadow-indigo-500/5'
+                      : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <Radio size={18} className={`${
+                      taskBackend?.configured_preference === 'celery' ? 'text-indigo-400' : 'text-slate-600'
+                    }`} />
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest">Celery</h4>
+                    <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 text-[8px] font-black uppercase tracking-widest">~100MB RAM</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-black uppercase opacity-60">
+                    Force Celery worker. Requires separate process. Best for dedicated servers with ample resources.
+                  </p>
+                </button>
+
+                {/* Threading */}
+                <button
+                  onClick={() => handleSetBackend('thread')}
+                  className={`group relative p-6 rounded-[2rem] border transition-all text-left ${
+                    taskBackend?.configured_preference === 'thread'
+                      ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
+                      : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <Radio size={18} className={`${
+                      taskBackend?.configured_preference === 'thread' ? 'text-emerald-400' : 'text-slate-600'
+                    }`} />
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest">Threading</h4>
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black uppercase tracking-widest">~0MB RAM</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-black uppercase opacity-60">
+                    Lightweight threads. No external dependencies. Perfect for low-resource VPS deployments.
+                  </p>
+                </button>
+             </div>
+
+             {/* Live Status Bar */}
+             {taskBackend && (
+               <div className="mt-8 p-5 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8">
+                 <div className="flex items-center gap-3">
+                   <div className={`w-2.5 h-2.5 rounded-full ${
+                     taskBackend.active_backend === 'celery'
+                       ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.6)]'
+                       : 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]'
+                   }`} />
+                   <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">
+                     Active: <span className="text-white">{taskBackend.active_backend.toUpperCase()}</span>
+                   </span>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <div className={`w-2 h-2 rounded-full ${
+                     taskBackend.celery_available
+                       ? 'bg-emerald-500'
+                       : 'bg-rose-500'
+                   }`} />
+                   <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                     Celery Worker: {taskBackend.celery_available ? 'Online' : 'Offline'}
+                   </span>
+                 </div>
+                 {taskBackend.thread_tasks.length > 0 && (
+                   <span className="text-[10px] font-black text-amber-400/60 uppercase tracking-widest">
+                     {taskBackend.thread_tasks.length} thread task(s) running
+                   </span>
+                 )}
+               </div>
+             )}
           </section>
 
           <section className="grid grid-cols-1 md:grid-cols-3 gap-8">

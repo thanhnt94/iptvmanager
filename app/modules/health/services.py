@@ -224,7 +224,8 @@ class HealthCheckService:
         db.session.commit()
 
         from app.modules.health.tasks import background_scan_task
-        background_scan_task.delay(mode=mode, days=days, playlist_id=playlist_id, group=group, delay=delay)
+        from app.core.task_dispatcher import TaskDispatcher
+        TaskDispatcher.dispatch(background_scan_task, mode=mode, days=days, playlist_id=playlist_id, group=group, delay=delay)
         return 'started'
 
     @staticmethod
@@ -349,8 +350,9 @@ class HealthCheckService:
 
         logger.info(f"Health: Triggering passive check for {ch_name} (Background Task, Timeout: 5s, Force: False)")
         from app.modules.health.tasks import check_channel_task
+        from app.core.task_dispatcher import TaskDispatcher
         # Set force=False to respect TTL during playback
-        check_channel_task.delay(channel_id, force=False, fast_mode=True, timeout=5)
+        TaskDispatcher.dispatch(check_channel_task, channel_id, force=False, fast_mode=True, timeout=5)
 
     @staticmethod
     def stop_scan():
