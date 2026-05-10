@@ -3,7 +3,7 @@ from flask import current_app
 
 class CentralAuthClient:
     """
-    Client for CentralAuth Single Sign-On (V2).
+    Client for CentralAuth Single Sign-On ().
     Handles discovery, code exchange, and token verification.
     """
 
@@ -77,3 +77,4 @@ class CentralAuthClient:
             if current_app:
                 current_app.logger.error(f"IPTV SSO Token Verification Error: {e}")
         return None
+

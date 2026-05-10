@@ -39,7 +39,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
   const handleMouseMove = () => {
     setShowHUD(true);
     clearTimeout(timeout);
-    timeout = setTimeout(() => setShowHUD(false), 4000);
+    timeout = setTimeout(() => setShowHUD(false), 2000);
   };
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                     ? <Pause style={{ width: 'clamp(16px, 2.5cqw, 32px)', height: 'clamp(16px, 2.5cqw, 32px)' }} fill="currentColor" />
                     : <Play  style={{ width: 'clamp(16px, 2.5cqw, 32px)', height: 'clamp(16px, 2.5cqw, 32px)' }} fill="currentColor" />}
                 </button>
-                <div className="flex items-center bg-white/5 backdrop-blur-md border border-white/10 rounded-full"
+                <div className="flex items-center bg-white/[0.03] backdrop-blur-xl border border-white/5 rounded-full"
                      style={{ gap: 'clamp(6px, 1.2cqw, 14px)', padding: 'clamp(4px, 0.7cqw, 10px) clamp(8px, 1.5cqw, 16px)' }}>
                   <button onClick={onToggleMute} className="text-white/60 hover:text-white transition-colors">
                     {isMuted || volume === 0
@@ -109,19 +109,12 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                   </button>
                   <input type="range" min="0" max="1" step="0.05" value={volume}
                     onChange={e => onVolumeChange(parseFloat(e.target.value))}
-                    className="accent-indigo-500 rounded-full cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                    className="accent-indigo-500 rounded-full cursor-pointer opacity-40 hover:opacity-100 transition-opacity"
                     style={{ width: 'clamp(50px, 10cqw, 120px)', height: '2px' }} />
                 </div>
               </div>
-              {/* Signal + Channel ID + Clock */}
+              {/* Channel ID + Clock */}
               <div className="flex items-center" style={{ gap: 'clamp(8px, 3cqw, 28px)' }}>
-                <div className="hidden sm:flex items-center bg-emerald-500/10 border border-emerald-500/20 rounded-full"
-                     style={{ gap: 'clamp(4px, 0.8cqw, 8px)', padding: 'clamp(3px, 0.5cqw, 6px) clamp(8px, 1.5cqw, 14px)' }}>
-                  <div className="rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-                       style={{ width: 'clamp(4px, 0.6cqw, 8px)', height: 'clamp(4px, 0.6cqw, 8px)' }} />
-                  <span className="font-black text-emerald-400 uppercase tracking-[0.15em]"
-                        style={{ fontSize: 'clamp(7px, 1cqw, 12px)' }}>Signal Encrypted</span>
-                </div>
                 <div className="flex items-baseline" style={{ gap: 'clamp(4px, 1cqw, 12px)' }}>
                   <span className="font-black text-white leading-none tracking-tighter"
                         style={{ fontSize: 'clamp(20px, 5cqw, 64px)' }}>{channel.id}</span>
@@ -252,11 +245,26 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                 <div className="flex items-center bg-white/5 border border-white/10"
                      style={{ gap: 'clamp(2px, 0.3cqw, 4px)', padding: 'clamp(3px, 0.4cqw, 5px)', borderRadius: 'clamp(8px, 1.2cqw, 16px)' }}>
                   {[
+                    { 
+                       icon: Activity, 
+                       onClick: async () => {
+                          const res = await fetch(`/api/channels/${channel.id}/check`, { method: 'POST' });
+                          const data = await res.json();
+                          if (data.status === 'ok') {
+                             window.dispatchEvent(new CustomEvent('channel-updated', { 
+                               detail: { id: channel.id, status: data.result.status } 
+                             }));
+                          }
+                       }, 
+                       active: false,
+                       title: "Instant Health Check"
+                    },
                     { icon: Heart, onClick: () => {}, active: false },
                     { icon: Share2, onClick: () => setShowShare(true), active: showShare },
                     { icon: Maximize, onClick: onToggleFullscreen, active: false }
                   ].map((item, idx) => (
                     <button key={idx} onClick={item.onClick}
+                      title={item.title}
                       className={`flex items-center justify-center transition-all ${item.active ? 'bg-indigo-600 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
                       style={{ width: 'clamp(28px, 4cqw, 48px)', height: 'clamp(28px, 4cqw, 48px)', borderRadius: 'clamp(6px, 0.8cqw, 12px)' }}>
                       <item.icon style={{ width: 'clamp(14px, 1.8cqw, 22px)', height: 'clamp(14px, 1.8cqw, 22px)' }} />

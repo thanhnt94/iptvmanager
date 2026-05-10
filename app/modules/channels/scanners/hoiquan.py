@@ -9,10 +9,10 @@ from .base import BaseScanner
 logger = logging.getLogger('iptv')
 
 class HoiquanScanner(BaseScanner):
-    """Scanner for sv2.hoiquan3.live"""
+    """Scanner for s.hoiquan3.live"""
     
     def __init__(self, site_url=None):
-        super().__init__(site_url or "https://sv2.hoiquan3.live/trang-chu")
+        super().__init__(site_url or "https://s.hoiquan3.live/trang-chu")
         self.site_url = self.site_url.rstrip('/')
         if not self.site_url.endswith('/trang-chu'):
             self.site_url = urljoin(self.site_url, '/trang-chu')
@@ -161,3 +161,4 @@ class HoiquanScanner(BaseScanner):
         except Exception as e:
             logger.error(f" [Hoiquan] Extraction failed: {e}")
             return {'success': False, 'error': str(e)}
+

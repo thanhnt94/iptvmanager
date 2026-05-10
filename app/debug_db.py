@@ -17,3 +17,4 @@ with app.app_context():
     cs = Channel.query.limit(5).all()
     for c in cs:
         print(f"Channel: {c.name} (id: {c.id}, status: {c.status})")
+

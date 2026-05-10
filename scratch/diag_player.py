@@ -30,3 +30,4 @@ with app.app_context():
         # We need a request context for url_for with _external=True
         with app.test_request_context():
             print(f"Smartlink for {c.name}: {url_for('channels.play_channel', channel_id=c.id, token=token, _external=True)}")
+

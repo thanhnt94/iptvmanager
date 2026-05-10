@@ -83,6 +83,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [checkingIds, setCheckingIds] = useState<Set<number>>(new Set());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -187,6 +188,18 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   useEffect(() => {
     fetchChannels(true);
   }, [selectedPlaylist, selectedCategory, debouncedSearch, hideDie, sortMode, fetchChannels]);
+
+  // Listen for real-time channel updates from player
+  useEffect(() => {
+    const handleChannelUpdate = (e: any) => {
+      const { id, status } = e.detail;
+      setChannels(prev => prev.map(ch => 
+        ch.id === id ? { ...ch, status } : ch
+      ));
+    };
+    window.addEventListener('channel-updated', handleChannelUpdate);
+    return () => window.removeEventListener('channel-updated', handleChannelUpdate);
+  }, []);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -417,25 +430,63 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                     </div>
                  </div>
                  <div className="flex items-center gap-2">
-                    {onEditChannel && (
+                     <div className="flex items-center gap-2">
                         <button 
-                          onClick={(e) => {
+                          disabled={checkingIds.has(ch.id)}
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            onEditChannel(ch.id);
+                            setCheckingIds(prev => new Set(prev).add(ch.id));
+                            try {
+                              const res = await fetch(`/api/channels/${ch.id}/check`, { method: 'POST' });
+                              const data = await res.json();
+                              if (data.status === 'ok') {
+                                window.dispatchEvent(new CustomEvent('channel-updated', { 
+                                  detail: { id: ch.id, status: data.result.status } 
+                                }));
+                              }
+                            } catch (err) {
+                               console.error("Check failed:", err);
+                            } finally {
+                               setCheckingIds(prev => {
+                                 const next = new Set(prev);
+                                 next.delete(ch.id);
+                                 return next;
+                               });
+                            }
                           }}
                           className={`p-1.5 rounded-lg transition-all ${
                             activeChannelId === ch.id 
-                            ? 'bg-white/10 text-white hover:bg-white/20' 
-                            : 'text-slate-500 hover:text-white hover:bg-white/5 shadow-sm'
-                          }`}
-                          title="Edit Channel"
+                            ? 'bg-white/10 text-emerald-400 hover:bg-white/20' 
+                            : 'text-slate-500 hover:text-emerald-400 hover:bg-white/5 shadow-sm'
+                          } ${checkingIds.has(ch.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title="Instant Check Signal"
                         >
-                           <Settings2 size={12} />
+                           {checkingIds.has(ch.id) ? (
+                              <Loader2 size={12} className="animate-spin" />
+                           ) : (
+                              <Zap size={12} />
+                           )}
                         </button>
-                    )}
-                    {activeChannelId === ch.id && (
-                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-                    )}
+                        {onEditChannel && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditChannel(ch.id);
+                              }}
+                              className={`p-1.5 rounded-lg transition-all ${
+                                activeChannelId === ch.id 
+                                ? 'bg-white/10 text-white hover:bg-white/20' 
+                                : 'text-slate-500 hover:text-white hover:bg-white/5 shadow-sm'
+                              }`}
+                              title="Edit Channel"
+                            >
+                               <Settings2 size={12} />
+                            </button>
+                        )}
+                        {activeChannelId === ch.id && (
+                           <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
+                        )}
+                     </div>
                  </div>
               </motion.button>
             ))

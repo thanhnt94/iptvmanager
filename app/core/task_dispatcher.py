@@ -1,156 +1,111 @@
 """
-TaskDispatcher — Central abstraction layer for background task execution.
-Supports two backends:
-  - 'celery': Uses Celery worker + broker (Redis/SQLite). Requires separate process.
-  - 'thread': Uses Python threading. Zero overhead, no external dependencies.
-  - 'auto': Auto-detects Celery availability; falls back to threading.
+TaskDispatcher  — Thread-only background task execution.
+No Flask or Celery dependency.
 """
+import os
 import time
+import uuid
 import logging
-from flask import current_app
+import threading
+from typing import Any, Dict, List
 
 logger = logging.getLogger('iptv')
 
 
+class ThreadTaskResult:
+    """Mimics Celery's AsyncResult interface."""
+    def __init__(self, task_id: str):
+        self.id = task_id
+        self.state = 'PENDING'
+        self.info = {}
+        self.result = None
+
+
+from concurrent.futures import ThreadPoolExecutor
+
 class TaskDispatcher:
-    """
-    Central task dispatcher with auto-detection.
-    
-    Usage:
-        # Instead of: task_func.delay(arg1, arg2)
-        # Use:        TaskDispatcher.dispatch(task_func, arg1, arg2)
-    
-    The dispatcher will route the task to the active backend
-    based on the TASK_BACKEND setting (auto/celery/thread).
-    """
-    
-    _celery_available = None  # Cached detection result
-    _celery_checked_at = 0    # Timestamp of last check
-    _CACHE_TTL = 60           # Re-check Celery availability every 60 seconds
-    
+    """Thread-based task dispatcher with a pool."""
+
+    _executor = ThreadPoolExecutor(max_workers=10)
+    _active_tasks: Dict[str, dict] = {}
+    _results: Dict[str, ThreadTaskResult] = {}
+    _lock = threading.Lock()
+
     @classmethod
-    def get_backend(cls) -> str:
-        """Returns 'celery' or 'thread' based on settings + auto-detection."""
-        try:
-            from app.modules.settings.services import SettingService
-            preference = SettingService.get('TASK_BACKEND', 'auto')
-        except Exception:
-            preference = 'auto'
+    def dispatch(cls, task_func, *args, **kwargs) -> ThreadTaskResult:
+        """
+        Dispatches a task. Uses Celery if USE_CELERY is true and task is a Celery task.
+        Otherwise uses internal ThreadPool.
+        """
+        use_celery = os.getenv("USE_CELERY", "false").lower() == "true"
         
-        if preference == 'celery':
-            return 'celery'
-        elif preference == 'thread':
-            return 'thread'
-        else:  # 'auto'
-            return 'celery' if cls._is_celery_available() else 'thread'
-    
+        # If it's a Celery task (has .delay method) and celery is enabled
+        if use_celery and hasattr(task_func, 'delay'):
+            try:
+                celery_result = task_func.delay(*args, **kwargs)
+                logger.debug(f"[DISPATCHER] Task dispatched to CELERY: {task_func.__name__} (ID: {celery_result.id})")
+                return ThreadTaskResult(celery_result.id) # Mimic result
+            except Exception as e:
+                logger.error(f"[DISPATCHER] Failed to dispatch to Celery: {e}. Falling back to Thread.")
+
+        # Fallback to ThreadPool
+        task_id = str(uuid.uuid4())
+        result = ThreadTaskResult(task_id)
+        result.state = 'STARTED'
+
+        with cls._lock:
+            cls._results[task_id] = result
+            cls._active_tasks[task_id] = {
+                'id': task_id,
+                'name': getattr(task_func, '__name__', str(task_func)),
+                'started_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+
+        def _run_wrapper():
+            try:
+                # If it's a celery task but we are running in thread mode, call the underlying func
+                if hasattr(task_func, 'run'):
+                    ret = task_func.run(*args, **kwargs)
+                else:
+                    ret = task_func(*args, **kwargs)
+                    
+                with cls._lock:
+                    result.state = 'SUCCESS'
+                    result.result = ret
+                    result.info = ret if isinstance(ret, dict) else {}
+            except Exception as e:
+                logger.error(f"[DISPATCHER] Task {task_id} failed: {e}", exc_info=True)
+                with cls._lock:
+                    result.state = 'FAILURE'
+                    result.info = str(e)
+            finally:
+                with cls._lock:
+                    cls._active_tasks.pop(task_id, None)
+
+        cls._executor.submit(_run_wrapper)
+        logger.debug(f"[DISPATCHER] Task queued in THREAD pool: {cls._active_tasks.get(task_id, {}).get('name')} (ID: {task_id[:8]})")
+        return result
+
     @classmethod
-    def _is_celery_available(cls) -> bool:
-        """
-        Ping Celery worker with a short timeout.
-        Results are cached for 60 seconds to avoid spamming.
-        """
-        now = time.time()
-        if cls._celery_available is not None and (now - cls._celery_checked_at) < cls._CACHE_TTL:
-            return cls._celery_available
-        
-        try:
-            app = current_app._get_current_object()
-            celery = app.celery_app
-            # ping() returns a list of dicts from each worker, timeout in seconds
-            response = celery.control.ping(timeout=2.0)
-            cls._celery_available = bool(response)
-            if cls._celery_available:
-                logger.debug(" [DISPATCHER] Celery worker detected: ONLINE")
-            else:
-                logger.debug(" [DISPATCHER] Celery worker not responding. Falling back to threading.")
-        except Exception as e:
-            logger.debug(f" [DISPATCHER] Celery ping failed ({e}). Using thread backend.")
-            cls._celery_available = False
-        
-        cls._celery_checked_at = now
-        return cls._celery_available
-    
+    def get_task_result(cls, task_id: str):
+        with cls._lock:
+            return cls._results.get(task_id)
+
+    @classmethod
+    def get_active_tasks(cls) -> List[dict]:
+        with cls._lock:
+            return list(cls._active_tasks.values())
+
+    @classmethod
+    def get_status_info(cls) -> dict:
+        return {
+            'active_backend': 'thread',
+            'celery_available': False,
+            'thread_tasks': cls.get_active_tasks(),
+            'configured_preference': 'thread',
+        }
+
     @classmethod
     def invalidate_cache(cls):
-        """Force re-detection on next dispatch (e.g., when user changes settings)."""
-        cls._celery_available = None
-        cls._celery_checked_at = 0
-    
-    @classmethod
-    def dispatch(cls, task_func, *args, **kwargs):
-        """
-        Dispatch a task to the active backend.
-        
-        Args:
-            task_func: A Celery shared_task decorated function.
-            *args, **kwargs: Arguments to pass to the task.
-            
-        Returns:
-            - Celery mode: Celery AsyncResult
-            - Thread mode: ThreadTaskResult (same interface)
-        """
-        backend = cls.get_backend()
-        
-        if backend == 'celery':
-            try:
-                result = task_func.delay(*args, **kwargs)
-                logger.debug(f" [DISPATCHER] Task dispatched via Celery: {task_func.name} (ID: {result.id[:8]})")
-                return result
-            except Exception as e:
-                # Celery dispatch failed (e.g., broker down) — auto-fallback to thread
-                logger.warning(f" [DISPATCHER] Celery dispatch failed ({e}). Falling back to thread backend.")
-                cls._celery_available = False
-                cls._celery_checked_at = time.time()
-                backend = 'thread'
-        
-        # Thread backend
-        from app.core.thread_backend import ThreadBackend
-        app = current_app._get_current_object()
-        result = ThreadBackend.run(task_func, app, *args, **kwargs)
-        logger.debug(f" [DISPATCHER] Task dispatched via Thread: {getattr(task_func, 'name', '?')} (ID: {result.id[:8]})")
-        return result
-    
-    @classmethod
-    def get_task_result(cls, task_id):
-        """
-        Get task result by ID, checking both backends.
-        Returns an object with .state, .info, .result attributes.
-        """
-        # 1. Try thread backend first (fast, in-memory)
-        from app.core.thread_backend import ThreadBackend
-        thread_result = ThreadBackend.get_result(task_id)
-        if thread_result:
-            return thread_result
-        
-        # 2. Try Celery backend
-        try:
-            app = current_app._get_current_object()
-            celery = app.celery_app
-            return celery.AsyncResult(task_id)
-        except Exception:
-            return None
-    
-    @classmethod
-    def get_status_info(cls):
-        """
-        Returns comprehensive status info for the admin panel.
-        """
-        backend = cls.get_backend()
-        
-        info = {
-            'active_backend': backend,
-            'celery_available': cls._is_celery_available(),
-        }
-        
-        # Get active thread tasks
-        from app.core.thread_backend import ThreadBackend
-        info['thread_tasks'] = ThreadBackend.get_active_tasks()
-        
-        try:
-            from app.modules.settings.services import SettingService
-            info['configured_preference'] = SettingService.get('TASK_BACKEND', 'auto')
-        except Exception:
-            info['configured_preference'] = 'auto'
-        
-        return info
+        pass  # No cache to invalidate in thread-only mode
+

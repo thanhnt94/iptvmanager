@@ -1,9 +1,17 @@
-from app.core.database import db
+"""
+Settings Models () — Standalone SQLAlchemy, no Flask dependency.
+"""
+from sqlalchemy import Column, Integer, String, Text
 
-class SystemSetting(db.Model):
+from app.core.database import Base
+
+
+class SystemSetting(Base):
     __tablename__ = 'system_settings'
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(50), unique=True, nullable=False)
-    value = db.Column(db.Text, nullable=True)
-    description = db.Column(db.String(255), nullable=True)
-    type = db.Column(db.String(20), default='string') # string, bool, int
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(50), unique=True, nullable=False)
+    value = Column(Text, nullable=True)
+    description = Column(String(255), nullable=True)
+    type = Column(String(20), default='string')  # string, bool, int
+

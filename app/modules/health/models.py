@@ -1,45 +1,54 @@
-from app.core.database import db
+"""
+Health Models () — Standalone SQLAlchemy, no Flask dependency.
+"""
 from datetime import datetime
+from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime
+from sqlalchemy.orm import Session
 
-class ScannerStatus(db.Model):
+from app.core.database import Base
+
+
+class ScannerStatus(Base):
     __tablename__ = 'health_scanner_status'
-    id = db.Column(db.Integer, primary_key=True)
-    is_running = db.Column(db.Boolean, default=False)
-    
+
+    id = Column(Integer, primary_key=True)
+    is_running = Column(Boolean, default=False)
+
     # Progress
-    total = db.Column(db.Integer, default=0)
-    current = db.Column(db.Integer, default=0)
-    current_name = db.Column(db.String(255), nullable=True)
-    current_id = db.Column(db.Integer, nullable=True)
-    
+    total = Column(Integer, default=0)
+    current = Column(Integer, default=0)
+    current_name = Column(String(255), nullable=True)
+    current_id = Column(Integer, nullable=True)
+
     # Stats
-    live_count = db.Column(db.Integer, default=0)
-    die_count = db.Column(db.Integer, default=0)
-    unknown_count = db.Column(db.Integer, default=0)
-    
+    live_count = Column(Integer, default=0)
+    die_count = Column(Integer, default=0)
+    unknown_count = Column(Integer, default=0)
+
     # Config
-    mode = db.Column(db.String(50), default='all')
-    group = db.Column(db.String(100), default='all')
-    playlist_id = db.Column(db.Integer, nullable=True)
-    
+    mode = Column(String(50), default='all')
+    group = Column(String(100), default='all')
+    playlist_id = Column(Integer, nullable=True)
+
     # Control
-    stop_requested = db.Column(db.Boolean, default=False)
-    
-    # Logs (Stored as JSON string or Text)
-    logs_json = db.Column(db.Text, default='[]')
-    
-    last_updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    stop_requested = Column(Boolean, default=False)
+
+    # Logs
+    logs_json = Column(Text, default='[]')
+
+    last_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     @classmethod
-    def get_singleton(cls):
-        """Ensures we only have one scanner status record. Thread-safe(ish) for SQLite."""
-        status = cls.query.first()
+    def get_singleton(cls, db: Session) -> "ScannerStatus":
+        """Ensures we only have one scanner status record."""
+        status = db.query(cls).first()
         if not status:
             try:
                 status = cls(is_running=False)
-                db.session.add(status)
-                db.session.commit()
+                db.add(status)
+                db.commit()
             except Exception:
-                db.session.rollback()
-                status = cls.query.first()
+                db.rollback()
+                status = db.query(cls).first()
         return status
+

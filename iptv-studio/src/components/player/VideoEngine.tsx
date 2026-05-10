@@ -17,6 +17,7 @@ interface VideoEngineProps {
   onPlaying?: () => void;
   onWaiting?: () => void;
   onError?: (error: string) => void;
+  onMuteChange?: (muted: boolean) => void;
   onTimeUpdate?: (time: number) => void;
   onDurationChange?: (duration: number) => void;
   onPlayStateChange?: (playing: boolean) => void;
@@ -32,6 +33,7 @@ export interface VideoEngineRef {
   setCurrentTime: (time: number) => void;
   setMuted: (muted: boolean) => void;
   setVolume: (volume: number) => void;
+  videoElement: HTMLVideoElement | null;
 }
 
 export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
@@ -42,6 +44,7 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
   onPlaying,
   onWaiting,
   onError,
+  onMuteChange,
   onTimeUpdate,
   onDurationChange,
   onPlayStateChange,
@@ -157,6 +160,19 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
     const isTS = lowUrl.includes('.ts') || lowUrl.includes('type=ts') || lowUrl.includes('proxy_stream') || lowUrl.includes('forced=ts') || format === 'ts' || (lowOrigUrl.includes('.ts') && !lowUrl.includes('/play/'));
     const isFLV = lowUrl.includes('.flv') || lowUrl.includes('forced=flv') || format === 'flv' || format === 'smart' || lowOrigUrl.includes('.flv') || lowOrigUrl.includes('.mp4');
 
+    const safePlay = (p: any) => {
+       if (p && typeof p.catch === 'function') {
+          p.catch((err: any) => {
+             if (err.name === 'NotAllowedError') {
+                video.muted = true;
+                onMuteChange?.(true);
+                const p2 = (mpegtsRef.current || flvRef.current || video).play();
+                if (p2 && typeof p2.catch === 'function') p2.catch(() => {});
+             }
+          });
+       }
+    };
+
     if (isM3U8) {
       if (Hls.isSupported()) {
         const hls = new Hls({
@@ -166,7 +182,9 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
         });
         hls.loadSource(url);
         hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          safePlay(video.play());
+        });
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
             switch (data.type) {
@@ -187,7 +205,7 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
         hlsRef.current = hls;
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
-        video.play().catch(() => {});
+        safePlay(video.play());
       }
     } else if (isFLV && flvjs.isSupported()) {
       const player = flvjs.createPlayer({
@@ -204,17 +222,8 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
       player.on(flvjs.Events.ERROR, (type, detail) => {
         onError?.(`FLV Engine Error: ${type} - ${detail}`);
       });
-      player.on(flvjs.Events.STATISTICS_INFO, (info) => {
-        if (info.speed === 0 && video.paused === false && (performance.now() - lastTime.current) > 10000) {
-           // Detected stuck stream (no data for 10s while playing)
-           // We don't trigger error immediately but we can log it
-        }
-      });
       player.load();
-      const playPromise = player.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {});
-      }
+      safePlay(player.play());
       flvRef.current = player;
     } else if (isTS) {
       if (mpegts.getFeatureList().mseLivePlayback) {
@@ -232,25 +241,37 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
            onError?.(`MPEG-TS Engine Error: ${type} - ${detail}`);
         });
         player.load();
-        player.play();
+        safePlay(player.play());
         mpegtsRef.current = player;
       }
     } else {
       video.src = url;
-      video.play().catch(() => {});
+      safePlay(video.play());
     }
 
     return cleanup;
   }, [url, format, type]);
 
+  const handlePlaying = () => {
+    onPlaying?.();
+    onPlayStateChange?.(true);
+  };
+
   return (
     <video
       ref={videoRef}
       className="w-full h-full object-contain bg-black"
-      onPlaying={() => { onPlaying?.(); onPlayStateChange?.(true); }}
+      onPlay={handlePlaying}
+      onPlaying={handlePlaying}
       onPause={() => onPlayStateChange?.(false)}
       onWaiting={onWaiting}
-      onTimeUpdate={() => onTimeUpdate?.(videoRef.current?.currentTime || 0)}
+      onTimeUpdate={() => {
+        const current = videoRef.current?.currentTime || 0;
+        if (current > 0) {
+           handlePlaying();
+        }
+        onTimeUpdate?.(current);
+      }}
       onLoadedMetadata={() => onDurationChange?.(videoRef.current?.duration || 0)}
       onError={() => onError?.("Media Stream Error: Check your gateway or source connection.")}
       muted={muted}

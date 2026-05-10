@@ -12,3 +12,4 @@ with app.app_context():
     
     total = Channel.query.filter_by(owner_id=1).count()
     print(f"Total Channels for Owner 1: {total}")
+

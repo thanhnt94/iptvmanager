@@ -112,3 +112,4 @@ class ColatvScanner(BaseScanner):
         # Since extract_direct_url is already quite good, we'll call it
         from app.modules.channels.services import ExtractorService
         return ExtractorService.extract_direct_url(page_url, deep_scan=True)
+

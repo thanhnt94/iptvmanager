@@ -63,6 +63,7 @@ const App: React.FC = () => {
                   <Route path="/streams" element={<Streams />} />
                   <Route path="/epg" element={<EPG />} />
                   <Route path="/player" element={<Player user={user} />} />
+                  <Route path="/player/:id" element={<Player user={user} />} />
                   <Route path="/import" element={<Import />} />
                   <Route path="/diagnostics" element={<Diagnostics />} />
                   <Route path="/profile" element={<ProfilePage />} />

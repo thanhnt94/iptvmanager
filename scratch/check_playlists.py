@@ -11,3 +11,4 @@ with app.app_context():
     profiles = PlaylistProfile.query.filter_by(is_system=True).all()
     for p in profiles:
         print(f"ID: {p.id} | Name: {p.name} | Owner: {p.owner_id} | Slug: {p.slug}")
+

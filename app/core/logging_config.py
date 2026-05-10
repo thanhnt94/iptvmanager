@@ -54,3 +54,4 @@ def setup_logging(app):
     
     logger.info("IPTV Logging system initialized.")
     return logger
+

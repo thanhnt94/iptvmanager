@@ -47,3 +47,4 @@ class GenericScanner(BaseScanner):
     def extract(self, page_url):
         from app.modules.channels.services import ExtractorService
         return ExtractorService.extract_direct_url(page_url, deep_scan=True)
+

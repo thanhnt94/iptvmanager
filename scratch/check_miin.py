@@ -13,3 +13,4 @@ with app.app_context():
     groups = db.session.query(Channel.group_name).distinct().all()
     for g in groups:
         print(f"- {g[0]}")
+

@@ -7,7 +7,7 @@ import logging
 import requests
 import re
 from app.modules.channels.models import Channel, EPGSource, EPGData
-from app.core.database import db
+from app.core.database import SessionFactory
 
 logger = logging.getLogger('iptv')
 
@@ -32,9 +32,9 @@ class StreamManager:
     @classmethod
     def get_source_stream(cls, url, headers=None, **kwargs):
         from app.modules.settings.services import SettingService
-        use_sm = SettingService.get('ENABLE_STREAM_MANAGER', True)
+        use_sm = SettingService.get(SessionFactory(), 'ENABLE_STREAM_MANAGER', True)
         # Load dynamic buffer size
-        ts_buffer_size = SettingService.get('TS_BUFFER_SIZE', 512) # 512 * 4KB = 2MB
+        ts_buffer_size = SettingService.get(SessionFactory(), 'TS_BUFFER_SIZE', 512) # 512 * 4KB = 2MB
         with cls._lock:
             # Detect if we need FFmpeg (Transcode/Remux)
             is_flv = '.flv' in url.lower().split('?')[0]
@@ -153,7 +153,7 @@ class StreamManager:
     @classmethod
     def _run_ffmpeg_pipe(cls, url, headers, sid):
         from app.modules.settings.services import SettingService
-        ffmpeg_bin = SettingService.get('FFMPEG_PATH', 'ffmpeg')
+        ffmpeg_bin = SettingService.get(SessionFactory(), 'FFMPEG_PATH', 'ffmpeg')
         
         # Robust path discovery
         ffmpeg_path = shutil.which(ffmpeg_bin)
@@ -327,7 +327,7 @@ class EPGService:
             # In a real app, this would be more complex and saved to an EPGData table
             # For now, we just update the source's last_sync_at
             source.last_sync_at = datetime.utcnow()
-            db.session.commit()
+            SessionFactory().commit()
             return {'status': 'success', 'last_sync': source.last_sync_at}
         except Exception as e:
             return {'error': str(e)}
@@ -347,7 +347,7 @@ class ChannelService:
 
         if not is_admin:
             # Subquery to find channels shared with this user and accepted
-            shared_channels_subquery = db.session.query(ChannelShare.channel_id).filter(
+            shared_channels_subquery = SessionFactory().query(ChannelShare.channel_id).filter(
                 ChannelShare.to_user_id == user.id,
                 ChannelShare.status == 'accepted'
             )
@@ -407,23 +407,23 @@ class ChannelService:
     @staticmethod
     def get_distinct_groups():
         """Returns a list of all unique group names in the database."""
-        groups = db.session.query(Channel.group_name).distinct().all()
+        groups = SessionFactory().query(Channel.group_name).distinct().all()
         return sorted([g[0] for g in groups if g[0]])
 
     @staticmethod
     def get_distinct_resolutions():
-        res = db.session.query(Channel.resolution).distinct().all()
+        res = SessionFactory().query(Channel.resolution).distinct().all()
         return sorted([r[0] for r in res if r[0]])
 
     @staticmethod
     def get_distinct_audio_codecs():
-        aud = db.session.query(Channel.audio_codec).distinct().all()
+        aud = SessionFactory().query(Channel.audio_codec).distinct().all()
         return sorted([a[0] for a in aud if a[0]])
 
     @staticmethod
     def get_distinct_formats(user=None):
         """Returns a list of all unique stream formats (hls, ts, etc.) in the database."""
-        formats = db.session.query(Channel.stream_format).distinct().all()
+        formats = SessionFactory().query(Channel.stream_format).distinct().all()
         return sorted([f[0] for f in formats if f[0]])
 
     @staticmethod
@@ -458,8 +458,8 @@ class ChannelService:
             is_original=data.get('is_original') == 'true' or data.get('is_original') == '1' or data.get('is_original') == 'on',
             owner_id=data.get('owner_id')
         )
-        db.session.add(new_channel)
-        db.session.commit()
+        SessionFactory().add(new_channel)
+        SessionFactory().commit()
         
         return new_channel
 
@@ -492,7 +492,7 @@ class ChannelService:
             else:
                 channel.public_status = 'none'
         
-        db.session.commit()
+        SessionFactory().commit()
         return channel
 
     @staticmethod
@@ -557,7 +557,7 @@ class HLSEngine:
         # 2. Cache MISS: Download from source
         try:
             if not headers:
-                ua = SettingService.get('CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
+                ua = SettingService.get(SessionFactory(), 'CUSTOM_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
                 headers = {'User-Agent': ua, 'Referer': url.rsplit('/', 1)[0] + '/'}
                 
             resp = requests.get(url, headers=headers, timeout=12, verify=False)
@@ -584,14 +584,14 @@ class HLSEngine:
     def _cleanup(cls):
         from app.modules.settings.services import SettingService
         now = time.time()
-        ttl = SettingService.get('HLS_CACHE_TTL', 60)
+        ttl = SettingService.get(SessionFactory(), 'HLS_CACHE_TTL', 60)
         
         expired = [u for u, v in cls._cache.items() if now - v['timestamp'] > ttl]
         for u in expired:
             del cls._cache[u]
         
         # Emergency cleanup if still too many
-        max_segments = SettingService.get('HLS_MAX_SEGMENTS', 50)
+        max_segments = SettingService.get(SessionFactory(), 'HLS_MAX_SEGMENTS', 50)
         if len(cls._cache) > max_segments:
             # Sort by timestamp and remove oldest
             sorted_cache = sorted(cls._cache.items(), key=lambda x: x[1]['timestamp'])
@@ -916,39 +916,49 @@ class EPGService:
     @staticmethod
     def add_source(name, url, priority=0):
         from app.modules.channels.models import EPGSource
-        from app.core.database import db
+        from app.core.database import SessionFactory
+        db = SessionFactory()
         source = EPGSource(name=name, url=url, priority=priority)
-        db.session.add(source)
-        db.session.commit()
+        db.add(source)
+        db.commit()
+        db.refresh(source)
+        db.close()
         return source
 
     @staticmethod
     def delete_source(source_id):
         from app.modules.channels.models import EPGSource
-        from app.core.database import db
-        source = EPGSource.query.get(source_id)
+        from app.core.database import SessionFactory
+        db = SessionFactory()
+        source = db.query(EPGSource).get(source_id)
         if source:
-            db.session.delete(source)
-            db.session.commit()
+            db.delete(source)
+            db.commit()
+            db.close()
             return True
+        db.close()
         return False
 
     @staticmethod
     def sync_epg(source_id):
         from app.modules.channels.models import EPGSource, EPGData
-        from app.core.database import db
+        from app.core.database import SessionFactory
         from datetime import datetime
         import requests
         import xml.etree.ElementTree as ET
 
-        source = EPGSource.query.get(source_id)
-        if not source: return {'success': False, 'error': 'Source not found'}
+        db = SessionFactory()
+        source = db.query(EPGSource).get(source_id)
+        if not source: 
+            db.close()
+            return {'success': False, 'error': 'Source not found'}
         
         logger.info(f"Starting EPG sync for {source.name} from {source.url}")
         try:
             resp = requests.get(source.url, timeout=60)
             if resp.status_code != 200:
                 logger.error(f"EPG Fetch failed for {source.name}: HTTP {resp.status_code}")
+                db.close()
                 return {'success': False, 'error': f'HTTP {resp.status_code}'}
             
             logger.debug(f"EPG file fetched, size: {len(resp.content)} bytes")
@@ -976,7 +986,7 @@ class EPGService:
                     stop_dt = EPGService._parse_xmltv_date(stop_str)
                     
                     # Check for existing to avoid exact duplicates
-                    existing = EPGData.query.filter_by(
+                    existing = db.query(EPGData).filter_by(
                         epg_id=epg_id, start=start_dt, stop=stop_dt
                     ).first()
                     
@@ -989,23 +999,27 @@ class EPGService:
                             stop=stop_dt,
                             source_id=source.id
                         )
-                        db.session.add(new_prog)
+                        db.add(new_prog)
                         count += 1
                 except Exception as ex:
                     logger.warning(f"Failed to parse EPG program: {ex}")
                     continue
             
-            source.last_sync_at = datetime.utcnow()
-            db.session.commit()
-            return {'success': True, 'added': count, 'last_sync': source.last_sync_at}
+            now_sync = datetime.utcnow()
+            source.last_sync_at = now_sync
+            db.commit()
+            db.close()
+            return {'success': True, 'added': count, 'last_sync': now_sync}
         except Exception as e:
+            if 'db' in locals(): db.close()
             logger.error(f"EPG Sync error: {e}")
             return {'success': False, 'error': str(e)}
 
     @staticmethod
     def add_manual_program(epg_id, title, start_dt, stop_dt, desc=None, owner_id=None):
         from app.modules.channels.models import EPGData
-        from app.core.database import db
+        from app.core.database import SessionFactory
+        db = SessionFactory()
         prog = EPGData(
             epg_id=epg_id,
             title=title,
@@ -1014,17 +1028,20 @@ class EPGService:
             stop=stop_dt,
             owner_id=owner_id
         )
-        db.session.add(prog)
-        db.session.commit()
+        db.add(prog)
+        db.commit()
+        db.refresh(prog)
+        db.close()
         return prog
 
     @staticmethod
     def import_xmltv(xml_content, owner_id=None):
         from app.modules.channels.models import EPGData
-        from app.core.database import db
+        from app.core.database import SessionFactory
         from datetime import datetime
         import xml.etree.ElementTree as ET
         
+        db = SessionFactory()
         try:
             root = ET.fromstring(xml_content)
             count = 0
@@ -1050,13 +1067,15 @@ class EPGService:
                         stop=stop_dt,
                         owner_id=owner_id
                     )
-                    db.session.add(new_prog)
+                    db.add(new_prog)
                     count += 1
                 except: continue
                 
-            db.session.commit()
+            db.commit()
+            db.close()
             return {'success': True, 'added': count}
         except Exception as e:
+            if 'db' in locals(): db.close()
             return {'success': False, 'error': str(e)}
 
     @staticmethod
@@ -1108,20 +1127,20 @@ class EPGService:
                 count += 1
                 
                 if len(new_programs) >= 1000:
-                    db.session.bulk_save_objects(new_programs)
+                    SessionFactory().bulk_save_objects(new_programs)
                     logger.debug(f"Bulk saved {count} programs...")
                     new_programs = []
             
             if new_programs:
-                db.session.bulk_save_objects(new_programs)
+                SessionFactory().bulk_save_objects(new_programs)
             
             source.last_sync_at = datetime.utcnow()
-            db.session.commit()
+            SessionFactory().commit()
             logger.info(f"EPG sync completed for {source.name}. Total programs: {count}")
             return {'success': True, 'count': count}
             
         except Exception as e:
-            db.session.rollback()
+            SessionFactory().rollback()
             logger.error(f"EPG sync exception for {source.name}: {str(e)}", exc_info=True)
             return {'success': False, 'error': str(e)}
 
@@ -1149,4 +1168,5 @@ class EPGService:
             return dt
         except:
             return datetime.now()
+
 

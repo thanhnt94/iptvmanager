@@ -27,6 +27,11 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   
   const videoEngineRef = useRef<VideoEngineRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasNotifiedLive = useRef(false);
+
+  useEffect(() => {
+    hasNotifiedLive.current = false;
+  }, [channel?.id]);
 
   useEffect(() => {
     if (channel) {
@@ -99,14 +104,31 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
         format={channel?.stream_format}
         muted={isMuted}
         volume={volume}
+        onMuteChange={setIsMuted}
         onPlaying={() => {
           setStatus('playing');
           setIsPlaying(true);
+          
+          if (!hasNotifiedLive.current) {
+            hasNotifiedLive.current = true;
+            // Broadcast local update
+            window.dispatchEvent(new CustomEvent('channel-updated', { 
+              detail: { id: channel.id, status: 'live' } 
+            }));
+            // Notify backend
+            fetch(`/api/channels/${channel.id}/touch`, { method: 'POST' }).catch(() => {});
+          }
         }}
-        onWaiting={() => setStatus('loading')}
+        onWaiting={() => {
+          if (status !== 'playing') setStatus('loading');
+        }}
         onError={(err) => {
           setStatus('error');
           setError(err);
+          // Broadcast local update
+          window.dispatchEvent(new CustomEvent('channel-updated', { 
+            detail: { id: channel.id, status: 'die' } 
+          }));
         }}
         onStatsUpdate={setStats}
       />
@@ -193,6 +215,30 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
                 );
               })}
             </div>
+          </motion.div>
+        )}
+        {status === 'playing' && isMuted && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none"
+          >
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                videoEngineRef.current?.setMuted(false);
+                setIsMuted(false);
+                if (videoEngineRef.current?.videoElement) {
+                   videoEngineRef.current.videoElement.volume = 1;
+                }
+              }}
+              className="pointer-events-auto px-8 py-4 bg-indigo-600/90 backdrop-blur-md text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] flex items-center gap-4 shadow-2xl shadow-indigo-600/40 hover:bg-indigo-500 transition-all active:scale-95 border border-white/20"
+            >
+              <div className="p-2 bg-white/20 rounded-lg animate-pulse">
+                <Wifi size={20} />
+              </div>
+              Tap to Enable Audio
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

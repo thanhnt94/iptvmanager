@@ -28,7 +28,7 @@ class SSOService:
         """Exchange the authorization code for tokens and sync the local user."""
         client = SSOService.get_client()
         
-        # 1. Exchange code for tokens (V2)
+        # 1. Exchange code for tokens ()
         token_data = client.exchange_code_for_token(code)
         if not token_data or 'access_token' not in token_data:
             current_app.logger.error("IPTV SSO Code exchange failed: Access token missing.")
@@ -83,3 +83,4 @@ class SSOService:
             db.session.add(user)
             db.session.commit()
             return user
+

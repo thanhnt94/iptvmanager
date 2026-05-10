@@ -44,3 +44,4 @@ class DataImportService:
         
         from app.modules.ingestion.services import IngestionService
         return IngestionService.import_channels(channels_data, visibility=visibility)
+

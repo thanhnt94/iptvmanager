@@ -33,3 +33,4 @@ class BaseScanner:
     def extract(self, page_url):
         """Should return a dict with direct stream links."""
         raise NotImplementedError
+

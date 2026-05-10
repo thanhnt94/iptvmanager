@@ -46,3 +46,4 @@ with app.app_context():
         res = client.get('/api/playlists/groups/0')
         print(f"Status: {res.status_code}")
         print(f"Data: {res.get_json()}")
+

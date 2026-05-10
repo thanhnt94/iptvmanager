@@ -1,26 +1,30 @@
-from celery import Celery, Task
-from flask import Flask
+import os
+from celery import Celery
+from dotenv import load_dotenv
 
-def celery_init_app(app: Flask) -> Celery:
-    class FlaskTask(Task):
-        def __call__(self, *args: object, **kwargs: object) -> object:
-            with app.app_context():
-                return self.run(*args, **kwargs)
+load_dotenv()
 
-    celery_app = Celery(app.name, task_cls=FlaskTask)
-    celery_app.config_from_object(app.config.get('CELERY', {
-        'broker_url': app.config.get('CELERY_BROKER_URL', 'redis://localhost:6379/0'),
-        'result_backend': app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
-        'task_ignore_result': True,
-    }))
-    celery_app.set_default()
-    app.extensions["celery"] = celery_app
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-    # Use the app's logging setup for Celery workers
-    from celery.signals import setup_logging
-    @setup_logging.connect
-    def on_setup_logging(**kwargs):
-        from app.core.logging_config import setup_logging as init_logs
-        init_logs(app)
+celery_app = Celery(
+    "iptv_worker",
+    broker=REDIS_URL,
+    backend=REDIS_URL,
+    include=[
+        "app.modules.health.tasks",
+        "app.modules.channels.tasks",
+    ]
+)
 
-    return celery_app
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="Asia/Ho_Chi_Minh",
+    enable_utc=True,
+    task_track_started=True,
+    task_time_limit=3600,  # 1 hour max
+)
+
+if __name__ == "__main__":
+    celery_app.start()

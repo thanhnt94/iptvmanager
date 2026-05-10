@@ -23,3 +23,4 @@ with app.app_context():
         print(f"  Role: {u.role}")
     else:
         print("Token NOT found in User table!")
+

@@ -34,3 +34,4 @@ class Config:
     # App specific
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB limit for database backups
+

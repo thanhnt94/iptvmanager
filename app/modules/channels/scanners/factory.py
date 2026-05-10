@@ -12,3 +12,4 @@ def get_scanner(scanner_type, site_url):
     
     scanner_class = scanners.get(scanner_type.lower(), GenericScanner)
     return scanner_class(site_url)
+

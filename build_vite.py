@@ -40,3 +40,4 @@ def build_frontend():
 
 if __name__ == "__main__":
     build_frontend()
+

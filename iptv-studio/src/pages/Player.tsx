@@ -1,21 +1,75 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { PlayerSidebar } from '../components/player/PlayerSidebar';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Tv } from 'lucide-react';
+import { Tv, Share2, Check } from 'lucide-react';
 import { PlayerHeader } from '../components/player/PlayerHeader';
 import { UnifiedPlayer } from '../components/player/UnifiedPlayer';
 import { ChannelForm } from '../components/forms/ChannelForm';
 
 export const Player: React.FC<{ user: { username: string, role: string } }> = ({ user }) => {
-   const [activeChannel, setActiveChannel] = useState<any>(null);
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [activeChannel, setActiveChannel] = useState<any>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (id && (!activeChannel || activeChannel.id !== parseInt(id))) {
+      fetch(`/api/channels/${id}`)
+        .then(res => {
+           if (res.ok) return res.json();
+           throw new Error('Failed to load channel');
+        })
+        .then(data => {
+           setActiveChannel(data);
+        })
+        .catch(err => console.error("Deeplink error:", err));
+    }
+  }, [id]);
+
+  const handleSelectChannel = (ch: any) => {
+    setActiveChannel(ch);
+    if (ch) {
+      navigate(`/player/${ch.id}`, { replace: true });
+    } else {
+      navigate('/player', { replace: true });
+    }
+  };
+
+  const copyShareLink = () => {
+    if (!activeChannel) return;
+    const url = `${window.location.origin}/player/${activeChannel.id}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col overflow-hidden z-[100] animate-in fade-in duration-700">
        {/* Global Header - Explicit Height & Z-Index */}
-       <div className="shrink-0 z-[120]">
+       <div className="shrink-0 z-[120] relative">
           <PlayerHeader user={user} />
+          
+          {/* Active Channel Share Button Overlay */}
+          <AnimatePresence>
+            {activeChannel && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="absolute right-40 top-3 lg:top-4 z-[130] hidden md:block"
+              >
+                <button 
+                  onClick={copyShareLink}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition-all ${copied ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20'}`}
+                >
+                  {copied ? <Check size={14} /> : <Share2 size={14} />}
+                  <span className="text-[10px] font-black uppercase tracking-widest">{copied ? 'Copied' : 'Share Link'}</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
        </div>
 
        <div className="flex-1 relative flex flex-col lg:flex-row overflow-hidden bg-black">
@@ -51,7 +105,7 @@ export const Player: React.FC<{ user: { username: string, role: string } }> = ({
           </div>
 
            <PlayerSidebar 
-            onSelectChannel={setActiveChannel} 
+            onSelectChannel={handleSelectChannel} 
             activeChannelId={activeChannel?.id} 
             onEditChannel={(id) => {
                 setEditingId(id);
