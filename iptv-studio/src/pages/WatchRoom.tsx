@@ -197,6 +197,8 @@ export const WatchRoom: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
   const isPlayingRef = useRef(false);
   const videoSourceRef = useRef<VideoSource>(videoSource);
+  const pendingSeekTime = useRef<number | null>(null);
+  const hasResumedRef = useRef(false);
 
   const ytContainerId = 'yt-player-element';
 
@@ -261,6 +263,17 @@ export const WatchRoom: React.FC = () => {
       setVideoSource(src);
       setIsPlaying(data.is_playing);
       setCurrentTime(data.current_time || 0);
+
+      // Save pending seek time so the player resumes from last position
+      if (data.current_time && data.current_time > 0 && src.url) {
+        pendingSeekTime.current = data.current_time;
+        hasResumedRef.current = false;
+      }
+
+      // Show the URL in the input
+      if (data.current_video_id) {
+        setCustomUrl(data.current_video_id);
+      }
 
       // If Host, load system channels
       if (data.is_host) {
@@ -473,7 +486,7 @@ export const WatchRoom: React.FC = () => {
         t = ytPlayerRef.current.getCurrentTime();
       }
       emitSyncState(isPlayingRef.current ? 'playing' : 'paused', t);
-    }, 8000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [room?.is_host, emitSyncState]);
 
@@ -747,7 +760,21 @@ export const WatchRoom: React.FC = () => {
                     muted={isMuted}
                     volume={volume}
                     onMuteChange={setIsMuted}
-                    onPlaying={() => setIsPlaying(true)}
+                    onPlaying={() => {
+                      setIsPlaying(true);
+                      // Resume from saved position on first play
+                      if (pendingSeekTime.current !== null && !hasResumedRef.current) {
+                        const seekTo = pendingSeekTime.current;
+                        pendingSeekTime.current = null;
+                        hasResumedRef.current = true;
+                        setTimeout(() => {
+                          if (videoEngineRef.current) {
+                            videoEngineRef.current.setCurrentTime(seekTo);
+                            setCurrentTime(seekTo);
+                          }
+                        }, 200);
+                      }
+                    }}
                     onPlayStateChange={setIsPlaying}
                     onTimeUpdate={(t) => {
                       if (!isSeeking) setCurrentTime(t);
