@@ -77,6 +77,9 @@ from app.modules.dashboard.router import router as dashboard_router
 from app.modules.playlists.router import router as playlists_router, legacy_router as playlists_legacy_router
 from app.modules.health.router import router as health_router
 from app.modules.ingestion.router import router as ingestion_router
+from app.modules.watchtogether.router import router as watchtogether_router
+import socketio
+from app.modules.watchtogether.socket_events import sio
 
 app.include_router(playlists_legacy_router, tags=["Legacy"]) # Legacy /p/ support - MUST BE FIRST
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
@@ -88,6 +91,11 @@ app.include_router(epg_router, prefix="/api/epg", tags=["EPG"])
 app.include_router(playlists_router, prefix="/api/playlists", tags=["Playlists"])
 app.include_router(health_router, prefix="/api/health", tags=["Health"])
 app.include_router(ingestion_router, prefix="/api/ingestion", tags=["Ingestion"])
+app.include_router(watchtogether_router, prefix="/api/watchtogether", tags=["WatchTogether"])
+
+# Mount Socket.IO
+sio_app = socketio.ASGIApp(sio, socketio_path="")
+app.mount("/watchtogether/socket.io", sio_app)
 
 # --- Health Check ---
 @app.get("/api/ping")

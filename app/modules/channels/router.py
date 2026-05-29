@@ -295,6 +295,44 @@ async def merge_groups(
     return {'status': 'ok'}
 
 
+@router.get("/pending-shares")
+async def get_pending_shares(
+    user: User = Depends(login_required),
+    db: Session = Depends(get_db),
+):
+    shares = db.query(ChannelShare).filter_by(to_user_id=user.id, status='pending').all()
+    return [{
+        'id': s.id,
+        'channel_id': s.channel_id,
+        'channel_name': s.channel.name if s.channel else '?',
+        'from_user': s.from_user.username if s.from_user else '?',
+        'access_level': s.access_level,
+    } for s in shares]
+
+
+@router.get("/hls-segment")
+async def hls_segment(
+    url: str,
+    db: Session = Depends(get_db),
+):
+    """Proxies individual HLS segments."""
+    from app.modules.channels.services import HLSEngine
+    data = HLSEngine.get_segment(url)
+    if data:
+        return StreamingResponse(iter([data]), media_type="video/mp2t")
+    raise HTTPException(status_code=502, detail="Failed to fetch segment")
+
+
+@router.get("/sessions")
+async def get_sessions(
+    user: User = Depends(admin_required),
+):
+    from app.modules.channels.services import ActiveSessionManager
+    sessions = ActiveSessionManager.get_active_sessions()
+    stats = ActiveSessionManager.get_server_stats()
+    return {'sessions': sessions, 'server_stats': stats}
+
+
 @router.get("/{channel_id}")
 async def get_channel(
     channel_id: int,
@@ -531,20 +569,6 @@ async def accept_share(
     return {'status': 'ok'}
 
 
-@router.get("/pending-shares")
-async def get_pending_shares(
-    user: User = Depends(login_required),
-    db: Session = Depends(get_db),
-):
-    shares = db.query(ChannelShare).filter_by(to_user_id=user.id, status='pending').all()
-    return [{
-        'id': s.id,
-        'channel_id': s.channel_id,
-        'channel_name': s.channel.name if s.channel else '?',
-        'from_user': s.from_user.username if s.from_user else '?',
-        'access_level': s.access_level,
-    } for s in shares]
-
 
 # --- Proxy / Streaming ---
 
@@ -665,29 +689,8 @@ async def play_hls(
     return StreamingResponse(iter([rewritten.encode()]), media_type="application/vnd.apple.mpegurl")
 
 
-@router.get("/hls-segment")
-async def hls_segment(
-    url: str,
-    db: Session = Depends(get_db),
-):
-    """Proxies individual HLS segments."""
-    from app.modules.channels.services import HLSEngine
-    data = HLSEngine.get_segment(url)
-    if data:
-        return StreamingResponse(iter([data]), media_type="video/mp2t")
-    raise HTTPException(status_code=502, detail="Failed to fetch segment")
-
 
 # --- Active Sessions ---
-
-@router.get("/sessions")
-async def get_sessions(
-    user: User = Depends(admin_required),
-):
-    from app.modules.channels.services import ActiveSessionManager
-    sessions = ActiveSessionManager.get_active_sessions()
-    stats = ActiveSessionManager.get_server_stats()
-    return {'sessions': sessions, 'server_stats': stats}
 
 
 @router.post("/sessions/kick")

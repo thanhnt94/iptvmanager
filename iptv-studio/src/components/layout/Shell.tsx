@@ -15,7 +15,8 @@ import {
   X,
   Search,
   FolderTree,
-  Settings
+  Settings,
+  Users
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -35,6 +36,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
   const menuItems = [
     { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/' },
     { icon: <PlayCircle size={20} />, label: 'Live Player', path: '/player' },
+    { icon: <Users size={20} />, label: 'Watch Room', path: '/watch' },
     { icon: <Radio size={20} />, label: 'Channels', path: '/channels' },
     { icon: <ListVideo size={20} />, label: 'Playlists', path: '/playlists' },
     { icon: <Monitor size={20} />, label: 'Monitoring', path: '/streams' },

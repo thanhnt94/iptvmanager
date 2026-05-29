@@ -15,6 +15,8 @@ import { MediaScanner } from './pages/MediaScanner';
 import { GroupManager } from './pages/GroupManager';
 import { PlaylistEditor } from './pages/PlaylistEditor';
 import { ProfilePage } from './pages/Profile';
+import { WatchTogether } from './pages/WatchTogether';
+import { WatchRoom } from './pages/WatchRoom';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -64,6 +66,8 @@ const App: React.FC = () => {
                   <Route path="/epg" element={<EPG />} />
                   <Route path="/player" element={<Player user={user} />} />
                   <Route path="/player/:id" element={<Player user={user} />} />
+                  <Route path="/watch" element={<WatchTogether />} />
+                  <Route path="/watch/:id" element={<WatchRoom />} />
                   <Route path="/import" element={<Import />} />
                   <Route path="/diagnostics" element={<Diagnostics />} />
                   <Route path="/profile" element={<ProfilePage />} />
