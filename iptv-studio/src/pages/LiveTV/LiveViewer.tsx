@@ -125,20 +125,29 @@ export const LiveViewer: React.FC = () => {
 
         <div className="flex-1 relative w-full h-full flex items-center justify-center bg-black pointer-events-none">
           {src ? (
-            <div className="w-full h-full pointer-events-auto">
-              <VideoEngine
-                ref={videoEngineRef}
-                url={src.url}
-                format={src.format}
-                type="live" // Always treat as live to hide seek controls in CSS if needed
-                onPlaying={() => {
-                  if (data.seek_time > 0 && !currentProg.is_live_stream) {
-                    if (videoEngineRef.current) {
-                      videoEngineRef.current.setCurrentTime(data.seek_time);
+            <div className="w-full h-full pointer-events-auto relative">
+              {src.provider === 'youtube' ? (
+                <iframe
+                  src={`https://www.youtube.com/embed/${src.url}?autoplay=1&controls=0&start=${Math.floor(data.seek_time)}&rel=0&showinfo=0&modestbranding=1&mute=0`}
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen
+                  className="w-full h-full border-none pointer-events-none"
+                />
+              ) : (
+                <VideoEngine
+                  ref={videoEngineRef}
+                  url={src.url}
+                  format={src.format}
+                  type="live" // Always treat as live to hide seek controls in CSS if needed
+                  onPlaying={() => {
+                    if (data.seek_time > 0 && !currentProg.is_live_stream) {
+                      if (videoEngineRef.current) {
+                        videoEngineRef.current.setCurrentTime(data.seek_time);
+                      }
                     }
-                  }
-                }}
-              />
+                  }}
+                />
+              )}
               {/* Overlay to block user clicks from pausing the video (true TV feel) */}
               <div className="absolute inset-0 z-[12]" />
             </div>

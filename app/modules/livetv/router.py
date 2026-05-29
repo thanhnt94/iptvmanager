@@ -4,7 +4,7 @@ from typing import List
 from datetime import datetime, timezone
 from app.core.database import get_db
 from app.modules.livetv import models, schemas
-from app.modules.auth.dependencies import get_current_user
+from app.core.auth_deps import get_current_user
 from app.modules.auth.models import User
 
 router = APIRouter()
