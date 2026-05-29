@@ -647,6 +647,34 @@ export const WatchRoom: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
+  // Send final sync before tab close (so DB has accurate time for resume)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const r = roomRef.current;
+      const s = socketRef.current;
+      if (!r?.is_host || !s) return;
+
+      let t = 0;
+      const src = videoSourceRef.current;
+      if (src.provider === 'video' && videoEngineRef.current?.videoElement) {
+        t = videoEngineRef.current.videoElement.currentTime;
+      } else if (src.provider === 'youtube' && ytPlayerRef.current?.getCurrentTime) {
+        t = ytPlayerRef.current.getCurrentTime();
+      }
+
+      // Use sendBeacon-style emit (sync_state) before socket disconnects
+      s.emit('sync_state', {
+        room_id: r.id,
+        state: isPlayingRef.current ? 'playing' : 'paused',
+        time: t,
+        video_id: r.current_video_id,
+        is_host: true
+      });
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   /* ═══════════════════════ Render ═══════════════════════ */
 
   if (loading) {

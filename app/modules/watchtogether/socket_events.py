@@ -15,6 +15,9 @@ sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
 # In-memory store for room presence
 ROOM_PRESENCE = {}
+# In-memory store for last known playback state per room (avoids extra DB writes)
+# { room_id: { 'time': float, 'is_playing': bool, 'video_id': str, 'updated_at': datetime } }
+ROOM_PLAYBACK_STATE = {}
 
 class DBSession:
     def __enter__(self) -> Session:
@@ -38,12 +41,29 @@ async def on_connect(sid, environ):
 async def on_disconnect(sid):
     logger.info(f"SocketDisconnected: {sid}")
     target_room = None
+    was_host = False
     for room_id, users in list(ROOM_PRESENCE.items()):
         if sid in users:
+            was_host = users[sid].get('is_host', False)
             del users[sid]
             target_room = room_id
             break
     if target_room:
+        # If host disconnected, flush last known playback state to DB
+        if was_host and target_room in ROOM_PLAYBACK_STATE:
+            state = ROOM_PLAYBACK_STATE[target_room]
+            with DBSession() as db:
+                room = db.query(WTRoom).filter_by(id=target_room).first()
+                if room:
+                    room.current_time = int(state.get('time', 0))
+                    room.is_playing = state.get('is_playing', False)
+                    room.last_updated = datetime.now(timezone.utc)
+                    try:
+                        db.commit()
+                        logger.info(f"Host disconnected from {target_room}: saved time={room.current_time}")
+                    except Exception as e:
+                        db.rollback()
+                        logger.error(f"Error saving host disconnect state: {e}")
         await broadcast_presence(target_room)
 
 @sio.on('join', namespace='/watchtogether')
@@ -94,9 +114,20 @@ async def on_join(sid, data):
     # Track online presence
     if room_id not in ROOM_PRESENCE:
         ROOM_PRESENCE[room_id] = {}
+    
+    # Check if this user is the host
+    is_host_user = False
+    if user_id:
+        with DBSession() as db:
+            room = db.query(WTRoom).filter_by(id=room_id).first()
+            if room and room.host_id == user_id:
+                is_host_user = True
+    
     ROOM_PRESENCE[room_id][sid] = {
         'username': username,
-        'is_member': user_id is not None
+        'is_member': user_id is not None,
+        'is_host': is_host_user,
+        'user_id': user_id
     }
     await broadcast_presence(room_id)
 
@@ -152,12 +183,22 @@ async def on_sync_state(sid, data):
         can_control = is_host or room.allow_guest_control
         
         if can_control:
+            # Update in-memory playback state (fast, no DB write)
+            ROOM_PLAYBACK_STATE[room_id] = {
+                'time': float(time) if time is not None else 0,
+                'is_playing': (state == 'playing') if state else True,
+                'video_id': video_id,
+                'updated_at': datetime.now(timezone.utc)
+            }
+            
+            # Write to DB less frequently — only on sync_state (every 15s from frontend)
             if video_id: 
                 room.current_video_id = video_id
             if state: 
                 room.is_playing = (state == 'playing')
             if time is not None: 
                 room.current_time = int(float(time))
+            room.last_updated = datetime.now(timezone.utc)
             try:
                 db.commit()
             except Exception as e:

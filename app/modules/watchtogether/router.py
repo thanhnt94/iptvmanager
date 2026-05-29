@@ -98,6 +98,18 @@ async def get_room(
 
     host_user = db.query(User).filter_by(id=room.host_id).first()
 
+    # Smart resume: if video was playing, calculate where it should be now
+    resume_time = room.current_time or 0
+    if room.is_playing and room.last_updated:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        last = room.last_updated
+        # Ensure last_updated is timezone-aware
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        elapsed_seconds = (now - last).total_seconds()
+        resume_time = int(resume_time + elapsed_seconds)
+
     return {
         "id": room.id,
         "name": room.name,
@@ -105,7 +117,7 @@ async def get_room(
         "host_username": host_user.username if host_user else "Unknown",
         "current_video_id": room.current_video_id,
         "is_playing": room.is_playing,
-        "current_time": room.current_time,
+        "current_time": resume_time,
         "allow_guest_control": room.allow_guest_control,
         "is_public": room.is_public,
         "is_host": is_host,
