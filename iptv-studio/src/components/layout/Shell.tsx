@@ -16,7 +16,8 @@ import {
   Search,
   FolderTree,
   Settings,
-  Users
+  Users,
+  MonitorPlay
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -38,6 +39,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
     { icon: <PlayCircle size={20} />, label: 'Live Player', path: '/player' },
     { icon: <Users size={20} />, label: 'Watch Room', path: '/watch' },
     { icon: <Radio size={20} />, label: 'Channels', path: '/channels' },
+    { icon: <MonitorPlay size={20} />, label: 'Đài Truyền Hình', path: '/tv' },
     { icon: <ListVideo size={20} />, label: 'Playlists', path: '/playlists' },
     { icon: <Monitor size={20} />, label: 'Monitoring', path: '/streams' },
     { icon: <Calendar size={20} />, label: 'EPG Registry', path: '/epg' },

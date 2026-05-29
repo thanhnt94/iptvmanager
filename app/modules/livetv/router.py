@@ -1,0 +1,123 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from datetime import datetime, timezone
+from app.core.database import get_db
+from app.modules.livetv import models, schemas
+from app.modules.auth.dependencies import get_current_user
+from app.modules.auth.models import User
+
+router = APIRouter()
+
+@router.get("/channels", response_model=List[schemas.TVChannelResponse])
+def get_channels(db: Session = Depends(get_db)):
+    """List all active TV channels with their programs."""
+    return db.query(models.TVChannel).filter(models.TVChannel.is_active == True).all()
+
+@router.get("/channels/{slug}/current", response_model=schemas.TVCurrentProgramResponse)
+def get_current_program(slug: str, db: Session = Depends(get_db)):
+    """Core logic: Calculate what is playing RIGHT NOW based on server time."""
+    channel = db.query(models.TVChannel).filter(models.TVChannel.slug == slug, models.TVChannel.is_active == True).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    now = datetime.now(timezone.utc)
+    current_program = None
+    seek_time = 0.0
+    upcoming = []
+
+    if channel.type == 'loop':
+        programs = db.query(models.TVProgram).filter(models.TVProgram.channel_id == channel.id).order_by(models.TVProgram.order_index).all()
+        if not programs:
+            return {"channel_id": channel.id, "channel_name": channel.name, "channel_type": channel.type, "program": None, "seek_time": 0, "upcoming": []}
+            
+        total_duration = sum(p.duration_seconds for p in programs)
+        if total_duration == 0:
+            return {"channel_id": channel.id, "channel_name": channel.name, "channel_type": channel.type, "program": None, "seek_time": 0, "upcoming": []}
+
+        # Ensure epoch is aware
+        epoch = channel.epoch_time
+        if epoch.tzinfo is None:
+            epoch = epoch.replace(tzinfo=timezone.utc)
+            
+        elapsed = (now - epoch).total_seconds()
+        
+        # If epoch is in the future, we haven't started yet
+        if elapsed < 0:
+            return {"channel_id": channel.id, "channel_name": channel.name, "channel_type": channel.type, "program": None, "seek_time": 0, "upcoming": programs}
+
+        current_pos = elapsed % total_duration
+        accumulated = 0
+        
+        found_idx = -1
+        for i, p in enumerate(programs):
+            if accumulated <= current_pos < accumulated + p.duration_seconds:
+                current_program = p
+                seek_time = current_pos - accumulated
+                found_idx = i
+                break
+            accumulated += p.duration_seconds
+            
+        if current_program:
+            # Add next 3 upcoming programs (circular)
+            for i in range(1, min(4, len(programs))):
+                upcoming.append(programs[(found_idx + i) % len(programs)])
+            
+            # If it's a relay live stream, we don't seek
+            if current_program.is_live_stream:
+                seek_time = 0
+
+    elif channel.type == 'schedule':
+        # Get all programs starting today or playing now
+        programs = db.query(models.TVProgram).filter(
+            models.TVProgram.channel_id == channel.id,
+            models.TVProgram.start_time.isnot(None)
+        ).order_by(models.TVProgram.start_time).all()
+        
+        for p in programs:
+            start = p.start_time
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+                
+            start_ts = start.timestamp()
+            end_ts = start_ts + p.duration_seconds
+            now_ts = now.timestamp()
+            
+            if start_ts <= now_ts < end_ts:
+                current_program = p
+                seek_time = now_ts - start_ts
+                if current_program.is_live_stream:
+                    seek_time = 0
+            elif now_ts < start_ts and len(upcoming) < 5:
+                upcoming.append(p)
+                
+    return {
+        "channel_id": channel.id,
+        "channel_name": channel.name,
+        "channel_type": channel.type,
+        "program": current_program,
+        "seek_time": seek_time,
+        "upcoming": upcoming
+    }
+
+# --- Admin APIs for CRUD ---
+
+@router.post("/channels", response_model=schemas.TVChannelResponse)
+def create_channel(channel: schemas.TVChannelCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role != 'admin':
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db_channel = models.TVChannel(**channel.dict())
+    db.add(db_channel)
+    db.commit()
+    db.refresh(db_channel)
+    return db_channel
+
+@router.post("/programs", response_model=schemas.TVProgramResponse)
+def create_program(program: schemas.TVProgramCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role != 'admin':
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db_prog = models.TVProgram(**program.dict())
+    db.add(db_prog)
+    db.commit()
+    db.refresh(db_prog)
+    return db_prog

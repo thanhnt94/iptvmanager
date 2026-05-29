@@ -78,6 +78,7 @@ from app.modules.playlists.router import router as playlists_router, legacy_rout
 from app.modules.health.router import router as health_router
 from app.modules.ingestion.router import router as ingestion_router
 from app.modules.watchtogether.router import router as watchtogether_router
+from app.modules.livetv.router import router as livetv_router
 import socketio
 from app.modules.watchtogether.socket_events import sio
 
@@ -92,6 +93,7 @@ app.include_router(playlists_router, prefix="/api/playlists", tags=["Playlists"]
 app.include_router(health_router, prefix="/api/health", tags=["Health"])
 app.include_router(ingestion_router, prefix="/api/ingestion", tags=["Ingestion"])
 app.include_router(watchtogether_router, prefix="/api/watchtogether", tags=["WatchTogether"])
+app.include_router(livetv_router, prefix="/api/livetv", tags=["LiveTV"])
 
 # Mount Socket.IO
 sio_app = socketio.ASGIApp(sio, socketio_path="")

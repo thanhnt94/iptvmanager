@@ -17,6 +17,8 @@ import { PlaylistEditor } from './pages/PlaylistEditor';
 import { ProfilePage } from './pages/Profile';
 import { WatchTogether } from './pages/WatchTogether';
 import { WatchRoom } from './pages/WatchRoom';
+import { LiveTVDirectory } from './pages/LiveTV/LiveTVDirectory';
+import { LiveViewer } from './pages/LiveTV/LiveViewer';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -68,6 +70,8 @@ const App: React.FC = () => {
                   <Route path="/player/:id" element={<Player user={user} />} />
                   <Route path="/watch" element={<WatchTogether />} />
                   <Route path="/watch/:id" element={<WatchRoom />} />
+                  <Route path="/tv" element={<LiveTVDirectory />} />
+                  <Route path="/tv/:slug" element={<LiveViewer />} />
                   <Route path="/import" element={<Import />} />
                   <Route path="/diagnostics" element={<Diagnostics />} />
                   <Route path="/profile" element={<ProfilePage />} />

@@ -80,6 +80,7 @@ def init_db():
     from app.modules.health import models as _health_models       # noqa: F401
     from app.modules.settings import models as _settings_models   # noqa: F401
     from app.modules.watchtogether import models as _wt_models     # noqa: F401
+    from app.modules.livetv import models as _livetv_models       # noqa: F401
 
     # Ensure database directory exists
     if Config.DB_PATH:
