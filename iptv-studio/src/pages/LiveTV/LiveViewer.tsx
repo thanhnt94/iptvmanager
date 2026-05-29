@@ -60,7 +60,7 @@ export const LiveViewer: React.FC = () => {
   
   // Player State
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -127,6 +127,7 @@ export const LiveViewer: React.FC = () => {
           playerVars: {
             start: Math.floor(data.seek_time || 0),
             autoplay: 1,
+            mute: 1,
             controls: 0,
             rel: 0,
             showinfo: 0,
@@ -231,6 +232,7 @@ export const LiveViewer: React.FC = () => {
                   format={src.format}
                   type="live"
                   controls={false}
+                  autoPlay={true}
                   muted={isMuted}
                   volume={volume}
                   onPlayStateChange={setIsPlaying}

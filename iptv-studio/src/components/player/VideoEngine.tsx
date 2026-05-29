@@ -25,6 +25,7 @@ interface VideoEngineProps {
   muted?: boolean;
   volume?: number;
   controls?: boolean;
+  autoPlay?: boolean;
 }
 
 export interface VideoEngineRef {
@@ -52,7 +53,8 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
   onStatsUpdate,
   muted = false,
   volume = 1,
-  controls = false
+  controls = false,
+  autoPlay = false
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -278,6 +280,7 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
       onError={() => onError?.("Media Stream Error: Check your gateway or source connection.")}
       muted={muted}
       controls={controls}
+      autoPlay={autoPlay}
       playsInline
     />
   );
