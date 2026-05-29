@@ -84,27 +84,57 @@ declare global {
 function detectFormat(url: string | null): string {
   if (!url) return 'hls';
   const low = url.toLowerCase();
-  if (low.includes('.m3u8') || low.includes('hls-manifest') || low.includes('hls')) return 'hls';
-  if (low.includes('.ts') || low.includes('/play/') || low.includes('ts')) return 'ts';
+  if (low.includes('.m3u8') || low.includes('hls-manifest') || low.includes('proxy_hls_manifest')) return 'hls';
+  if (low.includes('.ts') || low.includes('/play/') || low.includes('proxy_stream')) return 'ts';
   if (low.includes('.mp4')) return 'mp4';
+  if (low.includes('.flv')) return 'flv';
   return 'hls';
+}
+
+function isYoutubeUrl(url: string): boolean {
+  return (
+    url.includes('youtube.com/watch') ||
+    url.includes('youtube.com/embed') ||
+    url.includes('youtube.com/shorts') ||
+    url.includes('youtu.be/') ||
+    url.includes('youtube.com/live/')
+  );
+}
+
+function extractYoutubeId(rawUrl: string): string | null {
+  try {
+    if (rawUrl.includes('youtu.be/')) {
+      return rawUrl.split('youtu.be/')[1].split(/[?&#]/)[0] || null;
+    }
+    if (rawUrl.includes('youtube.com/shorts/')) {
+      return rawUrl.split('/shorts/')[1].split(/[?&#]/)[0] || null;
+    }
+    if (rawUrl.includes('youtube.com/live/')) {
+      return rawUrl.split('/live/')[1].split(/[?&#]/)[0] || null;
+    }
+    if (rawUrl.includes('youtube.com/embed/')) {
+      return rawUrl.split('/embed/')[1].split(/[?&#]/)[0] || null;
+    }
+    if (rawUrl.includes('v=')) {
+      const urlParams = new URLSearchParams(new URL(rawUrl).search);
+      return urlParams.get('v') || null;
+    }
+  } catch { /* fallback */ }
+  // Bare 11-char video ID (e.g. "dQw4w9WgXcQ")
+  if (/^[A-Za-z0-9_-]{11}$/.test(rawUrl)) return rawUrl;
+  return null;
 }
 
 function resolveSource(rawUrl: string | null): VideoSource {
   if (!rawUrl) return { url: null, format: 'hls', provider: 'video' };
 
-  const isYoutube = rawUrl.length === 11 || rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be');
-  if (isYoutube) {
-    let ytId = rawUrl;
-    try {
-      if (rawUrl.includes('v=')) {
-        const urlParams = new URLSearchParams(new URL(rawUrl).search);
-        ytId = urlParams.get('v') || rawUrl;
-      } else if (rawUrl.includes('youtu.be/')) {
-        ytId = rawUrl.split('youtu.be/')[1].split('?')[0];
-      }
-    } catch { /* fallback to raw */ }
-    return { url: ytId, format: 'youtube', provider: 'youtube' };
+  if (isYoutubeUrl(rawUrl)) {
+    const ytId = extractYoutubeId(rawUrl);
+    if (ytId) return { url: ytId, format: 'youtube', provider: 'youtube' };
+  }
+  // Bare 11-char ID
+  if (/^[A-Za-z0-9_-]{11}$/.test(rawUrl.trim())) {
+    return { url: rawUrl.trim(), format: 'youtube', provider: 'youtube' };
   }
 
   return { url: rawUrl, format: detectFormat(rawUrl), provider: 'video' };
@@ -505,6 +535,9 @@ export const WatchRoom: React.FC = () => {
       setCurrentTime(data.start_time || 0);
       setDuration(0);
 
+      // Show the playing URL in the input field for host
+      setCustomUrl(data.video_id || '');
+
       setRoom(prev => prev ? { ...prev, current_video_id: data.video_id } : null);
 
       // Trigger play after state update
@@ -512,6 +545,8 @@ export const WatchRoom: React.FC = () => {
         if (src.provider === 'video' && videoEngineRef.current) {
           videoEngineRef.current.setCurrentTime(data.start_time || 0);
           videoEngineRef.current.play();
+        } else if (src.provider === 'youtube' && src.url) {
+          initYoutubePlayer(src.url, data.start_time || 0);
         }
       }, 300);
     });
@@ -918,10 +953,16 @@ export const WatchRoom: React.FC = () => {
                   <div className="relative flex-shrink-0">
                     <select
                       onChange={(e) => {
-                        if (e.target.value) handleChangeVideo(e.target.value);
+                        const url = e.target.value;
+                        if (url) {
+                          setCustomUrl(url);
+                          handleChangeVideo(url);
+                          // Reset select to placeholder after picking
+                          e.target.value = '';
+                        }
                       }}
                       className="appearance-none bg-slate-950 border border-white/10 text-white text-xs pl-8 pr-6 py-2.5 rounded-xl outline-none cursor-pointer hover:border-indigo-500/50 transition-colors min-w-[160px]"
-                      defaultValue=""
+                      value=""
                     >
                       <option value="" disabled>📺 Chọn kênh IPTV</option>
                       {systemChannels.map(ch => (
@@ -965,10 +1006,18 @@ export const WatchRoom: React.FC = () => {
 
               {/* Now Playing indicator */}
               {hasVideo && (
-                <div className="flex items-center gap-2 text-[10px]">
+                <div className="flex items-center gap-2 text-[10px] min-w-0">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  <span className="text-slate-500 font-bold">Đang phát:</span>
-                  <span className="text-slate-400 truncate font-mono">{room.current_video_id?.substring(0, 60)}{(room.current_video_id?.length || 0) > 60 && '...'}</span>
+                  <span className="text-slate-500 font-bold shrink-0">Đang phát:</span>
+                  {videoSource.provider === 'youtube' ? (
+                    <span className="text-rose-400 font-bold shrink-0">▶ YouTube ({videoSource.url})</span>
+                  ) : (
+                    <span className="text-slate-400 truncate font-mono" title={videoSource.url || ''}>
+                      {videoSource.url && videoSource.url.length > 80
+                        ? videoSource.url.substring(0, 80) + '...'
+                        : videoSource.url}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
