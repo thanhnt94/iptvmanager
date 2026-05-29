@@ -21,7 +21,8 @@ import {
   Link2,
   Radio,
   SkipForward,
-  MonitorPlay
+  MonitorPlay,
+  WifiOff
 } from 'lucide-react';
 import { VideoEngine } from '../components/player/VideoEngine';
 import type { VideoEngineRef } from '../components/player/VideoEngine';
@@ -165,7 +166,7 @@ export const WatchRoom: React.FC = () => {
 
   // Real-time Chat and Presence
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [presence, setPresence] = useState({ total: 1, members: 0, guests: 1 });
+  const [presence, setPresence] = useState({ total: 1, members: 0, guests: 1, host_online: true });
   const [chatList, setChatList] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
 
@@ -473,6 +474,20 @@ export const WatchRoom: React.FC = () => {
   };
 
   /* ═══════════════════════ Effects ═══════════════════════ */
+
+  // Pause if host goes offline
+  useEffect(() => {
+    if (!room) return;
+    const isCtrl = room.is_host || room.allow_guest_control;
+    if (!isCtrl && !presence.host_online) {
+      setIsPlaying(false);
+      if (videoEngineRef.current) {
+        videoEngineRef.current.pause();
+      } else if (ytPlayerRef.current?.pauseVideo) {
+        ytPlayerRef.current.pauseVideo();
+      }
+    }
+  }, [presence.host_online, room]);
 
   // Periodic host sync
   useEffect(() => {
@@ -817,6 +832,19 @@ export const WatchRoom: React.FC = () => {
                     className="absolute inset-0 z-[12] cursor-pointer"
                     onClick={handleTogglePlay}
                   />
+                )}
+
+                {/* Host Offline Overlay */}
+                {!isControlMaster && !presence.host_online && (
+                  <div className="absolute inset-0 z-[30] flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm text-white">
+                    <div className="w-16 h-16 rounded-full bg-slate-800/80 flex items-center justify-center mb-4 border border-white/10">
+                      <WifiOff size={28} className="text-slate-400" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Kênh Ngoại Tuyến</h3>
+                    <p className="text-slate-400 text-sm max-w-xs text-center">
+                      Chủ phòng đã rời đi. Kênh sẽ tự động phát tiếp ngay khi chủ phòng quay lại.
+                    </p>
+                  </div>
                 )}
 
                 {/* Player Controls Overlay — fades on idle */}

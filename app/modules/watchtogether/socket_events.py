@@ -31,7 +31,13 @@ async def broadcast_presence(room_id):
     total = len(users)
     members = sum(1 for u in users.values() if u.get('is_member'))
     guests = total - members
-    await sio.emit('presence_update', {'total': total, 'members': members, 'guests': guests}, room=room_id, namespace='/watchtogether')
+    host_online = any(u.get('is_host') for u in users.values())
+    await sio.emit('presence_update', {
+        'total': total, 
+        'members': members, 
+        'guests': guests,
+        'host_online': host_online
+    }, room=room_id, namespace='/watchtogether')
 
 @sio.on('connect', namespace='/watchtogether')
 async def on_connect(sid, environ):
