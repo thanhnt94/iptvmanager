@@ -34,33 +34,60 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
     setIsSidebarOpen(false);
   }, [location]);
 
-  const menuItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/' },
-    { icon: <PlayCircle size={20} />, label: 'Live Player', path: '/player' },
-    { icon: <Users size={20} />, label: 'Watch Room', path: '/watch' },
-    { icon: <Radio size={20} />, label: 'Channels', path: '/channels' },
-    { icon: <MonitorPlay size={20} />, label: 'Đài Truyền Hình', path: '/tv' },
-    { icon: <Settings size={20} />, label: 'Quản Lý Kênh TV', path: '/tv-manager' },
-    { icon: <ListVideo size={20} />, label: 'Playlists', path: '/playlists' },
-    { icon: <Monitor size={20} />, label: 'Monitoring', path: '/streams' },
-    { icon: <Calendar size={20} />, label: 'EPG Registry', path: '/epg' },
-    { icon: <CloudDownload size={20} />, label: 'Ingestion', path: '/import' },
-    { icon: <Activity size={20} />, label: 'Diagnostics', path: '/diagnostics' },
-    { icon: <Settings size={20} />, label: 'Account Settings', path: '/profile' },
+  const menuGroups = [
+    {
+      label: 'Main',
+      items: [
+        { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/' },
+      ]
+    },
+    {
+      label: 'Viewer',
+      items: [
+        { icon: <PlayCircle size={20} />, label: 'Live Player', path: '/player' },
+        { icon: <Users size={20} />, label: 'Watch Room', path: '/watch' },
+        { icon: <MonitorPlay size={20} />, label: 'TV & Playlists', path: '/tv' },
+      ]
+    },
+    {
+      label: 'Content Management',
+      items: [
+        { icon: <Radio size={20} />, label: 'Signal Registry', path: '/channels' },
+        { icon: <Settings size={20} />, label: 'TV Channels', path: '/tv-manager' },
+        { icon: <ListVideo size={20} />, label: 'Playlists', path: '/playlists' },
+        { icon: <Calendar size={20} />, label: 'EPG Registry', path: '/epg' },
+      ]
+    },
+    {
+      label: 'Tools & System',
+      items: [
+        { icon: <CloudDownload size={20} />, label: 'Ingestion', path: '/import' },
+        { icon: <Monitor size={20} />, label: 'Monitoring', path: '/streams' },
+        { icon: <Activity size={20} />, label: 'Diagnostics', path: '/diagnostics' },
+      ]
+    }
   ];
 
   if (user.role === 'admin' || user.role === 'vip') {
-    menuItems.push(
+    menuGroups.find(g => g.label === 'Tools & System')?.items.unshift(
       { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' }
     );
   }
 
+  const adminGroup = {
+    label: 'Administration',
+    items: [
+      { icon: <Settings size={20} />, label: 'Account Settings', path: '/profile' }
+    ]
+  };
+
   if (user.role === 'admin') {
-    menuItems.push(
+    adminGroup.items.unshift(
       { icon: <FolderTree size={20} />, label: 'Group Manager', path: '/groups' },
       { icon: <ShieldCheck size={20} />, label: 'Admin Portal', path: '/admin' }
     );
   }
+  menuGroups.push(adminGroup);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col lg:flex-row">
@@ -111,18 +138,25 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
            </button>
         </div>
 
-        <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-          {menuItems.map(item => (
-            <NavLink 
-              key={item.path} 
-              to={item.path}
-              className={({ isActive }) => `flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all ${
-                isActive ? 'bg-indigo-500/10 text-indigo-400 font-bold' : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              {item.icon}
-              <span className="text-sm font-semibold tracking-wide">{item.label}</span>
-            </NavLink>
+        <nav className="flex-1 px-4 py-4 space-y-6 overflow-y-auto scrollbar-hide">
+          {menuGroups.map((group) => (
+            <div key={group.label}>
+              <h3 className="px-4 text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2">{group.label}</h3>
+              <div className="space-y-1">
+                {group.items.map(item => (
+                  <NavLink 
+                    key={item.path} 
+                    to={item.path}
+                    className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
+                      isActive ? 'bg-indigo-500/10 text-indigo-400 font-bold' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    {item.icon}
+                    <span className="text-sm font-semibold tracking-wide">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
