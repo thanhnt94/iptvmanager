@@ -20,6 +20,8 @@ playwright
 playwright-stealth
 beautifulsoup4
 httpx
+python-socketio
+python-engineio
 jinja2
 python-dateutil
 lxml
