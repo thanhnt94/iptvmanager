@@ -74,11 +74,11 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
 
     // If editing, load channel data
     if (channelId) {
-      fetch(`/api/channels/${channelId}/info`)
+      fetch(`/api/channels/${channelId}`)
         .then(res => res.json())
         .then(data => {
-          if (data.status === 'ok') {
-            const ch = data.channel;
+          if (data && data.name) {
+            const ch = data;
             setFormData({
               name: ch.name || '',
               stream_url: ch.stream_url || '',
@@ -89,7 +89,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
               is_original: !!ch.is_original,
               is_passthrough: !!ch.is_passthrough,
               is_public: !!ch.is_public,
-              selected_playlists: data.memberships || []
+              selected_playlists: ch.playlists?.map((p: any) => p.playlist_id) || []
             });
           }
           setInitialLoading(false);
@@ -103,8 +103,8 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
     setLoading(true);
     setError(null);
 
-    const endpoint = channelId ? `/api/channels/${channelId}` : '/api/channels/add';
-    const method = channelId ? 'PATCH' : 'POST';
+    const endpoint = channelId ? `/api/channels/${channelId}` : '/api/channels';
+    const method = channelId ? 'PUT' : 'POST';
 
     try {
       const res = await fetch(endpoint, {
@@ -115,10 +115,22 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
 
       const data = await res.json();
       if (res.ok) {
+        const id = channelId || data.id;
+        if (id) {
+           const playlistData = formData.selected_playlists.reduce((acc: any, pid) => {
+             acc[pid] = null;
+             return acc;
+           }, {});
+           await fetch(`/api/channels/sync-playlists/${id}`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ playlists: playlistData })
+           });
+        }
         onSuccess();
         onClose();
       } else {
-        setError(data.error || 'Failed to save channel');
+        setError(data.detail || data.error || 'Failed to save channel');
       }
     } catch (err) {
       setError('Network error');

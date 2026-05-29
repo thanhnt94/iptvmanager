@@ -391,6 +391,7 @@ async def create_channel(
         stream_format=stream_format,
         proxy_type=data.get('proxy_type', 'none'),
         is_original=data.get('is_original', False),
+        is_passthrough=data.get('is_passthrough', False),
         owner_id=user.id,
         status='unknown',
     )
@@ -416,6 +417,9 @@ async def update_channel(
 
     if 'is_original' in data:
         channel.is_original = bool(data['is_original'])
+        
+    if 'is_passthrough' in data:
+        channel.is_passthrough = bool(data['is_passthrough'])
 
     if 'is_public' in data and user.role == 'admin':
         channel.is_public = bool(data['is_public'])
