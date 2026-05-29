@@ -19,6 +19,7 @@ import { WatchTogether } from './pages/WatchTogether';
 import { WatchRoom } from './pages/WatchRoom';
 import { LiveTVDirectory } from './pages/LiveTV/LiveTVDirectory';
 import { LiveViewer } from './pages/LiveTV/LiveViewer';
+import { TVManager } from './pages/LiveTV/TVManager';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -72,6 +73,7 @@ const App: React.FC = () => {
                   <Route path="/watch/:id" element={<WatchRoom />} />
                   <Route path="/tv" element={<LiveTVDirectory />} />
                   <Route path="/tv/:slug" element={<LiveViewer />} />
+                  <Route path="/tv-manager" element={<TVManager />} />
                   <Route path="/import" element={<Import />} />
                   <Route path="/diagnostics" element={<Diagnostics />} />
                   <Route path="/profile" element={<ProfilePage />} />

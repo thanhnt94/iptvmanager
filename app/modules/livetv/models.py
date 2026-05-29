@@ -9,6 +9,7 @@ class TVChannel(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     slug = Column(String, unique=True, index=True, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     logo = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     type = Column(String, nullable=False, default='loop') # 'loop' or 'schedule'

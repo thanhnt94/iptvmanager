@@ -40,6 +40,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
     { icon: <Users size={20} />, label: 'Watch Room', path: '/watch' },
     { icon: <Radio size={20} />, label: 'Channels', path: '/channels' },
     { icon: <MonitorPlay size={20} />, label: 'Đài Truyền Hình', path: '/tv' },
+    { icon: <Settings size={20} />, label: 'Quản Lý Kênh TV', path: '/tv-manager' },
     { icon: <ListVideo size={20} />, label: 'Playlists', path: '/playlists' },
     { icon: <Monitor size={20} />, label: 'Monitoring', path: '/streams' },
     { icon: <Calendar size={20} />, label: 'EPG Registry', path: '/epg' },

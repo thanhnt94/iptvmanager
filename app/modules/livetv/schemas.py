@@ -33,11 +33,15 @@ class TVChannelCreate(TVChannelBase):
 
 class TVChannelResponse(TVChannelBase):
     id: int
+    owner_id: Optional[int] = None
     epoch_time: datetime
     created_at: datetime
     programs: List[TVProgramResponse] = []
     class Config:
         orm_mode = True
+
+class BulkProgramsUpdate(BaseModel):
+    programs: List[TVProgramCreate]
 
 class TVCurrentProgramResponse(BaseModel):
     channel_id: int

@@ -102,11 +102,21 @@ def get_current_program(slug: str, db: Session = Depends(get_db)):
 
 # --- Admin APIs for CRUD ---
 
+@router.get("/my", response_model=List[schemas.TVChannelResponse])
+def get_my_channels(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """List channels owned by the current user."""
+    if user.role not in ['admin', 'vip']:
+        raise HTTPException(status_code=403, detail="Forbidden. Only Admin or VIP can manage channels.")
+    if user.role == 'admin':
+        return db.query(models.TVChannel).all()
+    return db.query(models.TVChannel).filter(models.TVChannel.owner_id == user.id).all()
+
 @router.post("/channels", response_model=schemas.TVChannelResponse)
 def create_channel(channel: schemas.TVChannelCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if user.role != 'admin':
-        raise HTTPException(status_code=403, detail="Forbidden")
-    db_channel = models.TVChannel(**channel.dict())
+    if user.role not in ['admin', 'vip']:
+        raise HTTPException(status_code=403, detail="Forbidden. Only Admin or VIP can create channels.")
+    
+    db_channel = models.TVChannel(**channel.dict(), owner_id=user.id)
     db.add(db_channel)
     db.commit()
     db.refresh(db_channel)
@@ -114,10 +124,33 @@ def create_channel(channel: schemas.TVChannelCreate, db: Session = Depends(get_d
 
 @router.post("/programs", response_model=schemas.TVProgramResponse)
 def create_program(program: schemas.TVProgramCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if user.role != 'admin':
+    if user.role not in ['admin', 'vip']:
         raise HTTPException(status_code=403, detail="Forbidden")
     db_prog = models.TVProgram(**program.dict())
     db.add(db_prog)
     db.commit()
     db.refresh(db_prog)
     return db_prog
+
+@router.put("/channels/{channel_id}/programs/bulk")
+def bulk_update_programs(channel_id: int, payload: schemas.BulkProgramsUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role not in ['admin', 'vip']:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    channel = db.query(models.TVChannel).filter_by(id=channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+        
+    if user.role != 'admin' and channel.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your channel")
+
+    # Delete old
+    db.query(models.TVProgram).filter(models.TVProgram.channel_id == channel_id).delete()
+    
+    # Add new
+    for prog in payload.programs:
+        db.add(models.TVProgram(**prog.dict()))
+        
+    db.commit()
+    return {"status": "ok"}
+
