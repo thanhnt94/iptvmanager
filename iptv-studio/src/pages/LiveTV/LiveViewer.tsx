@@ -68,6 +68,7 @@ export const LiveViewer: React.FC = () => {
   const ytPlayerRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number | null>(null);
+  const hasSeekedRef = useRef(false);
   const ytContainerId = `yt-player-${slug}`;
 
   const loadCurrentProgram = async () => {
@@ -157,6 +158,10 @@ export const LiveViewer: React.FC = () => {
     initYoutubePlayer();
   }, [data?.program?.video_url, slug]);
 
+  useEffect(() => {
+    hasSeekedRef.current = false;
+  }, [data?.program?.id]);
+
   const handleTogglePlay = () => {
     const next = !isPlaying;
     setIsPlaying(next);
@@ -237,9 +242,10 @@ export const LiveViewer: React.FC = () => {
                   volume={volume}
                   onPlayStateChange={setIsPlaying}
                   onPlaying={() => {
-                    if (data.seek_time > 0 && !currentProg.is_live_stream) {
+                    if (data.seek_time > 0 && !currentProg.is_live_stream && !hasSeekedRef.current) {
                       if (videoEngineRef.current) {
                         videoEngineRef.current.setCurrentTime(data.seek_time);
+                        hasSeekedRef.current = true;
                       }
                     }
                   }}
