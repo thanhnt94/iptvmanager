@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Tv, ListVideo, Loader2, ArrowLeft } from 'lucide-react';
+import { Tv, ListVideo, Loader2, ArrowLeft, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
 import { VideoEngine } from '../../components/player/VideoEngine';
 import type { VideoEngineRef } from '../../components/player/VideoEngine';
 
@@ -57,8 +57,18 @@ export const LiveViewer: React.FC = () => {
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Player State
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const videoEngineRef = useRef<VideoEngineRef>(null);
+  const ytPlayerRef = useRef<any>(null);
+  const playerContainerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number | null>(null);
+  const ytContainerId = `yt-player-${slug}`;
 
   const loadCurrentProgram = async () => {
     try {
@@ -94,6 +104,90 @@ export const LiveViewer: React.FC = () => {
     };
   }, [slug]);
 
+  // YouTube API Initialization
+  useEffect(() => {
+    if (!data || !data.program) return;
+    const src = resolveSource(data.program.video_url);
+    if (src.provider !== 'youtube' || !src.url) return;
+
+    const initYoutubePlayer = () => {
+      if (ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.loadVideoById(src.url, data.seek_time || 0);
+          ytPlayerRef.current.playVideo();
+          return;
+        } catch (e) { console.error(e); }
+      }
+
+      const setupPlayer = () => {
+        ytPlayerRef.current = new (window as any).YT.Player(ytContainerId, {
+          height: '100%',
+          width: '100%',
+          videoId: src.url,
+          playerVars: {
+            start: Math.floor(data.seek_time || 0),
+            autoplay: 1,
+            controls: 0,
+            rel: 0,
+            showinfo: 0,
+            disablekb: 1,
+            modestbranding: 1
+          },
+          events: {
+            onStateChange: (event: any) => {
+              if (event.data === 1) setIsPlaying(true);
+              else if (event.data === 2) setIsPlaying(false);
+            }
+          }
+        });
+      };
+
+      if ((window as any).YT?.Player) {
+        setupPlayer();
+      } else {
+        (window as any).onYouTubeIframeAPIReady = setupPlayer;
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      }
+    };
+
+    initYoutubePlayer();
+  }, [data?.program?.video_url, slug]);
+
+  const handleTogglePlay = () => {
+    const next = !isPlaying;
+    setIsPlaying(next);
+    const src = resolveSource(data?.program?.video_url);
+
+    if (src.provider === 'video' && videoEngineRef.current) {
+      if (next) videoEngineRef.current.play();
+      else videoEngineRef.current.pause();
+    } else if (src.provider === 'youtube' && ytPlayerRef.current) {
+      if (next) ytPlayerRef.current.playVideo();
+      else ytPlayerRef.current.pauseVideo();
+    }
+  };
+
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      playerContainerRef.current?.requestFullscreen().catch(console.error);
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(console.error);
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-black">
@@ -123,23 +217,23 @@ export const LiveViewer: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex-1 relative w-full h-full flex items-center justify-center bg-black pointer-events-auto">
+        <div ref={playerContainerRef} className="flex-1 relative w-full h-full flex items-center justify-center bg-black group/player">
           {src ? (
-            <div className="w-full h-full relative group">
+            <div className="w-full h-full relative">
               {src.provider === 'youtube' ? (
-                <iframe
-                  src={`https://www.youtube.com/embed/${src.url}?autoplay=1&controls=1&start=${Math.floor(data.seek_time)}&rel=0&showinfo=0&modestbranding=1&mute=0`}
-                  allow="autoplay; encrypted-media; fullscreen"
-                  allowFullScreen
-                  className="w-full h-full border-none"
-                />
+                <div className="w-full h-full">
+                  <div id={ytContainerId} className="w-full h-full pointer-events-none" />
+                </div>
               ) : (
                 <VideoEngine
                   ref={videoEngineRef}
                   url={src.url}
                   format={src.format}
-                  type="live" // Always treat as live to hide seek controls in CSS if needed
-                  controls={true}
+                  type="live"
+                  controls={false}
+                  muted={isMuted}
+                  volume={volume}
+                  onPlayStateChange={setIsPlaying}
                   onPlaying={() => {
                     if (data.seek_time > 0 && !currentProg.is_live_stream) {
                       if (videoEngineRef.current) {
@@ -149,6 +243,63 @@ export const LiveViewer: React.FC = () => {
                   }}
                 />
               )}
+              {/* Overlay to block user clicks from pausing the video (true TV feel) */}
+              <div className="absolute inset-0 z-[12]" />
+
+              {/* Custom Controls */}
+              <div className="absolute bottom-0 left-0 right-0 z-[20] bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover/player:opacity-100 transition-opacity duration-300 pt-16 pb-4 px-4 md:px-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleTogglePlay}
+                      className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/10 hover:bg-indigo-600 text-white transition-all"
+                    >
+                      {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const next = !isMuted;
+                          setIsMuted(next);
+                          if (src.provider === 'youtube' && ytPlayerRef.current) {
+                            next ? ytPlayerRef.current.mute() : ytPlayerRef.current.unMute();
+                          }
+                        }}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white transition-all"
+                      >
+                        {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={volume}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          setVolume(v);
+                          setIsMuted(v === 0);
+                          if (src.provider === 'youtube' && ytPlayerRef.current) {
+                            ytPlayerRef.current.setVolume(v * 100);
+                            if (v > 0) ytPlayerRef.current.unMute();
+                          }
+                        }}
+                        className="w-20 h-1 accent-indigo-500 cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleToggleFullscreen}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white transition-all"
+                    >
+                      {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center text-slate-500">
