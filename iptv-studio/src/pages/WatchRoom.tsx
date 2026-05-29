@@ -834,9 +834,48 @@ export const WatchRoom: React.FC = () => {
                   </div>
                 )}
 
-                {/* Non-controller blocker */}
+                {/* Non-controller: volume + fullscreen only */}
                 {!isControlMaster && (
-                  <div className="absolute inset-0 bg-transparent z-[15] cursor-default" />
+                  <>
+                    <div className="absolute inset-0 bg-transparent z-[15] cursor-default" />
+                    <div className="absolute bottom-0 left-0 right-0 z-[20] bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover/player:opacity-100 transition-opacity duration-300 pb-3 px-4">
+                      <div className="flex items-center gap-2">
+                        {/* Mute toggle */}
+                        <button
+                          onClick={() => {
+                            const next = !isMuted;
+                            setIsMuted(next);
+                            videoEngineRef.current?.setMuted(next);
+                          }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white transition-all"
+                        >
+                          {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                        </button>
+                        {/* Volume slider */}
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={isMuted ? 0 : volume}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            setVolume(v);
+                            setIsMuted(v === 0);
+                            videoEngineRef.current?.setVolume(v);
+                          }}
+                          className="w-24 h-1 accent-indigo-500 cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
+                        />
+                        {/* Fullscreen */}
+                        <button
+                          onClick={handleToggleFullscreen}
+                          className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white transition-all"
+                        >
+                          {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
               </>
             ) : (
