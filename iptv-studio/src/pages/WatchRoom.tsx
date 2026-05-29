@@ -966,7 +966,7 @@ export const WatchRoom: React.FC = () => {
                     >
                       <option value="" disabled>📺 Chọn kênh IPTV</option>
                       {systemChannels.map(ch => (
-                        <option key={ch.id} value={ch.play_links?.hls || ch.play_url}>{ch.name}</option>
+                        <option key={ch.id} value={ch.play_links?.original || ch.play_url}>{ch.name}</option>
                       ))}
                     </select>
                     <Tv size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
