@@ -136,6 +136,40 @@ async def on_watch_heartbeat(sid, data):
     # Optional watch time stats
     pass
 
+# Cache for room permissions
+ROOM_CACHE = {} # { room_id: { 'host_id': int, 'allow_guest_control': bool } }
+
+import asyncio
+
+def _get_room_perms(room_id):
+    with DBSession() as db:
+        room = db.query(WTRoom).filter_by(id=room_id).first()
+        if room:
+            return {'host_id': room.host_id, 'allow_guest_control': room.allow_guest_control}
+    return None
+
+async def get_room_perms(room_id):
+    if room_id not in ROOM_CACHE:
+        perms = await asyncio.to_thread(_get_room_perms, room_id)
+        if perms:
+            ROOM_CACHE[room_id] = perms
+    return ROOM_CACHE.get(room_id)
+
+def _save_video_change(room_id, new_video_id, start_time):
+    with DBSession() as db:
+        room = db.query(WTRoom).filter_by(id=room_id).first()
+        if room:
+            room.current_video_id = new_video_id
+            room.current_time = start_time
+            room.is_playing = True
+            hist = WTVideoHistory(room_id=room_id, video_id=new_video_id)
+            db.add(hist)
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error changing video: {e}")
+
 @sio.on('change_video', namespace='/watchtogether')
 async def on_change_video(sid, data):
     room_id = data.get('room_id')
@@ -146,23 +180,27 @@ async def on_change_video(sid, data):
     if not room_id or not new_video_id:
         return
         
+    perms = await get_room_perms(room_id)
+    if perms and (is_host or perms['allow_guest_control']):
+        # Broadcast instantly
+        await sio.emit('video_changed', {'video_id': new_video_id, 'start_time': start_time}, room=room_id, namespace='/watchtogether')
+        await sio.emit('system_message', {'msg': 'Danh sách đã chuyển sang Video mới!'}, room=room_id, namespace='/watchtogether')
+        # Save to DB in background
+        asyncio.create_task(asyncio.to_thread(_save_video_change, room_id, new_video_id, start_time))
+
+def _save_sync_state(room_id, state, time, video_id):
     with DBSession() as db:
         room = db.query(WTRoom).filter_by(id=room_id).first()
-        if room and (is_host or room.allow_guest_control):
-            room.current_video_id = new_video_id
-            room.current_time = start_time
-            room.is_playing = True
-            
-            hist = WTVideoHistory(room_id=room_id, video_id=new_video_id)
-            db.add(hist)
-            
+        if room:
+            if video_id: room.current_video_id = video_id
+            if state: room.is_playing = (state == 'playing')
+            if time is not None: room.current_time = int(float(time))
+            room.last_updated = datetime.now(timezone.utc)
             try:
                 db.commit()
-                await sio.emit('video_changed', {'video_id': new_video_id, 'start_time': start_time}, room=room_id, namespace='/watchtogether')
-                await sio.emit('system_message', {'msg': 'Danh sách đã chuyển sang Video mới!'}, room=room_id, namespace='/watchtogether')
             except Exception as e:
                 db.rollback()
-                logger.error(f"Error changing video: {e}")
+                logger.error(f"Error syncing room state db: {e}")
 
 @sio.on('sync_state', namespace='/watchtogether')
 async def on_sync_state(sid, data):
@@ -175,41 +213,22 @@ async def on_sync_state(sid, data):
     if not room_id:
         return
 
-    with DBSession() as db:
-        room = db.query(WTRoom).filter_by(id=room_id).first()
-        if not room:
-            return
-        
-        can_control = is_host or room.allow_guest_control
-        
-        if can_control:
-            # Update in-memory playback state (fast, no DB write)
-            ROOM_PLAYBACK_STATE[room_id] = {
-                'time': float(time) if time is not None else 0,
-                'is_playing': (state == 'playing') if state else True,
-                'video_id': video_id,
-                'updated_at': datetime.now(timezone.utc)
-            }
-            
-            # Write to DB less frequently — only on sync_state (every 15s from frontend)
-            if video_id: 
-                room.current_video_id = video_id
-            if state: 
-                room.is_playing = (state == 'playing')
-            if time is not None: 
-                room.current_time = int(float(time))
-            room.last_updated = datetime.now(timezone.utc)
-            try:
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Error syncing room state db: {e}")
-                
-            await sio.emit('receive_state', data, room=room_id, skip_sid=sid, namespace='/watchtogether')
+    perms = await get_room_perms(room_id)
+    if perms and (is_host or perms['allow_guest_control']):
+        # Update in-memory playback state
+        ROOM_PLAYBACK_STATE[room_id] = {
+            'time': float(time) if time is not None else 0,
+            'is_playing': (state == 'playing') if state else True,
+            'video_id': video_id,
+            'updated_at': datetime.now(timezone.utc)
+        }
+        # Broadcast instantly (0 lag!)
+        await sio.emit('receive_state', data, room=room_id, skip_sid=sid, namespace='/watchtogether')
+        # Save to DB in background
+        asyncio.create_task(asyncio.to_thread(_save_sync_state, room_id, state, time, video_id))
 
 @sio.on('host_seek', namespace='/watchtogether')
 async def on_host_seek(sid, data):
-    """Instant seek broadcast — no DB write for low-latency response."""
     room_id = data.get('room_id')
     time = data.get('time')
     is_host = data.get('is_host', False)
@@ -217,13 +236,22 @@ async def on_host_seek(sid, data):
     if not room_id or time is None:
         return
 
+    perms = await get_room_perms(room_id)
+    if perms and (is_host or perms['allow_guest_control']):
+        await sio.emit('receive_seek', {'time': time}, room=room_id, skip_sid=sid, namespace='/watchtogether')
+
+def _save_chat(room_id, username, message, video_id, timestamp):
     with DBSession() as db:
-        room = db.query(WTRoom).filter_by(id=room_id).first()
-        if not room:
-            return
-        can_control = is_host or room.allow_guest_control
-        if can_control:
-            await sio.emit('receive_seek', {'time': time}, room=room_id, skip_sid=sid, namespace='/watchtogether')
+        msg = WTChatMessage(room_id=room_id, username=username, message=message, video_id=video_id, timestamp=timestamp)
+        db.add(msg)
+        try:
+            db.commit()
+            db.refresh(msg)
+            return msg.id, msg.created_at
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error saving chat: {e}")
+            return None, None
 
 @sio.on('chat_message', namespace='/watchtogether')
 async def on_chat_message(sid, data):
@@ -233,36 +261,23 @@ async def on_chat_message(sid, data):
     video_id = data.get('video_id')
     timestamp = data.get('timestamp')
     if room_id and message:
-        with DBSession() as db:
-            try:
-                msg = WTChatMessage(room_id=room_id, username=username, message=message, video_id=video_id, timestamp=timestamp)
-                db.add(msg)
-                db.commit()
-                db.refresh(msg)
-                
-                await sio.emit('chat_message', {
-                    'id': msg.id,
-                    'username': username, 
-                    'message': message,
-                    'video_id': video_id,
-                    'timestamp': timestamp,
-                    'reactions': '{}',
-                    'created_at': msg.created_at.isoformat() + 'Z' if msg.created_at else None
-                }, room=room_id, namespace='/watchtogether')
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Error saving chat: {e}")
-
-@sio.on('add_reaction', namespace='/watchtogether')
-async def on_add_reaction(sid, data):
-    room_id = data.get('room_id')
-    message_id = data.get('message_id')
-    emoji = data.get('emoji')
-    username = data.get('username')
-    
-    if not all([room_id, message_id, emoji, username]):
-        return
+        # Broadcast immediately using a temporary ID
+        temp_id = int(datetime.now().timestamp() * 1000)
+        chat_payload = {
+            'id': temp_id,
+            'username': username, 
+            'message': message,
+            'video_id': video_id,
+            'timestamp': timestamp,
+            'reactions': '{}',
+            'created_at': datetime.now(timezone.utc).isoformat() + 'Z'
+        }
+        await sio.emit('chat_message', chat_payload, room=room_id, namespace='/watchtogether')
         
+        # Save in background
+        asyncio.create_task(asyncio.to_thread(_save_chat, room_id, username, message, video_id, timestamp))
+
+def _save_reaction(room_id, message_id, emoji, username):
     with DBSession() as db:
         msg = db.query(WTChatMessage).filter_by(id=message_id, room_id=room_id).first()
         if msg:
@@ -292,7 +307,23 @@ async def on_add_reaction(sid, data):
             msg.reactions = new_rx
             try:
                 db.commit()
-                await sio.emit('reaction_updated', {'message_id': message_id, 'reactions': new_rx}, room=room_id, namespace='/watchtogether')
+                return new_rx
             except Exception as e:
                 db.rollback()
                 logger.error(f"Error updating reactions: {e}")
+    return None
+
+@sio.on('add_reaction', namespace='/watchtogether')
+async def on_add_reaction(sid, data):
+    room_id = data.get('room_id')
+    message_id = data.get('message_id')
+    emoji = data.get('emoji')
+    username = data.get('username')
+    
+    if not all([room_id, message_id, emoji, username]):
+        return
+        
+    # Process DB update in thread, then broadcast
+    new_rx = await asyncio.to_thread(_save_reaction, room_id, message_id, emoji, username)
+    if new_rx:
+        await sio.emit('reaction_updated', {'message_id': message_id, 'reactions': new_rx}, room=room_id, namespace='/watchtogether')

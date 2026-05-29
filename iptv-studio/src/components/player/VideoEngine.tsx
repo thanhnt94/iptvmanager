@@ -14,7 +14,6 @@ interface VideoEngineProps {
   format?: string | null;
   originalUrl?: string;
   type?: 'live' | 'vod';
-  startTime?: number;
   onPlaying?: () => void;
   onWaiting?: () => void;
   onError?: (error: string) => void;
@@ -42,7 +41,6 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
   format,
   originalUrl,
   type = 'live',
-  startTime = 0,
   onPlaying,
   onWaiting,
   onError,
@@ -185,10 +183,6 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
         hls.loadSource(url);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          // Seek BEFORE playing so video starts at the right position
-          if (startTime > 0) {
-            video.currentTime = startTime;
-          }
           safePlay(video.play());
         });
         hls.on(Hls.Events.ERROR, (_, data) => {
@@ -211,7 +205,6 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
         hlsRef.current = hls;
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
-        if (startTime > 0) video.currentTime = startTime;
         safePlay(video.play());
       }
     } else if (isFLV && flvjs.isSupported()) {
@@ -230,7 +223,6 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
         onError?.(`FLV Engine Error: ${type} - ${detail}`);
       });
       player.load();
-      if (startTime > 0) video.currentTime = startTime;
       safePlay(player.play());
       flvRef.current = player;
     } else if (isTS) {
@@ -249,18 +241,16 @@ export const VideoEngine = forwardRef<VideoEngineRef, VideoEngineProps>(({
            onError?.(`MPEG-TS Engine Error: ${type} - ${detail}`);
         });
         player.load();
-        if (startTime > 0) video.currentTime = startTime;
         safePlay(player.play());
         mpegtsRef.current = player;
       }
     } else {
       video.src = url;
-      if (startTime > 0) video.currentTime = startTime;
       safePlay(video.play());
     }
 
     return cleanup;
-  }, [url, format, type, startTime]);
+  }, [url, format, type]);
 
   const handlePlaying = () => {
     onPlaying?.();
