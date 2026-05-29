@@ -12,7 +12,7 @@ interface PlayerHUDProps {
   channel: {
     id: number; name: string; logo_url: string | null; group: string;
     resolution: string; stream_format: string; epg_id?: string | null;
-    play_links?: { smart: string; direct: string; tracking: string; hls: string; ts: string; };
+    play_links?: { [key: string]: string | undefined };
   } | null;
   isPlaying: boolean; isMuted: boolean; volume: number;
   onTogglePlay: () => void; onToggleMute: () => void;
@@ -292,7 +292,12 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                         </button>
                       </header>
                       <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto scrollbar-hide">
-                        {channel.play_links && Object.entries(channel.play_links).map(([mode, url]) => (
+                        {channel.play_links && Object.entries(channel.play_links).map(([mode, rawUrl]) => {
+                          let url = rawUrl;
+                          if (typeof url === 'string' && url.startsWith('/')) {
+                            url = `${window.location.origin}${url}`;
+                          }
+                          return (
                           <div key={mode} className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/5 transition-all">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">{mode}</span>
@@ -307,7 +312,8 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
                               {url as string}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </motion.div>
                   </motion.div>

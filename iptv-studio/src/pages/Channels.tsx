@@ -59,11 +59,11 @@ interface Channel {
   last_checked: string;
   play_url?: string;
   play_links?: {
-    smart: string;
-    direct: string;
-    tracking: string;
-    hls: string;
-    ts: string;
+    original?: string;
+    smart?: string;
+    hls?: string;
+    ts?: string;
+    [key: string]: any;
   };
 }
 
@@ -1234,14 +1234,17 @@ export const Channels: React.FC = () => {
                   </header>
 
                   <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                      {shareChannel.play_links && (['direct', 'tracking', 'smart', 'hls', 'ts'] as const).map((mode) => {
-                        const url = shareChannel.play_links?.[mode];
+                      {shareChannel.play_links && (['original', 'smart', 'hls', 'ts'] as const).map((mode) => {
+                        let url = shareChannel.play_links?.[mode];
                         if (!url) return null;
 
+                        if (typeof url === 'string' && url.startsWith('/')) {
+                          url = `${window.location.origin}${url}`;
+                        }
+
                         const labelMap: Record<string, string> = {
-                          'smart': 'SMart Dynamic Gateway',
-                          'tracking': 'Direct Landing Track',
-                          'direct': 'Original Source Link',
+                          'smart': 'Smart Dynamic Gateway',
+                          'original': 'Original Source Link',
                           'hls': 'HLS Edge Cache',
                           'ts': 'TS Stream Proxy'
                         };

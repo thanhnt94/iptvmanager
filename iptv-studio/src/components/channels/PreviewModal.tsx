@@ -10,13 +10,7 @@ interface PreviewModalProps {
     stream_url: string;
     stream_type?: string;
     stream_format?: string;
-    play_links?: {
-      smart: string;
-      direct: string;
-      tracking: string;
-      hls: string;
-      ts: string;
-    };
+    play_links?: { [key: string]: string | undefined };
   } | null;
   onClose: () => void;
 }
