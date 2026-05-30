@@ -64,6 +64,10 @@ export const LiveViewer: React.FC = () => {
   const [volume, setVolume] = useState(() => parseFloat(localStorage.getItem('livetv_volume') || '1'));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [countdown, setCountdown] = useState<string>('');
+  
+  // Video playback time state
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
 
   const videoEngineRef = useRef<VideoEngineRef>(null);
   const ytPlayerRef = useRef<any>(null);
@@ -195,15 +199,31 @@ export const LiveViewer: React.FC = () => {
     hasSeekedRef.current = false;
   }, [data?.program?.id]);
 
+  const currentProg = data?.program;
+  const src = currentProg ? resolveSource(currentProg.video_url) : null;
+
+  useEffect(() => {
+    // For YouTube time tracking
+    let ytInterval: any;
+    if (src?.provider === 'youtube' && isPlaying) {
+      ytInterval = setInterval(() => {
+        if (ytPlayerRef.current?.getCurrentTime) {
+          setCurrentTime(ytPlayerRef.current.getCurrentTime());
+          setDuration(ytPlayerRef.current.getDuration() || 0);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(ytInterval);
+  }, [src?.provider, isPlaying]);
+
   const handleTogglePlay = () => {
     const next = !isPlaying;
     setIsPlaying(next);
-    const src = resolveSource(data?.program?.video_url);
 
-    if (src.provider === 'video' && videoEngineRef.current) {
+    if (src?.provider === 'video' && videoEngineRef.current) {
       if (next) videoEngineRef.current.play();
       else videoEngineRef.current.pause();
-    } else if (src.provider === 'youtube' && ytPlayerRef.current) {
+    } else if (src?.provider === 'youtube' && ytPlayerRef.current) {
       if (next) ytPlayerRef.current.playVideo();
       else ytPlayerRef.current.pauseVideo();
     }
@@ -264,9 +284,18 @@ export const LiveViewer: React.FC = () => {
 
   if (!data) return null;
 
-  const currentProg = data.program;
   const upcoming = data.upcoming || [];
-  const src = currentProg ? resolveSource(currentProg.video_url) : null;
+
+  const formatTime = (seconds: number) => {
+    if (!seconds || isNaN(seconds)) return '00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col lg:flex-row overflow-hidden bg-[#070b14] animate-in fade-in duration-500 font-sans">
@@ -301,6 +330,8 @@ export const LiveViewer: React.FC = () => {
                   muted={isMuted}
                   volume={volume}
                   onPlayStateChange={setIsPlaying}
+                  onTimeUpdate={setCurrentTime}
+                  onDurationChange={setDuration}
                   onPlaying={() => {
                     if (data.seek_time > 0 && !currentProg.is_live_stream && !hasSeekedRef.current) {
                       if (videoEngineRef.current) {
@@ -359,8 +390,15 @@ export const LiveViewer: React.FC = () => {
                             if (v > 0) ytPlayerRef.current.unMute();
                           }
                         }}
-                        className="w-20 h-1 accent-indigo-500 cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                        className="w-20 h-1 accent-indigo-500 cursor-pointer opacity-60 hover:opacity-100 transition-opacity mr-2"
                       />
+                      
+                      <div className="hidden sm:flex text-xs font-mono text-white/80 select-none">
+                        <span>{formatTime(currentTime)}</span>
+                        {duration > 0 && !currentProg.is_live_stream && (
+                          <span className="text-white/40 before:content-['/'] before:mx-1">{formatTime(duration)}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
