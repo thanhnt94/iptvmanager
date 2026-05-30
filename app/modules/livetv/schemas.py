@@ -26,7 +26,8 @@ class TVChannelBase(BaseModel):
     logo: Optional[str] = None
     description: Optional[str] = None
     type: str = 'loop'
-    show_watermark: bool = True
+    timezone: str = 'Asia/Ho_Chi_Minh'
+    show_watermark: Optional[bool] = True
     is_active: bool = True
 
 class TVChannelCreate(TVChannelBase):

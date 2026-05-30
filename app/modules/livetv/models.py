@@ -13,6 +13,7 @@ class TVChannel(Base):
     logo = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     type = Column(String, nullable=False, default='loop') # 'loop' or 'schedule'
+    timezone = Column(String, nullable=False, default='Asia/Ho_Chi_Minh')
     show_watermark = Column(Boolean, default=True)
     epoch_time = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     is_active = Column(Boolean, default=True)

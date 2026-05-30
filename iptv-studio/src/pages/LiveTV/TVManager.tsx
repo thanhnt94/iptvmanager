@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Save, Tv, Loader2, ArrowUp, ArrowDown, Settings2, Image as ImageIcon, Video, CalendarDays, GripVertical, CheckCircle2, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatInTimeZone, toDate } from 'date-fns-tz';
+
+const TIMEZONES = [
+  'UTC', 'Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'Asia/Tokyo', 'Asia/Seoul', 
+  'Europe/London', 'America/New_York', 'America/Los_Angeles'
+];
 
 export const TVManager: React.FC = () => {
   const [channels, setChannels] = useState<any[]>([]);
@@ -16,6 +22,7 @@ export const TVManager: React.FC = () => {
   const [slug, setSlug] = useState('');
   const [logo, setLogo] = useState('');
   const [type, setType] = useState('loop');
+  const [timezone, setTimezone] = useState('Asia/Ho_Chi_Minh');
   const [showWatermark, setShowWatermark] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -49,17 +56,20 @@ export const TVManager: React.FC = () => {
     setSlug(ch.slug);
     setLogo(ch.logo || '');
     setType(ch.type);
+    setTimezone(ch.timezone || 'Asia/Ho_Chi_Minh');
     setShowWatermark(ch.show_watermark !== false); // default true
     setActiveTab('general');
     
     // Format programs for editing
+    const chTz = ch.timezone || 'Asia/Ho_Chi_Minh';
     const formattedProgs = (ch.programs || []).map((p: any) => {
       let bDate = '';
       let bTime = '';
       if (p.start_time) {
-        const d = new Date(p.start_time);
-        bDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        bTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        // p.start_time is returned as UTC from server. It might miss 'Z'.
+        const utcStr = p.start_time.endsWith('Z') ? p.start_time : p.start_time + 'Z';
+        bDate = formatInTimeZone(utcStr, chTz, 'yyyy-MM-dd');
+        bTime = formatInTimeZone(utcStr, chTz, 'HH:mm:ss');
       }
       return {
         ...p,
@@ -84,6 +94,7 @@ export const TVManager: React.FC = () => {
     setSlug('');
     setLogo('');
     setType('loop');
+    setTimezone('Asia/Ho_Chi_Minh');
     setShowWatermark(true);
     setPrograms([]);
     setActiveTab('general');
@@ -92,7 +103,7 @@ export const TVManager: React.FC = () => {
   const handleSaveChannel = async () => {
     setSaving(true);
     try {
-      const payload = { name, slug, logo, type, show_watermark: showWatermark, is_active: true };
+      const payload = { name, slug, logo, type, timezone, show_watermark: showWatermark, is_active: true };
       let channelId = selectedChannel?.id;
       
       if (selectedChannel?.isNew) {
@@ -101,16 +112,16 @@ export const TVManager: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (!res.ok) throw new Error("Failed to create channel");
-        const newCh = await res.json();
-        channelId = newCh.id;
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail);
+        channelId = data.id;
       } else {
-         // Update existing
-         await fetch(`/api/livetv/channels/${channelId}`, {
-           method: 'PUT',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify(payload)
-         });
+        const res = await fetch(`/api/livetv/channels/${channelId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Update failed');
       }
       
       // Save programs
@@ -118,8 +129,11 @@ export const TVManager: React.FC = () => {
         const progsPayload = programs.map((p, idx) => {
           let st = null;
           if (type === 'schedule' && p.broadcast_date && p.broadcast_time) {
-            const d = new Date(`${p.broadcast_date}T${p.broadcast_time}`);
-            st = d.toISOString();
+            try {
+              const bTime = p.broadcast_time.split(':').length === 2 ? p.broadcast_time + ':00' : p.broadcast_time;
+              const dateObj = toDate(`${p.broadcast_date}T${bTime}`, { timeZone: timezone });
+              st = dateObj.toISOString();
+            } catch(e) { console.error(e); }
           }
           return {
             channel_id: channelId,
@@ -329,7 +343,18 @@ export const TVManager: React.FC = () => {
                       <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                          <Tv size={12} /> Station Name
                       </label>
-                      <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-950/50 border border-white/10 rounded-2xl px-5 py-4 text-white text-sm font-black focus:outline-none focus:border-indigo-500 focus:bg-slate-900 transition-all" placeholder="e.g. VTV1 HD" />
+                      <input 
+                        type="text" 
+                        value={name} 
+                        onChange={e => {
+                          setName(e.target.value);
+                          if (!slug || selectedChannel?.isNew) {
+                            setSlug(e.target.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''));
+                          }
+                        }} 
+                        className="w-full bg-slate-950/50 border border-white/10 rounded-2xl px-5 py-4 text-white text-sm font-black focus:outline-none focus:border-indigo-500 focus:bg-slate-900 transition-all" 
+                        placeholder="e.g. VTV1 HD" 
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -369,6 +394,26 @@ export const TVManager: React.FC = () => {
                           <div className="text-[11px] text-slate-400 font-medium leading-relaxed mt-1">Strictly schedule programs with exact broadcast dates and times. Missing slots will display a placeholder.</div>
                         </div>
                       </label>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-white/5 space-y-4">
+                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                       Timezone Settings
+                    </label>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                        Select the timezone for this station. All EPG Schedule times will be interpreted and displayed in this timezone.
+                      </p>
+                      <select 
+                        value={timezone} 
+                        onChange={e => setTimezone(e.target.value)} 
+                        className="w-full md:w-1/2 bg-slate-950/50 border border-white/10 rounded-2xl px-5 py-3 text-white text-sm font-black focus:outline-none focus:border-indigo-500 focus:bg-slate-900 transition-all cursor-pointer"
+                      >
+                        {TIMEZONES.map(tz => (
+                          <option key={tz} value={tz}>{tz}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -485,6 +530,7 @@ export const TVManager: React.FC = () => {
                                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Start Time</span>
                                       <input 
                                         type="time" 
+                                        step="1"
                                         value={prog.broadcast_time} 
                                         onChange={e => updateProgram(prog.uid, 'broadcast_time', e.target.value)} 
                                         className="bg-transparent border-none text-indigo-300 text-sm font-black focus:outline-none appearance-none [&::-webkit-calendar-picker-indicator]:invert" 
