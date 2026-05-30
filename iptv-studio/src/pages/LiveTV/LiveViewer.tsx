@@ -83,10 +83,21 @@ export const LiveViewer: React.FC = () => {
         
         if (result.program) {
           const remaining = result.program.duration_seconds - result.seek_time;
-          if (remaining > 0) {
+          let timeoutTime = remaining * 1000 + 500; // 500ms buffer
+          
+          // If the next program is scheduled to start BEFORE the current program naturally ends
+          if (result.upcoming && result.upcoming.length > 0 && result.upcoming[0].start_time) {
+            const nextStartMs = new Date(result.upcoming[0].start_time).getTime();
+            const timeToNext = nextStartMs - new Date().getTime();
+            if (timeToNext > 0 && timeToNext < timeoutTime) {
+              timeoutTime = timeToNext + 1000; // 1s buffer after start
+            }
+          }
+
+          if (timeoutTime > 0) {
             timerRef.current = window.setTimeout(() => {
               loadCurrentProgram();
-            }, remaining * 1000 + 500); // 500ms buffer to ensure backend is ready
+            }, timeoutTime);
           }
         } else if (result.upcoming && result.upcoming.length > 0) {
           const nextProg = result.upcoming[0];
