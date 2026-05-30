@@ -16,6 +16,7 @@ export const TVManager: React.FC = () => {
   const [slug, setSlug] = useState('');
   const [logo, setLogo] = useState('');
   const [type, setType] = useState('loop');
+  const [showWatermark, setShowWatermark] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // EPG Active Date
@@ -48,6 +49,7 @@ export const TVManager: React.FC = () => {
     setSlug(ch.slug);
     setLogo(ch.logo || '');
     setType(ch.type);
+    setShowWatermark(ch.show_watermark !== false); // default true
     setActiveTab('general');
     
     // Format programs for editing
@@ -82,6 +84,7 @@ export const TVManager: React.FC = () => {
     setSlug('');
     setLogo('');
     setType('loop');
+    setShowWatermark(true);
     setPrograms([]);
     setActiveTab('general');
   };
@@ -89,7 +92,7 @@ export const TVManager: React.FC = () => {
   const handleSaveChannel = async () => {
     setSaving(true);
     try {
-      const payload = { name, slug, logo, type, is_active: true };
+      const payload = { name, slug, logo, type, show_watermark: showWatermark, is_active: true };
       let channelId = selectedChannel?.id;
       
       if (selectedChannel?.isNew) {
@@ -341,7 +344,6 @@ export const TVManager: React.FC = () => {
                       <input type="text" value={logo} onChange={e => setLogo(e.target.value)} className="w-full bg-slate-950/50 border border-white/10 rounded-2xl px-5 py-4 text-slate-300 text-sm font-mono focus:outline-none focus:border-indigo-500 focus:bg-slate-900 transition-all" placeholder="https://..." />
                     </div>
                   </div>
-
                   <div className="pt-6 border-t border-white/5 space-y-4">
                     <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                        Broadcasting Mode
@@ -350,6 +352,7 @@ export const TVManager: React.FC = () => {
                       <label className={`flex items-start gap-4 p-5 rounded-3xl cursor-pointer border transition-all ${type === 'loop' ? 'bg-indigo-500/10 border-indigo-500/50 shadow-lg shadow-indigo-500/10' : 'bg-slate-950/30 border-white/5 hover:border-white/20'}`}>
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${type === 'loop' ? 'border-indigo-500' : 'border-slate-600'}`}>
                            {type === 'loop' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />}
+                           <input type="radio" className="hidden" checked={type === 'loop'} onChange={() => setType('loop')} />
                         </div>
                         <div>
                           <div className="font-black text-white uppercase tracking-tight">Loop Playlist</div>
@@ -359,6 +362,7 @@ export const TVManager: React.FC = () => {
                       <label className={`flex items-start gap-4 p-5 rounded-3xl cursor-pointer border transition-all ${type === 'schedule' ? 'bg-indigo-500/10 border-indigo-500/50 shadow-lg shadow-indigo-500/10' : 'bg-slate-950/30 border-white/5 hover:border-white/20'}`}>
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${type === 'schedule' ? 'border-indigo-500' : 'border-slate-600'}`}>
                            {type === 'schedule' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />}
+                           <input type="radio" className="hidden" checked={type === 'schedule'} onChange={() => setType('schedule')} />
                         </div>
                         <div>
                           <div className="font-black text-white uppercase tracking-tight">EPG Schedule</div>
@@ -366,6 +370,19 @@ export const TVManager: React.FC = () => {
                         </div>
                       </label>
                     </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-white/5 space-y-4">
+                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                       Player Settings
+                    </label>
+                    <label className="flex items-center gap-4 cursor-pointer">
+                      <div className="relative inline-block w-12 h-6 rounded-full transition-colors" style={{ backgroundColor: showWatermark ? '#6366f1' : '#334155' }}>
+                        <input type="checkbox" className="hidden" checked={showWatermark} onChange={e => setShowWatermark(e.target.checked)} />
+                        <span className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${showWatermark ? 'translate-x-6' : 'translate-x-0'}`} />
+                      </div>
+                      <span className="text-sm font-bold text-white">Show Logo Watermark on Player</span>
+                    </label>
                   </div>
                 </motion.div>
               )}

@@ -106,6 +106,8 @@ def get_current_program(slug: str, db: Session = Depends(get_db)):
         "channel_id": channel.id,
         "channel_name": channel.name,
         "channel_type": channel.type,
+        "logo": channel.logo,
+        "show_watermark": channel.show_watermark,
         "program": current_program,
         "seek_time": seek_time,
         "upcoming": upcoming

@@ -26,6 +26,7 @@ class TVChannelBase(BaseModel):
     logo: Optional[str] = None
     description: Optional[str] = None
     type: str = 'loop'
+    show_watermark: bool = True
     is_active: bool = True
 
 class TVChannelCreate(TVChannelBase):
@@ -47,6 +48,8 @@ class TVCurrentProgramResponse(BaseModel):
     channel_id: int
     channel_name: str
     channel_type: str
+    logo: Optional[str] = None
+    show_watermark: bool = True
     program: Optional[TVProgramResponse] = None
     seek_time: float = 0 # Offset in seconds to start playing
     upcoming: List[TVProgramResponse] = []

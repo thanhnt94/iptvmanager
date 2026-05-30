@@ -61,8 +61,9 @@ export const LiveViewer: React.FC = () => {
   // Player State
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(() => parseFloat(localStorage.getItem('livetv_volume') || '1'));
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [countdown, setCountdown] = useState<string>('');
 
   const videoEngineRef = useRef<VideoEngineRef>(null);
   const ytPlayerRef = useRef<any>(null);
@@ -226,6 +227,33 @@ export const LiveViewer: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    if (!data || data.program || !data.upcoming || data.upcoming.length === 0) {
+      setCountdown('');
+      return;
+    }
+    const nextProg = data.upcoming[0];
+    if (!nextProg.start_time) return;
+    
+    const timeStr = nextProg.start_time.endsWith('Z') ? nextProg.start_time : nextProg.start_time + 'Z';
+    const startMs = new Date(timeStr).getTime();
+    
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      const diff = startMs - now;
+      if (diff <= 0) {
+        setCountdown('Đang tải chương trình...');
+      } else {
+        const hrs = Math.floor(diff / 3600000);
+        const mins = Math.floor((diff % 3600000) / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        setCountdown(`${hrs > 0 ? hrs + ' giờ ' : ''}${mins > 0 ? mins + ' phút ' : ''}${secs} giây`);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [data]);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-black">
@@ -282,6 +310,12 @@ export const LiveViewer: React.FC = () => {
                     }
                   }}
                 />
+              )}
+              {/* Watermark Logo */}
+              {data.show_watermark && data.logo && (
+                <div className="absolute top-6 right-6 z-[15] pointer-events-none opacity-50">
+                  <img src={data.logo} alt={data.channel_name} className="w-24 h-auto object-contain filter drop-shadow-md" />
+                </div>
               )}
               {/* Overlay to block user clicks from pausing the video (true TV feel) */}
               <div className="absolute inset-0 z-[12]" />
@@ -342,10 +376,41 @@ export const LiveViewer: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center text-slate-500">
-              <Tv size={64} className="mb-4 opacity-50" />
-              <h2 className="text-2xl font-bold text-white mb-2">Đang chờ phát sóng</h2>
-              <p>Chương trình tiếp theo sẽ sớm bắt đầu.</p>
+            <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 bg-gradient-to-b from-slate-900 via-black to-black relative overflow-hidden">
+              {/* Background animations */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-500/10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
+              <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-[100px] pointer-events-none" />
+
+              {/* Channel Logo Watermark */}
+              {data.show_watermark && data.logo && (
+                <div className="absolute top-8 right-8 z-[15] pointer-events-none opacity-50">
+                  <img src={data.logo} alt={data.channel_name} className="w-32 h-auto object-contain filter drop-shadow-md" />
+                </div>
+              )}
+
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-24 h-24 bg-white/5 border border-white/10 rounded-full flex items-center justify-center mb-8 shadow-2xl backdrop-blur-sm">
+                  <Tv size={40} className="text-indigo-400" />
+                </div>
+                
+                <h2 className="text-3xl md:text-5xl font-black text-white mb-6 tracking-tight uppercase">Đang chờ phát sóng</h2>
+                
+                {data.upcoming && data.upcoming.length > 0 ? (
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-8 max-w-lg w-full backdrop-blur-md">
+                    <p className="text-indigo-300 font-bold uppercase tracking-widest text-xs mb-3">Chương trình tiếp theo</p>
+                    <h3 className="text-xl md:text-2xl font-bold text-white mb-6">{data.upcoming[0].title}</h3>
+                    
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <p className="text-slate-400 text-sm">Bắt đầu sau</p>
+                      <div className="text-3xl md:text-5xl font-black text-indigo-400 font-mono tracking-tighter">
+                        {countdown || 'Đang tính...'}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-lg max-w-md">Kênh hiện tại chưa có lịch phát sóng nào tiếp theo. Vui lòng quay lại sau.</p>
+                )}
+              </div>
             </div>
           )}
           
