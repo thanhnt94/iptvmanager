@@ -87,7 +87,8 @@ export const LiveViewer: React.FC = () => {
           
           // If the next program is scheduled to start BEFORE the current program naturally ends
           if (result.upcoming && result.upcoming.length > 0 && result.upcoming[0].start_time) {
-            const nextStartMs = new Date(result.upcoming[0].start_time).getTime();
+            const timeStr = result.upcoming[0].start_time.endsWith('Z') ? result.upcoming[0].start_time : result.upcoming[0].start_time + 'Z';
+            const nextStartMs = new Date(timeStr).getTime();
             const timeToNext = nextStartMs - new Date().getTime();
             if (timeToNext > 0 && timeToNext < timeoutTime) {
               timeoutTime = timeToNext + 1000; // 1s buffer after start
@@ -102,7 +103,8 @@ export const LiveViewer: React.FC = () => {
         } else if (result.upcoming && result.upcoming.length > 0) {
           const nextProg = result.upcoming[0];
           if (nextProg.start_time) {
-            const startTimeMs = new Date(nextProg.start_time).getTime();
+            const timeStr = nextProg.start_time.endsWith('Z') ? nextProg.start_time : nextProg.start_time + 'Z';
+            const startTimeMs = new Date(timeStr).getTime();
             const diff = startTimeMs - new Date().getTime();
             if (diff > 0) {
               timerRef.current = window.setTimeout(() => {
@@ -384,9 +386,17 @@ export const LiveViewer: React.FC = () => {
                 TIẾP THEO
               </div>
               <h3 className="font-bold text-slate-300 line-clamp-2">{prog.title}</h3>
-              <p className="text-xs text-slate-500 mt-2">
-                Thời lượng: {Math.round(prog.duration_seconds / 60)} phút
-              </p>
+              <div className="text-xs text-slate-500 mt-2 flex items-center gap-2 flex-wrap">
+                <span>Thời lượng: {Math.round(prog.duration_seconds / 60)} phút</span>
+                {data.channel_type === 'schedule' && prog.start_time && (
+                  <>
+                    <span className="w-1 h-1 rounded-full bg-slate-600"></span>
+                    <span className="text-indigo-400 font-bold">
+                      Bắt đầu: {new Date(prog.start_time.endsWith('Z') ? prog.start_time : prog.start_time + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           ))}
 
