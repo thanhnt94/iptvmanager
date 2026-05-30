@@ -98,7 +98,7 @@ export const LiveViewer: React.FC = () => {
           if (timeoutTime > 0) {
             timerRef.current = window.setTimeout(() => {
               loadCurrentProgram();
-            }, timeoutTime);
+            }, Math.min(timeoutTime, 15000)); // Cập nhật tối đa mỗi 15s để bắt sự kiện thay đổi lịch
           }
         } else if (result.upcoming && result.upcoming.length > 0) {
           const nextProg = result.upcoming[0];
@@ -109,7 +109,7 @@ export const LiveViewer: React.FC = () => {
             if (diff > 0) {
               timerRef.current = window.setTimeout(() => {
                 loadCurrentProgram();
-              }, diff + 1000); // 1s buffer
+              }, Math.min(diff + 1000, 15000)); // 1s buffer, max 15s poll
             } else {
               timerRef.current = window.setTimeout(() => loadCurrentProgram(), 5000);
             }
@@ -373,10 +373,18 @@ export const LiveViewer: React.FC = () => {
               <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold mb-1">
                 ĐANG PHÁT
               </div>
-              <h3 className="font-bold text-white line-clamp-2">{currentProg.title}</h3>
-              <p className="text-xs text-slate-400 mt-2">
-                Thời lượng: {Math.round(currentProg.duration_seconds / 60)} phút
-              </p>
+              <h3 className="font-bold text-white text-lg leading-snug">{currentProg.title}</h3>
+              <div className="text-xs text-indigo-200 mt-2 flex items-center gap-2 flex-wrap">
+                <span>Thời lượng: {Math.round(currentProg.duration_seconds / 60)} phút</span>
+                {data.channel_type === 'schedule' && currentProg.start_time && (
+                  <>
+                    <span className="w-1 h-1 rounded-full bg-indigo-400"></span>
+                    <span className="font-bold">
+                      Bắt đầu: {new Date(currentProg.start_time.endsWith('Z') ? currentProg.start_time : currentProg.start_time + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
