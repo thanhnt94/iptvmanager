@@ -434,11 +434,28 @@ export const TVManager: React.FC = () => {
                                 </div>
 
                                 {type === 'schedule' && (
-                                  <div className="flex items-center gap-3 bg-slate-950/50 px-3 py-1.5 rounded-xl border border-white/5">
-                                    <Clock size={12} className="text-indigo-400" />
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Start Time</span>
-                                    <input type="time" value={prog.broadcast_time} onChange={e => updateProgram(prog.uid, 'broadcast_time', e.target.value)} className="bg-transparent border-none text-indigo-300 text-sm font-black focus:outline-none appearance-none [&::-webkit-calendar-picker-indicator]:invert" />
-                                  </div>
+                                  <>
+                                    <div className="flex items-center gap-3 bg-slate-950/50 px-3 py-1.5 rounded-xl border border-white/5">
+                                      <CalendarDays size={12} className="text-indigo-400" />
+                                      <input 
+                                        type="date" 
+                                        value={prog.broadcast_date} 
+                                        onChange={e => updateProgram(prog.uid, 'broadcast_date', e.target.value)} 
+                                        className="bg-transparent border-none text-indigo-300 text-[11px] font-black focus:outline-none appearance-none [&::-webkit-calendar-picker-indicator]:invert w-[110px]" 
+                                        title="Chuyển video này sang ngày khác"
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-3 bg-slate-950/50 px-3 py-1.5 rounded-xl border border-white/5">
+                                      <Clock size={12} className="text-indigo-400" />
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Start Time</span>
+                                      <input 
+                                        type="time" 
+                                        value={prog.broadcast_time} 
+                                        onChange={e => updateProgram(prog.uid, 'broadcast_time', e.target.value)} 
+                                        className="bg-transparent border-none text-indigo-300 text-sm font-black focus:outline-none appearance-none [&::-webkit-calendar-picker-indicator]:invert" 
+                                      />
+                                    </div>
+                                  </>
                                 )}
                                 
                                 <label className="flex items-center gap-2 cursor-pointer ml-auto mr-2 group/check">
