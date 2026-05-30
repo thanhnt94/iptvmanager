@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
@@ -13,6 +14,16 @@ router = APIRouter()
 def get_channels(db: Session = Depends(get_db)):
     """List all active TV channels with their programs."""
     return db.query(models.TVChannel).filter(models.TVChannel.is_active == True).all()
+
+@router.get("/channels/{slug}/stream")
+def stream_channel(slug: str, db: Session = Depends(get_db)):
+    """Redirects to the actual video URL of the currently playing program.
+    This allows users to play the channel in external IPTV players or Smart TVs."""
+    current_data = get_current_program(slug=slug, db=db)
+    prog = current_data.get("program")
+    if prog and prog.video_url:
+        return RedirectResponse(url=prog.video_url, status_code=302)
+    raise HTTPException(status_code=404, detail="No program is currently playing on this channel")
 
 @router.get("/channels/{slug}/current", response_model=schemas.TVCurrentProgramResponse)
 def get_current_program(slug: str, db: Session = Depends(get_db)):

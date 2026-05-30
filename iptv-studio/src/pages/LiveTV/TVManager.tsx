@@ -270,14 +270,32 @@ export const TVManager: React.FC = () => {
                  </div>
               </div>
               
-              <button 
-                onClick={handleSaveChannel} 
-                disabled={saving || !name || !slug}
-                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black text-[11px] uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
-              >
-                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                Commit Changes
-              </button>
+              <div className="flex items-center gap-3">
+                {!selectedChannel.isNew && (
+                  <button 
+                    onClick={(e) => {
+                      const url = `${window.location.origin}/api/livetv/channels/${slug}/stream`;
+                      navigator.clipboard.writeText(url);
+                      const btn = e.currentTarget;
+                      const originalText = btn.innerHTML;
+                      btn.innerHTML = 'COPIED!';
+                      setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+                    }}
+                    className="px-4 py-3 bg-white/5 hover:bg-white/10 text-white font-black text-[11px] uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 border border-white/10"
+                    title="Copy direct stream URL for Smart TV or External IPTV Players"
+                  >
+                    Copy Link
+                  </button>
+                )}
+                <button 
+                  onClick={handleSaveChannel} 
+                  disabled={saving || !name || !slug}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black text-[11px] uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  Commit Changes
+                </button>
+              </div>
             </header>
 
             {/* Tabs Navigation */}
