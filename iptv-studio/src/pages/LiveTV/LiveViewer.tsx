@@ -79,14 +79,33 @@ export const LiveViewer: React.FC = () => {
         setData(result);
         
         // Schedule next load based on remaining time of current program
+        if (timerRef.current) window.clearTimeout(timerRef.current);
+        
         if (result.program) {
           const remaining = result.program.duration_seconds - result.seek_time;
-          if (timerRef.current) window.clearTimeout(timerRef.current);
           if (remaining > 0) {
             timerRef.current = window.setTimeout(() => {
               loadCurrentProgram();
-            }, remaining * 1000);
+            }, remaining * 1000 + 500); // 500ms buffer to ensure backend is ready
           }
+        } else if (result.upcoming && result.upcoming.length > 0) {
+          const nextProg = result.upcoming[0];
+          if (nextProg.start_time) {
+            const startTimeMs = new Date(nextProg.start_time).getTime();
+            const diff = startTimeMs - new Date().getTime();
+            if (diff > 0) {
+              timerRef.current = window.setTimeout(() => {
+                loadCurrentProgram();
+              }, diff + 1000); // 1s buffer
+            } else {
+              timerRef.current = window.setTimeout(() => loadCurrentProgram(), 5000);
+            }
+          } else {
+            timerRef.current = window.setTimeout(() => loadCurrentProgram(), 10000);
+          }
+        } else {
+          // No program and no upcoming. Check back periodically.
+          timerRef.current = window.setTimeout(() => loadCurrentProgram(), 30000);
         }
       } else {
         navigate('/tv');
