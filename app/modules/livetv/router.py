@@ -145,6 +145,22 @@ def create_program(program: schemas.TVProgramCreate, db: Session = Depends(get_d
     db.refresh(db_prog)
     return db_prog
 
+@router.put("/channels/{channel_id}", response_model=schemas.TVChannelResponse)
+def update_channel(channel_id: int, channel: schemas.TVChannelCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    db_channel = db.query(models.TVChannel).filter(models.TVChannel.id == channel_id).first()
+    if not db_channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    if user.role != 'admin' and db_channel.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your channel")
+        
+    for key, value in channel.dict().items():
+        setattr(db_channel, key, value)
+        
+    db.commit()
+    db.refresh(db_channel)
+    return db_channel
+
 @router.put("/channels/{channel_id}/programs/bulk")
 def bulk_update_programs(channel_id: int, payload: schemas.BulkProgramsUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if user.role not in ['admin', 'vip']:
