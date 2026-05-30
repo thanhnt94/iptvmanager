@@ -931,12 +931,13 @@ export const WatchRoom: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Time display for VOD */}
-                        {!isLive && duration > 0 && (
-                          <span className="text-[10px] font-mono font-bold text-white/50 hidden md:inline">
-                            {formatTime(currentTime)} / {formatTime(duration)}
-                          </span>
-                        )}
+                        {/* Time display (Always show current time, show duration if VOD) */}
+                        <div className="hidden sm:flex text-xs font-mono text-white/80 select-none items-center">
+                          <span>{formatTime(currentTime)}</span>
+                          {!isLive && duration > 0 && (
+                            <span className="text-white/40 before:content-['/'] before:mx-1">{formatTime(duration)}</span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2">
