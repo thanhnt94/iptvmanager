@@ -32,11 +32,13 @@ import {
   Save,
   ArrowUpDown,
   ZapOff,
-  ListPlus
+  ListPlus,
+  GitMerge
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
 import { PreviewModal } from '../components/channels/PreviewModal';
+import { MergeChannelsModal } from '../components/channels/MergeChannelsModal';
 import { useNavigate } from 'react-router-dom';
 import { getLogoUrl } from '../utils';
 import { useSearchParams } from 'react-router-dom';
@@ -205,6 +207,8 @@ export const Channels: React.FC = () => {
    const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
    const [checkingBatch, setCheckingBatch] = useState(false);
    const [epgHints, setEpgHints] = useState<string[]>([]);
+   const [isMergeOpen, setIsMergeOpen] = useState(false);
+   const [sharePassword, setSharePassword] = useState('');
 
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -368,7 +372,7 @@ export const Channels: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (!confirm('Are you absolutely sure? This action cannot be undone.')) return;
     try {
-      const res = await fetch(`/api/channels/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/channels/delete/${id}`, { method: 'POST' });
       if (res.ok) fetchChannels();
     } catch (err) { alert('Delete failed'); }
   };
@@ -562,6 +566,12 @@ export const Channels: React.FC = () => {
                 className="h-10 md:h-12 px-4 rounded-xl md:rounded-2xl flex items-center justify-center gap-3 text-[9px] md:text-xs font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/10 transition-all border border-indigo-500/20 shrink-0"
                >
                   <CloudDownload size={14} /> <span className="hidden md:inline">Import Bulk</span>
+               </button>
+               <button 
+                onClick={() => setIsMergeOpen(true)}
+                className="h-10 md:h-12 px-4 rounded-xl md:rounded-2xl flex items-center justify-center gap-3 text-[9px] md:text-xs font-black uppercase tracking-widest text-amber-400 hover:bg-amber-500/10 transition-all border border-amber-500/20 shrink-0"
+               >
+                  <GitMerge size={14} /> <span className="hidden md:inline">Merge Links</span>
                </button>
              </>
            )}
@@ -1203,6 +1213,7 @@ export const Channels: React.FC = () => {
       <AnimatePresence>
         {isFormOpen && <ChannelForm channelId={editingId} onClose={() => setIsFormOpen(false)} onSuccess={fetchChannels} />}
         {previewChannel && <PreviewModal channel={previewChannel} onClose={() => setPreviewChannel(null)} />}
+        {isMergeOpen && <MergeChannelsModal onClose={() => setIsMergeOpen(false)} onSuccess={fetchChannels} />}
       </AnimatePresence>
 
       {/* Share Links Modal Portal */}
@@ -1236,6 +1247,34 @@ export const Channels: React.FC = () => {
                       </button>
                   </header>
 
+                  {/* Auth Configuration for Distribute */}
+                  <div className="px-8 py-4 bg-white/[0.02] border-b border-white/5 space-y-2">
+                    <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">
+                      Tích hợp xác thực TiviMate / Basic Auth
+                    </label>
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider mb-1">Username</span>
+                        <input
+                          type="text"
+                          disabled
+                          value={user.username || ''}
+                          className="w-full bg-slate-950/40 border border-white/5 rounded-xl px-3 py-2 text-[11px] text-slate-400 outline-none"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider mb-1">Password</span>
+                        <input
+                          type="password"
+                          placeholder="Nhập password để gen link bảo mật..."
+                          value={sharePassword}
+                          onChange={(e) => setSharePassword(e.target.value)}
+                          className="w-full bg-slate-950/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-3 py-2 text-[11px] text-white outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                       {shareChannel.play_links && (['original', 'track', 'smart', 'hls', 'ts'] as const).map((mode) => {
                         let url = shareChannel.play_links?.[mode];
@@ -1243,6 +1282,12 @@ export const Channels: React.FC = () => {
 
                         if (typeof url === 'string' && url.startsWith('/')) {
                           url = `${window.location.origin}${url}`;
+                        }
+
+                        // Nếu nhập password, đính kèm xác thực vào các link phát thông qua gateway
+                        if (sharePassword && mode !== 'original') {
+                          const conn = url.includes('?') ? '&' : '?';
+                          url = `${url}${conn}u=${encodeURIComponent(user.username)}&p=${encodeURIComponent(sharePassword)}`;
                         }
 
                         const labelMap: Record<string, string> = {

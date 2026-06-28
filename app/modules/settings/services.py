@@ -64,6 +64,7 @@ class SettingService:
             ('HLS_CACHE_TTL', '60', 'int', 'Seconds to keep HLS segments in RAM.'),
             ('HLS_MAX_SEGMENTS', '50', 'int', 'Max HLS segments per channel in RAM.'),
             ('TASK_BACKEND', 'thread', 'string', 'Task execution backend: thread (default).'),
+            ('SOCKS5_PROXY_URL', '', 'string', 'SOCKS5 Proxy URL (e.g., socks5://user:pass@ip:port) for scanning and proxying.'),
         ]
         for key, value, s_type, desc in defaults:
             existing = db.query(SystemSetting).filter_by(key=key).first()

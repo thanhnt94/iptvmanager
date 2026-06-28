@@ -405,17 +405,40 @@ export const SettingsPage: React.FC = () => {
              <div className="glass-card p-10 rounded-[3rem] border border-white/5 shadow-2xl space-y-6">
                 <div className="flex items-center gap-4">
                   <Cpu size={20} className="text-orange-400" />
-                  <h4 className="text-sm font-black text-white uppercase italic">Compute Engine</h4>
+                  <h4 className="text-sm font-black text-white uppercase italic">Infrastructure Proxy</h4>
                 </div>
                 <div className="space-y-2">
                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-relaxed">
-                      FFmpeg paths & hardware acceleration parameters.
+                      SOCKS5 Proxy for Playwright dynamic resolution and health checks.
                    </p>
                 </div>
-                <div className="pt-4 space-y-3">
-                   <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/5 text-[9px] font-mono text-white/40 break-all">
-                      {getSettingValue('FFPROBE_PATH') || 'System Default'}
-                   </div>
+                <div className="pt-2 space-y-3">
+                   <input
+                     type="text"
+                     placeholder="socks5://user:pass@ip:port"
+                     value={(getSettingValue('SOCKS5_PROXY_URL') as string) || ''}
+                     onChange={(e) => {
+                       const val = e.target.value;
+                       setSettings(prev => {
+                         const exists = prev.find(s => s.key === 'SOCKS5_PROXY_URL');
+                         if (exists) {
+                           return prev.map(s => s.key === 'SOCKS5_PROXY_URL' ? { ...s, value: val } : s);
+                         } else {
+                           return [...prev, { key: 'SOCKS5_PROXY_URL', value: val, type: 'string', description: 'SOCKS5 proxy server' }];
+                         }
+                       });
+                     }}
+                     onBlur={async (e) => {
+                       const val = e.target.value;
+                       await fetch('/api/settings/save_val', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ key: 'SOCKS5_PROXY_URL', value: val, type: 'string' })
+                       });
+                       showMsg('success', 'SOCKS5 Proxy URL updated');
+                     }}
+                     className="w-full bg-slate-950/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-3 py-2.5 text-[11px] text-white outline-none placeholder:text-slate-700"
+                   />
                 </div>
              </div>
 

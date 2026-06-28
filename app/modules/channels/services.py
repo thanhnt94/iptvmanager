@@ -75,6 +75,20 @@ class StreamManager:
     def _run_source_pipe(cls, url, headers, sid):
         logger.info(f"StreamEngine: Starting optimized pipe for {url}")
         session = requests.Session()
+
+        try:
+            from app.modules.settings.services import SettingService
+            from app.core.database import SessionFactory
+            db = SessionFactory()
+            try:
+                socks5_url = SettingService.get(db, 'SOCKS5_PROXY_URL')
+                if socks5_url:
+                    logger.info(f"StreamEngine: Using SOCKS5 proxy: {socks5_url}")
+                    session.proxies = {"http": socks5_url, "https": socks5_url}
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"StreamEngine: Failed to read proxy settings: {e}")
         
         # User Agent & Referer optimization for IPTV providers
         if not headers or 'User-Agent' not in headers:
@@ -610,6 +624,19 @@ class ExtractorService:
         seen_urls = set()
         page_title = "Unknown Source"
 
+        # Lấy proxy từ cấu hình database
+        socks5_url = None
+        try:
+            from app.core.database import SessionFactory
+            from app.modules.settings.services import SettingService
+            db = SessionFactory()
+            try:
+                socks5_url = SettingService.get(db, 'SOCKS5_PROXY_URL')
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f" [PROXY-ERROR] Failed to read proxy settings: {e}")
+
         # 1. Playwright Ultra Scan (JS Rendering + Network Sniffing)
         if deep_scan:
             try:
@@ -618,9 +645,9 @@ class ExtractorService:
                 
                 with sync_playwright() as p:
                     # Optimized Browser Launch for VPS (low RAM)
-                    browser = p.chromium.launch(
-                        headless=True,
-                        args=[
+                    launch_kwargs = {
+                        "headless": True,
+                        "args": [
                             '--no-sandbox', 
                             '--disable-setuid-sandbox', 
                             '--disable-dev-shm-usage',
@@ -628,7 +655,12 @@ class ExtractorService:
                             '--disable-gpu',
                             '--js-flags="--max-old-space-size=256"' # Limit JS memory
                         ]
-                    )
+                    }
+                    if socks5_url:
+                        logger.info(f" [DYNAMIC-RESOLVER-PROXY] Using SOCKS5 proxy: {socks5_url}")
+                        launch_kwargs["proxy"] = {"server": socks5_url}
+                        
+                    browser = p.chromium.launch(**launch_kwargs)
                     context = browser.new_context(
                         user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
                     )
@@ -798,6 +830,19 @@ class ExtractorService:
         from urllib.parse import urljoin
         from bs4 import BeautifulSoup
 
+        # Lấy proxy từ cấu hình database
+        socks5_url = None
+        try:
+            from app.core.database import SessionFactory
+            from app.modules.settings.services import SettingService
+            db = SessionFactory()
+            try:
+                socks5_url = SettingService.get(db, 'SOCKS5_PROXY_URL')
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f" [PROXY-ERROR] Failed to read proxy settings: {e}")
+
         logger.info(f" [DISCOVERY-START] URL: {site_url}")
         links = []
         seen_hrefs = set()
@@ -805,7 +850,11 @@ class ExtractorService:
         try:
             with sync_playwright() as p:
                 logger.debug(" [DISCOVERY] Launching browser...")
-                browser = p.chromium.launch(headless=True, args=['--no-sandbox'])
+                launch_kwargs = {"headless": True, "args": ['--no-sandbox']}
+                if socks5_url:
+                    logger.info(f" [DISCOVERY-PROXY] Using SOCKS5 proxy: {socks5_url}")
+                    launch_kwargs["proxy"] = {"server": socks5_url}
+                browser = p.chromium.launch(**launch_kwargs)
                 context = browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36')
                 page = context.new_page()
                 stealth = Stealth()

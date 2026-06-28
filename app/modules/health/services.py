@@ -67,6 +67,9 @@ class HealthCheckService:
             if delta < (ttl_minutes * 60) and channel.status == 'live':
                 return {'status': channel.status, 'skipped': 'TTL active'}
 
+        proxy_url = SettingService.get(db, 'SOCKS5_PROXY_URL')
+        proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Referer': channel.stream_url,
@@ -78,7 +81,7 @@ class HealthCheckService:
             latency = None
 
             try:
-                response = requests.head(channel.stream_url, timeout=min(10, timeout), headers=headers, allow_redirects=True)
+                response = requests.head(channel.stream_url, timeout=min(10, timeout), headers=headers, allow_redirects=True, proxies=proxies)
                 latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                 ping_ok = response.status_code < 400
                 ctype = response.headers.get('Content-Type', '').lower()
@@ -86,7 +89,7 @@ class HealthCheckService:
                     ping_ok = False
             except Exception:
                 try:
-                    response = requests.get(channel.stream_url, timeout=timeout, headers=headers, stream=True)
+                    response = requests.get(channel.stream_url, timeout=timeout, headers=headers, stream=True, proxies=proxies)
                     latency = (datetime.utcnow() - start_time).total_seconds() * 1000
                     ping_ok = response.status_code < 400
                     ctype = response.headers.get('Content-Type', '').lower()

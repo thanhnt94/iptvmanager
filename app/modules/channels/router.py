@@ -507,6 +507,7 @@ async def update_channel(
 
 
 @router.delete("/{channel_id}")
+@router.post("/delete/{channel_id}")
 async def delete_channel(
     channel_id: int,
     user: User = Depends(login_required),
@@ -519,6 +520,46 @@ async def delete_channel(
     db.query(PlaylistEntry).filter_by(channel_id=channel_id).delete()
     db.delete(channel)
     db.commit()
+    return {'status': 'ok'}
+
+
+@router.post("/merge")
+async def merge_channels(
+    data: dict = Body(...),
+    user: User = Depends(login_required),
+    db: Session = Depends(get_db),
+):
+    """Merges source channel's link into target channel and deletes the source channel."""
+    source_id = data.get('source_id')
+    target_id = data.get('target_id')
+    if not source_id or not target_id:
+        raise HTTPException(status_code=400, detail="Both source_id and target_id are required")
+
+    src_access, source_channel = _check_channel_access(db, source_id, user)
+    tgt_access, target_channel = _check_channel_access(db, target_id, user)
+    
+    if src_access != 'edit' or tgt_access != 'edit':
+        raise HTTPException(status_code=403, detail="No edit access to one of the channels")
+
+    # Copy stream and attributes to target
+    target_channel.stream_url = source_channel.stream_url
+    target_channel.is_dynamic = source_channel.is_dynamic
+    target_channel.dynamic_origin_url = source_channel.dynamic_origin_url
+    target_channel.proxy_type = source_channel.proxy_type
+    target_channel.is_passthrough = source_channel.is_passthrough
+    
+    # Reset target channel status
+    target_channel.status = 'unknown'
+    target_channel.latency = None
+    target_channel.error_message = None
+
+    # Delete playlist entries for the source to prevent foreign key errors
+    db.query(PlaylistEntry).filter_by(channel_id=source_id).delete()
+    
+    # Delete the source channel
+    db.delete(source_channel)
+    db.commit()
+
     return {'status': 'ok'}
 
 
@@ -748,15 +789,29 @@ async def _get_resolved_stream_url(db: Session, channel: Channel) -> str:
     return channel.stream_url
 
 
+def _authenticate_stream_request(db: Session, u: str = None, p: str = None):
+    """Verifies stream request credentials."""
+    if not u or not p:
+        raise HTTPException(status_code=403, detail="Authentication credentials (u and p) required")
+    from app.modules.auth.models import User
+    user = db.query(User).filter_by(username=u).first()
+    if not user or not user.check_password(p):
+        raise HTTPException(status_code=403, detail="Invalid username or password")
+
+
 # --- Proxy / Streaming ---
 
 @router.get("/track/{channel_id}")
 async def track_redirect(
     channel_id: int,
     request: Request,
+    u: str = Query(default=None),
+    p: str = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Tracking redirect — increments play_count, then redirects to stream URL."""
+    _authenticate_stream_request(db, u, p)
+
     channel = db.query(Channel).get(channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
@@ -805,9 +860,13 @@ async def track_redirect(
 async def play_channel(
     channel_id: int,
     request: Request,
+    u: str = Query(default=None),
+    p: str = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """TS Proxy — Proxies the stream through the server."""
+    _authenticate_stream_request(db, u, p)
+
     channel = db.query(Channel).get(channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")

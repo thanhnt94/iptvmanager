@@ -579,3 +579,37 @@ async def legacy_m3u(
     if not content:
         raise HTTPException(status_code=404, detail="Empty playlist")
     return PlainTextResponse(content, media_type="text/plain")
+
+
+@router.get("/get.m3u")
+async def get_authenticated_m3u(
+    request: Request,
+    u: str = Query(...),
+    p: str = Query(...),
+    id: int = Query(...),
+    mode: str = Query(default=None),
+    hide_die: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    """Authenticated M3U playlist retrieval using credentials (suitable for TiviMate)."""
+    from app.modules.auth.models import User
+    
+    user = db.query(User).filter_by(username=u).first()
+    if not user or not user.check_password(p):
+        raise HTTPException(status_code=403, detail="Invalid username or password")
+
+    profile = db.query(PlaylistProfile).get(id)
+    if not profile or not profile.is_active:
+        raise HTTPException(status_code=404, detail="Playlist not found or inactive")
+
+    base_url = str(request.base_url).rstrip('/')
+    auth_params = {"u": u, "p": p}
+    content = PlaylistService.generate_m3u(
+        db, profile.id, base_url=base_url, 
+        hide_die=hide_die, mode=mode, auth_params=auth_params
+    )
+    
+    if not content:
+        raise HTTPException(status_code=404, detail="Empty playlist")
+        
+    return PlainTextResponse(content, media_type="audio/mpegurl")

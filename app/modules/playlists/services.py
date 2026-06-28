@@ -125,7 +125,7 @@ class PlaylistService:
 
     @staticmethod
     def generate_m3u(db: Session, playlist_id: int, base_url: str = "",
-                     epg_url=None, hide_die=False, mode=None) -> str:
+                     epg_url=None, hide_die=False, mode=None, auth_params: dict = None) -> str:
         """Generates M3U8 string for a playlist."""
         profile = db.query(PlaylistProfile).get(playlist_id)
         if not profile or not profile.is_active:
@@ -141,10 +141,16 @@ class PlaylistService:
         def get_wrapped_url(ch, mode_override=None):
             m = mode_override or ch.proxy_type or 'default'
             if m == 'direct' or ch.is_passthrough or m == 'none':
-                return ch.stream_url
-            if m == 'hls':
-                return f"{base}/api/channels/hls-manifest/{ch.id}/index.m3u8"
-            return f"{base}/api/channels/track/{ch.id}"
+                url = ch.stream_url
+            elif m == 'hls':
+                url = f"{base}/api/channels/hls-manifest/{ch.id}/index.m3u8"
+            else:
+                url = f"{base}/api/channels/track/{ch.id}"
+
+            if auth_params and 'u' in auth_params and 'p' in auth_params:
+                conn = '&' if '?' in url else '?'
+                url += f"{conn}u={auth_params['u']}&p={auth_params['p']}"
+            return url
 
         # System playlists
         if profile.is_system:
