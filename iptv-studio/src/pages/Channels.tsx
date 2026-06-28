@@ -31,7 +31,8 @@ import {
   Image as ImageIcon,
   Save,
   ArrowUpDown,
-  ZapOff
+  ZapOff,
+  ListPlus
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ChannelForm } from '../components/forms/ChannelForm';
@@ -1169,20 +1170,20 @@ export const Channels: React.FC = () => {
 
                 <div className="flex items-center justify-between bg-slate-950/40 px-1 py-1 rounded-xl border border-white/5">
                    {[
-                     { icon: <Eye size={15} />, onClick: () => setPreviewChannel(ch) },
-                     { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={15} /> : <Activity size={15} />, onClick: () => handleCheck(ch.id) },
-                     { icon: ch.is_original ? <Shield size={15} /> : <ShieldOff size={15} />, onClick: () => toggleProtection(ch.id), active: ch.is_original },
-                     { icon: <Settings2 size={15} />, onClick: () => openEdit(ch.id) },
-                     { icon: <Trash2 size={15} />, onClick: () => handleDelete(ch.id), danger: true }
+                     { icon: <Eye size={15} />, onClick: () => setPreviewChannel(ch), title: 'Preview' },
+                     { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={15} /> : <Activity size={15} />, onClick: () => handleCheck(ch.id), title: 'Check Connection' },
+                     { icon: <ListPlus size={15} />, onClick: () => { setSelectedIds([ch.id]); setIsBatchModalOpen(true); }, title: 'Add to Playlist' },
+                     { icon: <Settings2 size={15} />, onClick: () => openEdit(ch.id), title: 'Channel Settings' },
+                     { icon: <Trash2 size={15} />, onClick: () => handleDelete(ch.id), danger: true, title: 'Delete Signal' }
                    ].map((btn, idx) => (
                      <button 
                       key={idx} 
                       onClick={(e) => { e.stopPropagation(); btn.onClick(); }}
                       className={`p-2 rounded-lg transition-all ${
                         btn.danger ? 'text-rose-500/30 hover:text-rose-400' :
-                        btn.active ? 'text-indigo-400' :
                         'text-slate-600 hover:text-white'
                       }`}
+                      title={btn.title}
                      >
                        {btn.icon}
                      </button>

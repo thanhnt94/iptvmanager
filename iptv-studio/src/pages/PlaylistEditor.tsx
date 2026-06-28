@@ -97,23 +97,31 @@ export const PlaylistEditor: React.FC = () => {
     }
   }, [id]);
 
-  const openAddChannelsModal = async () => {
+  const openAddChannelsModal = () => {
     setIsAddModalOpen(true);
-    setPickerLoading(true);
     setPickerSelectedIds(new Set());
-    try {
-      const res = await fetch('/api/channels?per_page=1000');
-      const data = await res.json();
-      const existingChannelIds = new Set(entries.map(e => e.channel_id));
-      // Only show channels that are not already in this playlist
-      const available = (data.channels || data || []).filter((ch: any) => !existingChannelIds.has(ch.id));
-      setPickerChannels(available);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setPickerLoading(false);
-    }
+    setPickerSearch('');
   };
+
+  useEffect(() => {
+    if (!isAddModalOpen) return;
+    const delayDebounceFn = setTimeout(async () => {
+      setPickerLoading(true);
+      try {
+        const res = await fetch(`/api/channels?per_page=100&search=${encodeURIComponent(pickerSearch)}`);
+        const data = await res.json();
+        const existingChannelIds = new Set(entries.map(e => e.channel_id));
+        const available = (data.channels || data || []).filter((ch: any) => !existingChannelIds.has(ch.id));
+        setPickerChannels(available);
+      } catch (err) {
+        console.error("Picker search fetch error:", err);
+      } finally {
+        setPickerLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [pickerSearch, isAddModalOpen, entries]);
 
   const handleAddChannels = async () => {
     if (pickerSelectedIds.size === 0) return;
