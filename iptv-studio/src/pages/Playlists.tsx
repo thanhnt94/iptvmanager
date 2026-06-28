@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  FolderTree, 
   Layers, 
-  Globe, 
   Search, 
   Plus, 
   MoreVertical, 
@@ -52,23 +50,12 @@ interface ScannerStatus {
   die_count: number;
 }
 
-interface ScannerType {
-  id: string;
-  name: string;
-}
-
 export const Playlists: React.FC = () => {
   const navigate = useNavigate();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as 'personal' | 'system' | 'dynamic') || 'personal';
-
-  const setActiveTab = (tab: 'personal' | 'system' | 'dynamic') => {
-    setSearchParams({ tab });
-  };
   const [activeDropdown, setActiveDropdown] = useState<number | string | null>(null);
   const [activeMenu, setActiveMenu] = useState<number | string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -79,12 +66,8 @@ export const Playlists: React.FC = () => {
   
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createType, setCreateType] = useState<'manual' | 'dynamic'>('manual');
   const [newName, setNewName] = useState('');
   const [newSlug, setNewSlug] = useState('');
-  const [newUrl, setNewUrl] = useState('');
-  const [newScanner, setNewScanner] = useState('colatv');
-  const [scannerTypes, setScannerTypes] = useState<ScannerType[]>([]);
   const [creating, setCreating] = useState(false);
 
   const fetchPlaylists = () => {
@@ -97,18 +80,8 @@ export const Playlists: React.FC = () => {
       .catch(err => console.error("Playlists fetch error:", err));
   };
 
-  const fetchScannerTypes = () => {
-    fetch('/api/playlists/dynamic/types')
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') setScannerTypes(data.types);
-      })
-      .catch(err => console.error("Scanner types fetch error:", err));
-  };
-
   useEffect(() => {
     fetchPlaylists();
-    fetchScannerTypes();
   }, []);
 
   const wasRunningRef = React.useRef(false);
@@ -228,27 +201,17 @@ export const Playlists: React.FC = () => {
   const handleCreate = async () => {
     setCreating(true);
     try {
-      let res;
-      if (createType === 'manual') {
-        res = await fetch('/api/playlists/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: newName, slug: newSlug })
-        });
-      } else {
-        res = await fetch('/api/playlists/dynamic', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: newName, website_url: newUrl, scanner_type: newScanner })
-        });
-      }
+      const res = await fetch('/api/playlists/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, slug: newSlug })
+      });
       const data = await res.json();
       if (data.status === 'ok' || data.status === 'success') {
         fetchPlaylists();
         setIsCreateModalOpen(false);
         setNewName('');
         setNewSlug('');
-        setNewUrl('');
       } else {
         alert(data.message);
       }

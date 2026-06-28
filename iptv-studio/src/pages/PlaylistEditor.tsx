@@ -8,7 +8,6 @@ import {
   Trash2, 
   Save, 
   Loader2, 
-  Plus,
   Tv,
   Layout,
   Pencil,
@@ -41,6 +40,8 @@ interface Entry {
   is_passthrough: boolean;
   is_discovery?: boolean;
   stream_url?: string;
+  custom_name?: string;
+  custom_group?: string;
   play_links?: {
     smart: string;
     direct: string;
@@ -55,7 +56,6 @@ export const PlaylistEditor: React.FC = () => {
   const navigate = useNavigate();
   const [playlist, setPlaylist] = useState<PlaylistInfo | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [groups, setGroups] = useState<{id: number, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -63,7 +63,6 @@ export const PlaylistEditor: React.FC = () => {
   // Group Edit State
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
   const [entryCustomName, setEntryCustomName] = useState('');
   const [entryCustomGroup, setEntryCustomGroup] = useState('');
   
@@ -91,10 +90,9 @@ export const PlaylistEditor: React.FC = () => {
   const fetchPlaylistData = async () => {
     setLoading(true);
     try {
-      const [pRes, eRes, gRes] = await Promise.all([
+      const [pRes, eRes] = await Promise.all([
         fetch(`/api/playlists`).then(res => res.json()),
-        fetch(`/api/playlists/entries/${id}?limit=500`).then(res => res.json()),
-        fetch(`/api/playlists/groups/${id}`).then(res => res.json())
+        fetch(`/api/playlists/entries/${id}?limit=500`).then(res => res.json())
       ]);
       
       const pInfo = pRes.find((p: any) => p.id.toString() === id);
@@ -117,9 +115,6 @@ export const PlaylistEditor: React.FC = () => {
         stream_url: ch.play_links?.original || ''
       }));
       setEntries(mapped);
-      if (gRes && gRes.groups) {
-        setGroups(gRes.groups);
-      }
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
