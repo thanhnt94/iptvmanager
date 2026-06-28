@@ -5,15 +5,13 @@ import {
   Save, 
   Tv, 
   List, 
-  Shield, 
   Link, 
   Image as ImageIcon,
   Loader2,
   AlertCircle,
   Play,
   Globe,
-  Lock as LockIcon,
-  ZapOff
+  Lock as LockIcon
 } from 'lucide-react';
 import { getLogoUrl } from '../../utils';
 import { UnifiedPlayer } from '../player/UnifiedPlayer';
@@ -359,51 +357,6 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                </div>
 
                <div className="space-y-4">
-                  <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-4">Identity Protection</h4>
-                  <button 
-                    type="button"
-                    onClick={() => setFormData({...formData, is_original: !formData.is_original})}
-                    className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                      formData.is_original 
-                      ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' 
-                      : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                       <Shield size={20} />
-                       <div className="text-left">
-                          <p className="text-xs font-black uppercase tracking-widest">Mark as Protected</p>
-                          <p className="text-[9px] font-medium opacity-60">Prevents automatic cleanup if link dies</p>
-                       </div>
-                    </div>
-                    <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_original ? 'bg-indigo-500' : 'bg-slate-800'}`}>
-                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_original ? 'left-5' : 'left-1'}`} />
-                    </div>
-                  </button>
-
-                  <button 
-                    type="button"
-                    onClick={() => setFormData({...formData, is_passthrough: !formData.is_passthrough})}
-                    className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all mt-4 ${
-                      formData.is_passthrough 
-                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' 
-                      : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                       <ZapOff size={20} />
-                       <div className="text-left">
-                          <p className="text-xs font-black uppercase tracking-widest">Passthrough Mode</p>
-                          <p className="text-[9px] font-medium opacity-60">Skip VPS Scan/Player (Direct Device Only)</p>
-                       </div>
-                    </div>
-                    <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_passthrough ? 'bg-rose-500' : 'bg-slate-800'}`}>
-                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_passthrough ? 'left-5' : 'left-1'}`} />
-                    </div>
-                  </button>
-                </div>
-
-               <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-4">Public Accessibility</h4>
                   <button 
                     type="button"
@@ -418,7 +371,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                        {formData.is_public ? <Globe size={20} /> : <LockIcon size={20} />}
                        <div className="text-left">
                           <p className="text-xs font-black uppercase tracking-widest">Share to Community</p>
-                          <p className="text-[9px] font-medium opacity-60">Visible in dynamic shared playlist</p>
+                          <p className="text-[9px] font-medium opacity-60">Visible to VIP/Admin members</p>
                        </div>
                     </div>
                     <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_public ? 'bg-emerald-500' : 'bg-slate-800'}`}>

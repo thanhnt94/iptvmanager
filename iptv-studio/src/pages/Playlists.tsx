@@ -201,7 +201,7 @@ export const Playlists: React.FC = () => {
   const handleCreate = async () => {
     setCreating(true);
     try {
-      const res = await fetch('/api/playlists/', {
+      const res = await fetch('/api/playlists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, slug: newSlug })
@@ -441,13 +441,16 @@ export const Playlists: React.FC = () => {
                         </button>
                     </div>
                     <div className="space-y-1">
-                        {['smart', 'tracking', 'direct'].map(mode => (
+                        {[
+                          { mode: 'direct', label: 'Direct Gateway (Link gốc)' },
+                          { mode: 'tracking', label: 'Tracking Gateway (Link track)' }
+                        ].map(({ mode, label }) => (
                           <button 
                             key={mode} 
                             onClick={() => copyToClipboard(item, hideDieFilter, mode)}
                             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all border ${copiedId === `${item.id}-${mode}` ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-white/5 hover:bg-white/5'}`}
                           >
-                            <span className="text-[10px] font-black text-white uppercase">{mode} Gateway</span>
+                            <span className="text-[10px] font-black text-white uppercase">{label}</span>
                             {copiedId === `${item.id}-${mode}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-slate-600" />}
                           </button>
                         ))}
