@@ -721,8 +721,9 @@ async def track_redirect(
     db.commit()
 
     from app.modules.channels.services import ActiveSessionManager
+    client_host = request.client.host if request.client else '127.0.0.1'
     ActiveSessionManager.update_session(
-        channel_id, 'External', request.client.host,
+        channel_id, 'External', client_host,
         'M3U Player', user_agent=request.headers.get('user-agent'),
     )
 
@@ -753,8 +754,9 @@ async def play_channel(
     headers = {'User-Agent': request.headers.get('user-agent', 'IPTV-Manager/2.0')}
     q, sid = StreamManager.get_source_stream(url, headers)
 
+    client_host = request.client.host if request.client else '127.0.0.1'
     ActiveSessionManager.update_session(
-        channel_id, 'Proxy', request.client.host,
+        channel_id, 'Proxy', client_host,
         'TS Proxy', user_agent=request.headers.get('user-agent'),
     )
 
