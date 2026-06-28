@@ -175,24 +175,36 @@ class PlaylistService:
                 query = query.filter_by(is_public=True)
 
             if hide_die:
-                query = query.filter(or_(Channel.status != 'die', Channel.status == None))
-
-            sort_logic = [
-                case((Channel.owner_id == profile.owner_id, 0), else_=1).asc(),
-                case((Channel.status == 'live', 0), (Channel.status == 'unknown', 1), (Channel.status == 'die', 2), else_=1).asc(),
-                Channel.name.asc(),
-            ]
+                sort_logic = [
+                    case((Channel.status == 'live', 0), else_=1).asc(),
+                    case((Channel.owner_id == profile.owner_id, 0), else_=1).asc(),
+                    Channel.name.asc(),
+                ]
+            else:
+                sort_logic = [
+                    case((Channel.owner_id == profile.owner_id, 0), else_=1).asc(),
+                    Channel.name.asc(),
+                ]
             channels = query.order_by(*sort_logic).all()
 
             for ch in channels:
                 if not ch:
                     continue
                 ch_status = ch.status or 'unknown'
-                ch_name = ch.name
-                if ch_status == 'unknown':
-                    ch_name = f"[Unknown] {ch.name}"
-                elif not hide_die and ch_status == 'die':
-                    ch_name = f"[Unavailable] {ch.name}"
+                clean_name = ch.name
+                
+                # Strip old prefix tags if any
+                for tag in ["[die]", "[unknown]", "[unavailable]", "[unknown]", "[Unavailable]", "[Unknown]"]:
+                    if clean_name.lower().startswith(tag.lower()):
+                        clean_name = clean_name[len(tag):].strip()
+                
+                if ch_status == 'die':
+                    ch_name = f"[die] {clean_name}"
+                elif ch_status == 'unknown':
+                    ch_name = f"[unknown] {clean_name}"
+                else:
+                    ch_name = clean_name
+                    
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch_name}'
                 m3u_lines.append(extinf)
                 m3u_lines.append(get_wrapped_url(ch, mode))
@@ -203,13 +215,15 @@ class PlaylistService:
                 owner_user = db.query(User).get(profile.owner_id)
                 if owner_user and owner_user.role == 'free':
                     query_entries = query_entries.join(Channel).filter(Channel.owner_id == profile.owner_id)
-            entries = query_entries.all()
             
-            if not hide_die:
-                priority = {'live': 0, 'unknown': 1, 'die': 2}
+            # Sắp xếp mặc định theo order_index
+            entries = query_entries.order_by(PlaylistEntry.order_index.asc()).all()
+            
+            if hide_die:
+                # BẬT: Kênh live lên đầu, die/unknown xuống dưới
                 entries = sorted(entries, key=lambda e: (
-                    priority.get(getattr(e.channel, 'status', 'die') or 'die', 2),
-                    e.channel.name if e.channel else '',
+                    0 if (e.channel.status if e.channel else None) == 'live' else 1,
+                    e.order_index
                 ))
 
             for entry in entries:
@@ -217,13 +231,21 @@ class PlaylistService:
                 if not ch:
                     continue
                 ch_status = ch.status or 'unknown'
-                if hide_die and ch_status == 'die':
-                    continue
                 ch_name = entry.custom_name or ch.name
-                if ch_status == 'unknown':
-                    ch_name = f"[Unknown] {ch_name}"
-                elif not hide_die and ch_status == 'die':
-                    ch_name = f"[Unavailable] {ch_name}"
+                
+                # Strip old prefix tags if any
+                clean_name = ch_name
+                for tag in ["[die]", "[unknown]", "[unavailable]", "[unknown]", "[Unavailable]", "[Unknown]"]:
+                    if clean_name.lower().startswith(tag.lower()):
+                        clean_name = clean_name[len(tag):].strip()
+                
+                if ch_status == 'die':
+                    ch_name = f"[die] {clean_name}"
+                elif ch_status == 'unknown':
+                    ch_name = f"[unknown] {clean_name}"
+                else:
+                    ch_name = clean_name
+                    
                 group_name = entry.custom_group or (entry.group.name if entry.group else ch.group_name or "General")
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch_name}'
                 m3u_lines.append(extinf)

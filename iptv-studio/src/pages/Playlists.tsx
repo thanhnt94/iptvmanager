@@ -61,8 +61,8 @@ export const Playlists: React.FC = () => {
   // Advanced Copy Modal States
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [activePlaylistForCopy, setActivePlaylistForCopy] = useState<Playlist | null>(null);
-  const [advMode, setAdvMode] = useState('default');
-  const [advUa, setAdvUa] = useState('default');
+  const [advMode, setAdvMode] = useState('tracking');
+  const [advUa, setAdvUa] = useState('chrome');
   const [advHideDie, setAdvHideDie] = useState(false);
   
   // Scanner Progress State
@@ -164,8 +164,8 @@ export const Playlists: React.FC = () => {
 
   const openCopyModal = (playlist: Playlist) => {
     setActivePlaylistForCopy(playlist);
-    setAdvMode('default');
-    setAdvUa('default');
+    setAdvMode('tracking');
+    setAdvUa('chrome');
     setAdvHideDie(hideDieFilter);
     setIsCopyModalOpen(true);
   };
