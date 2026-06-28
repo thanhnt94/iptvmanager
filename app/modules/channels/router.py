@@ -74,6 +74,8 @@ def _check_channel_access(db: Session, channel_id: int, user: User):
     if share:
         return share.access_level, channel
     if channel.is_public:
+        if user.role == 'free' and channel.owner_id != user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
         return 'read', channel
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -102,11 +104,17 @@ async def list_channels(
             ChannelShare.to_user_id == user.id,
             ChannelShare.status == 'accepted',
         )
-        query = query.filter(or_(
-            Channel.owner_id == user.id,
-            Channel.is_public == True,
-            Channel.id.in_(shared_ids),
-        ))
+        if user.role == 'free':
+            query = query.filter(or_(
+                Channel.owner_id == user.id,
+                Channel.id.in_(shared_ids),
+            ))
+        else: # vip
+            query = query.filter(or_(
+                Channel.owner_id == user.id,
+                Channel.is_public == True,
+                Channel.id.in_(shared_ids),
+            ))
 
     if search:
         if search.isdigit():
@@ -372,9 +380,6 @@ async def create_channel(
     if not stream_url:
         raise HTTPException(status_code=400, detail="stream_url is required")
 
-    if db.query(Channel).filter_by(stream_url=stream_url).first():
-        raise HTTPException(status_code=409, detail="Channel with this URL already exists")
-
     # Auto format detection
     url_lower = stream_url.lower()
     stream_format = None
@@ -382,6 +387,7 @@ async def create_channel(
     elif '.mp4' in url_lower: stream_format = 'mp4'
     elif '.ts' in url_lower: stream_format = 'ts'
 
+    is_pub = bool(data.get('is_public', False))
     channel = Channel(
         name=data.get('name', 'New Channel'),
         stream_url=stream_url,
@@ -392,6 +398,8 @@ async def create_channel(
         proxy_type=data.get('proxy_type', 'none'),
         is_original=data.get('is_original', False),
         is_passthrough=data.get('is_passthrough', False),
+        is_public=is_pub,
+        public_status='approved' if is_pub else 'none',
         owner_id=user.id,
         status='unknown',
     )
@@ -421,7 +429,7 @@ async def update_channel(
     if 'is_passthrough' in data:
         channel.is_passthrough = bool(data['is_passthrough'])
 
-    if 'is_public' in data and user.role == 'admin':
+    if 'is_public' in data:
         channel.is_public = bool(data['is_public'])
         channel.public_status = 'approved' if channel.is_public else 'none'
 

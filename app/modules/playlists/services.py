@@ -190,10 +190,17 @@ class PlaylistService:
             query = db.query(Channel)
             if profile.owner_id:
                 oid = int(profile.owner_id)
+                from app.modules.auth.models import User
+                owner_user = db.query(User).get(oid)
+                owner_role = owner_user.role if owner_user else 'free'
+                
                 if "protected" in profile.slug:
                     query = query.filter(Channel.owner_id == oid, Channel.is_original == True)
                 else:
-                    query = query.filter(or_(Channel.owner_id == oid, Channel.is_public == True))
+                    if owner_role == 'free':
+                        query = query.filter(Channel.owner_id == oid)
+                    else:
+                        query = query.filter(or_(Channel.owner_id == oid, Channel.is_public == True))
             else:
                 query = query.filter_by(is_public=True)
 
@@ -220,7 +227,14 @@ class PlaylistService:
                 m3u_lines.append(extinf)
                 m3u_lines.append(get_wrapped_url(ch, mode))
         else:
-            entries = profile.entries
+            query_entries = db.query(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
+            if profile.owner_id:
+                from app.modules.auth.models import User
+                owner_user = db.query(User).get(profile.owner_id)
+                if owner_user and owner_user.role == 'free':
+                    query_entries = query_entries.join(Channel).filter(Channel.owner_id == profile.owner_id)
+            entries = query_entries.all()
+            
             if not hide_die:
                 priority = {'live': 0, 'unknown': 1, 'die': 2}
                 entries = sorted(entries, key=lambda e: (
@@ -260,10 +274,17 @@ class PlaylistService:
         if profile.is_system:
             query = db.query(Channel).filter(or_(Channel.status != 'die', Channel.status == None))
             if profile.owner_id:
+                from app.modules.auth.models import User
+                owner_user = db.query(User).get(profile.owner_id)
+                owner_role = owner_user.role if owner_user else 'free'
+                
                 if "protected" in profile.slug:
                     query = query.filter_by(owner_id=profile.owner_id, is_original=True)
                 else:
-                    query = query.filter(or_(Channel.owner_id == profile.owner_id, Channel.is_public == True))
+                    if owner_role == 'free':
+                        query = query.filter(Channel.owner_id == profile.owner_id)
+                    else:
+                        query = query.filter(or_(Channel.owner_id == profile.owner_id, Channel.is_public == True))
             elif profile.slug == 'public':
                 query = query.filter_by(is_public=True)
             for ch in query.all():
@@ -274,7 +295,15 @@ class PlaylistService:
                     if ch.logo_url:
                         ET.SubElement(c_node, 'icon', src=ch.logo_url)
         else:
-            for entry in profile.entries:
+            query_entries = db.query(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
+            if profile.owner_id:
+                from app.modules.auth.models import User
+                owner_user = db.query(User).get(profile.owner_id)
+                if owner_user and owner_user.role == 'free':
+                    query_entries = query_entries.join(Channel).filter(Channel.owner_id == profile.owner_id)
+            entries = query_entries.all()
+            
+            for entry in entries:
                 ch = entry.channel
                 if not ch or ch.status == 'die':
                     continue
