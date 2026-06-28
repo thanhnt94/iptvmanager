@@ -421,7 +421,7 @@ export const Channels: React.FC = () => {
     setSavingId(id);
     try {
       const res = await fetch(`/api/channels/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
