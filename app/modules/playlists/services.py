@@ -138,6 +138,18 @@ class PlaylistService:
 
         base = base_url.rstrip('/')
 
+        # User-Agent mapping for client-side spoofing via #EXTVLCOPT
+        UA_MAP = {
+            'chrome': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'iphone': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
+            'tv': 'Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5359.211 Safari/537.36',
+            'tivimate': 'TiviMate/4.7.0 (Linux; Google TV)',
+            'vlc': 'VLC/3.0.18 LibVLC/3.0.18',
+        }
+
+        ua_key = auth_params.get('ua') if auth_params else None
+        ua_full = UA_MAP.get(ua_key) if ua_key and ua_key != 'default' else None
+
         def get_wrapped_url(ch, mode_override=None):
             m = mode_override or ch.proxy_type or 'default'
             if m == 'direct' or ch.is_passthrough or m == 'none':
@@ -150,10 +162,14 @@ class PlaylistService:
             if auth_params and 'token' in auth_params:
                 conn = '&' if '?' in url else '?'
                 url += f"{conn}token={auth_params['token']}"
-            if auth_params and 'ua' in auth_params:
-                conn = '&' if '?' in url else '?'
-                url += f"{conn}ua={auth_params['ua']}"
             return url
+
+        def append_channel(m3u_lines, extinf, url):
+            """Append EXTINF + optional EXTVLCOPT + URL to m3u_lines."""
+            m3u_lines.append(extinf)
+            if ua_full:
+                m3u_lines.append(f'#EXTVLCOPT:http-user-agent={ua_full}')
+            m3u_lines.append(url)
 
         # System playlists
         if profile.is_system:
@@ -206,8 +222,7 @@ class PlaylistService:
                     ch_name = clean_name
                     
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{ch.group_name or ""}",{ch_name}'
-                m3u_lines.append(extinf)
-                m3u_lines.append(get_wrapped_url(ch, mode))
+                append_channel(m3u_lines, extinf, get_wrapped_url(ch, mode))
         else:
             query_entries = db.query(PlaylistEntry).filter(PlaylistEntry.playlist_id == playlist_id)
             if profile.owner_id:
@@ -248,8 +263,7 @@ class PlaylistService:
                     
                 group_name = entry.custom_group or (entry.group.name if entry.group else ch.group_name or "General")
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch_name}'
-                m3u_lines.append(extinf)
-                m3u_lines.append(get_wrapped_url(ch, mode))
+                append_channel(m3u_lines, extinf, get_wrapped_url(ch, mode))
 
         return "\r\n".join(m3u_lines)
 
