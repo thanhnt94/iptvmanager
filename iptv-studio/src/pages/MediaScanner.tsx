@@ -322,7 +322,7 @@ export const MediaScanner: React.FC = () => {
            </div>
            <div className="text-center space-y-2">
               <p className="text-xs font-black text-indigo-400 uppercase tracking-[0.3em] animate-pulse">Sniffing Web Page...</p>
-              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Parsing HTML response code</p>
+              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Activating Ultra JS Engine (Playwright Stealth Sniffer) & scanning network streams...</p>
            </div>
         </div>
       )}
