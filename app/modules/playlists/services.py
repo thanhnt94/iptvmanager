@@ -151,6 +151,9 @@ class PlaylistService:
         ua_full = UA_MAP.get(ua_key) if ua_key and ua_key != 'default' else None
 
         def get_wrapped_url(ch, mode_override=None):
+            if getattr(ch, 'keep_original_link', False):
+                return ch.stream_url
+
             m = mode_override or ch.proxy_type or 'default'
             if m == 'direct' or ch.is_passthrough or m == 'none':
                 url = ch.stream_url

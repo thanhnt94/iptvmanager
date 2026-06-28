@@ -89,5 +89,17 @@ def init_db():
             os.makedirs(db_dir, exist_ok=True)
 
     Base.metadata.create_all(bind=engine)
+    
+    # Auto-migration: ensure keep_original_link exists on channels table
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE channels ADD COLUMN keep_original_link BOOLEAN DEFAULT 0"))
+            conn.commit()
+            logger.info("Added keep_original_link column to channels table.")
+    except Exception as e:
+        # Ignore if column already exists
+        pass
+
     logger.info("Database schema verified/created successfully.")
 

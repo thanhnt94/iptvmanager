@@ -91,13 +91,13 @@ def _channel_to_dict(ch: Channel) -> dict:
         'status': ch.status,
         'stream_type': ch.stream_type,
         'stream_format': ch.stream_format or 'ts',
-        'play_url': f"/api/channels/play/{ch.id}",
+        'play_url': ch.stream_url if getattr(ch, 'keep_original_link', False) else f"/api/channels/play/{ch.id}",
         'play_links': {
             'original': ch.stream_url,
-            'track': f"/api/channels/track/{ch.id}",
-            'smart': f"/api/channels/play/{ch.id}",
-            'ts': f"/api/channels/play/{ch.id}",
-            'hls': f"/api/channels/hls-manifest/{ch.id}/index.m3u8",
+            'track': ch.stream_url if getattr(ch, 'keep_original_link', False) else f"/api/channels/track/{ch.id}",
+            'smart': ch.stream_url if getattr(ch, 'keep_original_link', False) else f"/api/channels/play/{ch.id}",
+            'ts': ch.stream_url if getattr(ch, 'keep_original_link', False) else f"/api/channels/play/{ch.id}",
+            'hls': ch.stream_url if getattr(ch, 'keep_original_link', False) else f"/api/channels/hls-manifest/{ch.id}/index.m3u8",
         },
         'latency': ch.latency,
         'quality': ch.quality,
@@ -113,6 +113,7 @@ def _channel_to_dict(ch: Channel) -> dict:
         'is_protected': ch.is_protected,
         'is_public': ch.is_public,
         'is_dynamic': ch.is_dynamic,
+        'keep_original_link': getattr(ch, 'keep_original_link', False),
         'public_status': ch.public_status,
         'owner_id': ch.owner_id,
         'play_count': ch.play_count,
@@ -457,6 +458,7 @@ async def create_channel(
         proxy_type=data.get('proxy_type', 'none'),
         is_original=data.get('is_original', False),
         is_passthrough=data.get('is_passthrough', False),
+        keep_original_link=bool(data.get('keep_original_link', False)),
         is_public=is_pub,
         public_status='approved' if is_pub else 'none',
         is_dynamic=bool(data.get('is_dynamic', False)),
@@ -501,6 +503,9 @@ async def update_channel(
         channel.is_dynamic = bool(data['is_dynamic'])
         if channel.is_dynamic:
             channel.dynamic_origin_url = channel.stream_url
+
+    if 'keep_original_link' in data:
+        channel.keep_original_link = bool(data['keep_original_link'])
 
     db.commit()
     return {'status': 'ok'}

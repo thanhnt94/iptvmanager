@@ -33,6 +33,7 @@ class Channel(Base):
     is_passthrough = Column(Boolean, default=False)
     is_protected = Column(Boolean, default=False)
     is_dynamic = Column(Boolean, default=False)
+    keep_original_link = Column(Boolean, default=False)
     dynamic_origin_url = Column(String(512))
 
     # Permission fields
