@@ -76,6 +76,13 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
   }
   menuGroups.push(adminGroup);
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {}
+    window.location.href = '/login';
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col lg:flex-row">
       {/* Mobile Top Bar */}
@@ -156,7 +163,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
                 <p className="text-sm font-black text-white truncate leading-none mb-1 group-hover:text-indigo-400 transition-colors">{user.username}</p>
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">View Profile</p>
              </NavLink>
-             <button onClick={() => window.location.href = '/logout'} className="p-2.5 hover:bg-white/5 rounded-xl hover:text-rose-400 transition-colors">
+             <button onClick={handleLogout} className="p-2.5 hover:bg-white/5 rounded-xl hover:text-rose-400 transition-colors">
                <LogOut size={18} />
              </button>
            </div>
