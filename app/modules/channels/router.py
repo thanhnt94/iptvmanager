@@ -727,6 +727,27 @@ async def track_redirect(
         'M3U Player', user_agent=request.headers.get('user-agent'),
     )
 
+    # 1. Đưa vào queue với độ ưu tiên cao
+    from app.modules.health.services import HealthCheckService
+    HealthCheckService.prioritize_channel_in_queue(db, channel_id)
+
+    # 2. Check nhanh tại chỗ (Fast check) để phản hồi trạng thái
+    check_res = HealthCheckService.check_stream(db, channel_id, force=True, timeout=5)
+    
+    # 3. Nếu die thì đổi tên [die] và đẩy xuống cuối playlist
+    if check_res.get('status') == 'die':
+        if not channel.name.startswith("[die]"):
+            channel.name = f"[die] {channel.name}"
+            
+        # Đẩy xuống cuối các playlist chứa kênh này
+        from sqlalchemy import func
+        entries = db.query(PlaylistEntry).filter_by(channel_id=channel_id).all()
+        for entry in entries:
+            max_order = db.query(func.max(PlaylistEntry.order_index)).filter_by(playlist_id=entry.playlist_id).scalar() or 0
+            entry.order_index = max_order + 1
+            
+        db.commit()
+
     return RedirectResponse(url=channel.stream_url, status_code=302)
 
 
