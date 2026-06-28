@@ -20,7 +20,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column('tv_channels', sa.Column('show_watermark', sa.Boolean(), nullable=True))
+    try:
+        op.add_column('tv_channels', sa.Column('show_watermark', sa.Boolean(), nullable=True))
+    except Exception:
+        pass
 
 
 def downgrade() -> None:

@@ -20,7 +20,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column('tv_channels', sa.Column('timezone', sa.String(), nullable=False, server_default='Asia/Ho_Chi_Minh'))
+    try:
+        op.add_column('tv_channels', sa.Column('timezone', sa.String(), nullable=False, server_default='Asia/Ho_Chi_Minh'))
+    except Exception:
+        pass
 
 
 def downgrade() -> None:
