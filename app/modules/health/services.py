@@ -32,6 +32,21 @@ class HealthCheckService:
 
         logger.info(f" [HEALTH-START] Checking {channel.name} (Force={force}, Fast={fast_mode}, Timeout={timeout}s)")
 
+        # Phân giải link động nếu được cấu hình
+        if channel.is_dynamic:
+            try:
+                from app.modules.channels.services import ExtractorService
+                logger.info(f" [HEALTH-DYNAMIC] Resolving dynamic channel {channel.id} before check")
+                origin_url = channel.dynamic_origin_url or channel.stream_url
+                results = ExtractorService.extract_direct_url(origin_url, deep_scan=True)
+                if results and len(results) > 0:
+                    resolved_url = results[0]['url']
+                    logger.info(f" [HEALTH-DYNAMIC] Resolved to: {resolved_url}")
+                    channel.stream_url = resolved_url
+                    db.commit()
+            except Exception as e:
+                logger.error(f" [HEALTH-DYNAMIC-ERROR] Resolution failed for channel {channel.id}: {e}")
+
         from app.modules.settings.services import SettingService
         if not SettingService.get(db, 'ENABLE_HEALTH_SYSTEM', True):
             return {'status': channel.status, 'skipped': 'Master switch OFF'}

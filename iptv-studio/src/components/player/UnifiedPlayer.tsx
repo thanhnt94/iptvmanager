@@ -36,7 +36,10 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   useEffect(() => {
     if (channel) {
       const mode = activeMode.toLowerCase();
-      const url = channel.play_links?.[mode] || channel.play_url;
+      let url = channel.play_links?.[mode] || channel.play_url;
+      if (channel.is_dynamic && (mode === 'original' || !url)) {
+        url = channel.play_links?.['track'] || `/api/channels/track/${channel.id}`;
+      }
       setCurrentUrl(url);
       setStatus('loading');
       setError(null);
