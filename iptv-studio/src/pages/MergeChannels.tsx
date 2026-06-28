@@ -133,7 +133,7 @@ export const MergeChannels: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <div className="bg-slate-900/50 rounded-[2rem] border border-white/5 overflow-hidden">
+      <div className="bg-slate-900/50 rounded-[2rem] border border-white/5">
         <div className="p-8 space-y-8">
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
