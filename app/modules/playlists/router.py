@@ -236,6 +236,7 @@ async def get_entries(
                 'play_url': f"/api/channels/play/{ch.id}",
                 'play_links': {
                     'original': ch.stream_url,
+                    'track': f"/api/channels/track/{ch.id}",
                     'smart': f"/api/channels/play/{ch.id}",
                     'ts': f"/api/channels/play/{ch.id}",
                     'hls': f"/api/channels/hls-manifest/{ch.id}/index.m3u8",
@@ -290,6 +291,7 @@ async def get_entries(
                 'play_url': f"/api/channels/play/{e.channel.id}",
                 'play_links': {
                     'original': e.channel.stream_url,
+                    'track': f"/api/channels/track/{e.channel.id}",
                     'smart': f"/api/channels/play/{e.channel.id}",
                     'ts': f"/api/channels/play/{e.channel.id}",
                     'hls': f"/api/channels/hls-manifest/{e.channel.id}/index.m3u8",

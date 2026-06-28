@@ -1237,7 +1237,7 @@ export const Channels: React.FC = () => {
                   </header>
 
                   <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                      {shareChannel.play_links && (['original', 'smart', 'hls', 'ts'] as const).map((mode) => {
+                      {shareChannel.play_links && (['original', 'track', 'smart', 'hls', 'ts'] as const).map((mode) => {
                         let url = shareChannel.play_links?.[mode];
                         if (!url) return null;
 
@@ -1246,8 +1246,9 @@ export const Channels: React.FC = () => {
                         }
 
                         const labelMap: Record<string, string> = {
-                          'smart': 'Smart Dynamic Gateway',
                           'original': 'Original Source Link',
+                          'track': 'Direct Link Tracking (302 Redirect)',
+                          'smart': 'Smart Dynamic Gateway',
                           'hls': 'HLS Edge Cache',
                           'ts': 'TS Stream Proxy'
                         };

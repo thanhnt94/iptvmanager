@@ -94,6 +94,7 @@ def _channel_to_dict(ch: Channel) -> dict:
         'play_url': f"/api/channels/play/{ch.id}",
         'play_links': {
             'original': ch.stream_url,
+            'track': f"/api/channels/track/{ch.id}",
             'smart': f"/api/channels/play/{ch.id}",
             'ts': f"/api/channels/play/{ch.id}",
             'hls': f"/api/channels/hls-manifest/{ch.id}/index.m3u8",
