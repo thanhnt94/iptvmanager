@@ -118,6 +118,7 @@ def _channel_to_dict(ch: Channel) -> dict:
         'owner_id': ch.owner_id,
         'play_count': ch.play_count,
         'total_watch_seconds': ch.total_watch_seconds,
+        'created_at': ch.created_at.isoformat() if ch.created_at else None,
     }
 
 

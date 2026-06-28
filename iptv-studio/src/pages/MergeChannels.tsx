@@ -1,13 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { GitMerge, Search, HelpCircle, Loader2, ArrowRight, X, CheckCircle } from 'lucide-react';
+import { GitMerge, Search, HelpCircle, Loader2, ArrowRight, X, CheckCircle, Shield, Tv } from 'lucide-react';
 
 interface Channel {
   id: number;
   name: string;
   stream_url: string;
   group_name: string;
+  logo_url?: string;
+  is_protected?: boolean;
+  created_at?: string;
 }
+
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleString('vi-VN', { hour12: false });
+  } catch {
+    return dateStr;
+  }
+};
 
 export const MergeChannels: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -138,13 +151,34 @@ export const MergeChannels: React.FC = () => {
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="p-5 rounded-2xl bg-amber-500/5 border border-amber-500/20 relative"
+                  className="p-5 rounded-2xl bg-amber-500/5 border border-amber-500/20 relative flex gap-4 items-start"
                 >
-                  <h4 className="text-sm font-bold text-white">{selectedSource.name}</h4>
-                  <p className="text-[10px] text-amber-400/60 mt-1.5 truncate font-mono">{selectedSource.stream_url}</p>
-                  <span className="inline-block mt-2.5 px-2.5 py-1 bg-amber-500/10 text-amber-400 text-[8px] font-black rounded-lg uppercase tracking-wider">
-                    {selectedSource.group_name}
-                  </span>
+                  <div className="shrink-0">
+                    {selectedSource.logo_url ? (
+                      <img src={selectedSource.logo_url} className="w-12 h-12 rounded-xl object-contain bg-slate-950 border border-white/10" alt="" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500">
+                        <Tv size={20} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-white">{selectedSource.name}</h4>
+                      <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-[8px] font-black rounded uppercase tracking-wider">
+                        {selectedSource.group_name}
+                      </span>
+                      {selectedSource.is_protected && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[8px] font-black rounded uppercase tracking-wider border border-indigo-500/20">
+                          <Shield size={8} /> Protected
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-amber-400/60 mt-1.5 truncate font-mono">{selectedSource.stream_url}</p>
+                    {selectedSource.created_at && (
+                      <p className="text-[9px] text-slate-500 mt-1">Added: {formatDate(selectedSource.created_at)}</p>
+                    )}
+                  </div>
                   <button
                     onClick={() => setSelectedSource(null)}
                     className="absolute top-4 right-4 p-1.5 hover:bg-white/5 rounded-xl text-slate-400 hover:text-white transition-colors"
@@ -173,10 +207,36 @@ export const MergeChannels: React.FC = () => {
                             setSourceSearch('');
                             setSourceResults([]);
                           }}
-                          className="w-full text-left px-4 py-3 hover:bg-amber-500/5 border-b border-white/5 transition-colors flex flex-col"
+                          className="w-full text-left px-4 py-3.5 hover:bg-amber-500/5 border-b border-white/5 transition-colors flex items-center gap-3"
                         >
-                          <span className="text-xs font-bold text-white">{ch.name}</span>
-                          <span className="text-[9px] text-slate-500 truncate mt-0.5 font-mono">{ch.stream_url}</span>
+                          <div className="shrink-0">
+                            {ch.logo_url ? (
+                              <img src={ch.logo_url} className="w-9 h-9 rounded-lg object-contain bg-slate-900 border border-white/10" alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            ) : (
+                              <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-500 font-black uppercase text-xs">
+                                {ch.name.substring(0, 2)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-white">{ch.name}</span>
+                              <span className="px-1.5 py-0.5 bg-white/5 border border-white/5 text-slate-400 text-[8px] font-black rounded uppercase tracking-wider">
+                                {ch.group_name || 'General'}
+                              </span>
+                              {ch.is_protected && (
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[8px] font-black rounded uppercase tracking-wider">
+                                  <Shield size={8} /> Protected
+                                </span>
+                              )}
+                            </div>
+                            <span className="block text-[9px] text-slate-500 truncate mt-1 font-mono">{ch.stream_url}</span>
+                            {ch.created_at && (
+                              <span className="block text-[8px] text-slate-600 mt-0.5">
+                                Added: {formatDate(ch.created_at)}
+                              </span>
+                            )}
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -198,13 +258,34 @@ export const MergeChannels: React.FC = () => {
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="p-5 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 relative"
+                  className="p-5 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 relative flex gap-4 items-start"
                 >
-                  <h4 className="text-sm font-bold text-white">{selectedTarget.name}</h4>
-                  <p className="text-[10px] text-indigo-400/60 mt-1.5 truncate font-mono">{selectedTarget.stream_url}</p>
-                  <span className="inline-block mt-2.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-400 text-[8px] font-black rounded-lg uppercase tracking-wider">
-                    {selectedTarget.group_name}
-                  </span>
+                  <div className="shrink-0">
+                    {selectedTarget.logo_url ? (
+                      <img src={selectedTarget.logo_url} className="w-12 h-12 rounded-xl object-contain bg-slate-955 border border-white/10" alt="" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500">
+                        <Tv size={20} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-white">{selectedTarget.name}</h4>
+                      <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[8px] font-black rounded uppercase tracking-wider">
+                        {selectedTarget.group_name}
+                      </span>
+                      {selectedTarget.is_protected && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[8px] font-black rounded uppercase tracking-wider border border-indigo-500/20">
+                          <Shield size={8} /> Protected
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-indigo-400/60 mt-1.5 truncate font-mono">{selectedTarget.stream_url}</p>
+                    {selectedTarget.created_at && (
+                      <p className="text-[9px] text-slate-500 mt-1">Added: {formatDate(selectedTarget.created_at)}</p>
+                    )}
+                  </div>
                   <button
                     onClick={() => setSelectedTarget(null)}
                     className="absolute top-4 right-4 p-1.5 hover:bg-white/5 rounded-xl text-slate-400 hover:text-white transition-colors"
@@ -233,10 +314,36 @@ export const MergeChannels: React.FC = () => {
                             setTargetSearch('');
                             setTargetResults([]);
                           }}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-500/5 border-b border-white/5 transition-colors flex flex-col"
+                          className="w-full text-left px-4 py-3.5 hover:bg-indigo-500/5 border-b border-white/5 transition-colors flex items-center gap-3"
                         >
-                          <span className="text-xs font-bold text-white">{ch.name}</span>
-                          <span className="text-[9px] text-slate-500 truncate mt-0.5 font-mono">{ch.stream_url}</span>
+                          <div className="shrink-0">
+                            {ch.logo_url ? (
+                              <img src={ch.logo_url} className="w-9 h-9 rounded-lg object-contain bg-slate-900 border border-white/10" alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            ) : (
+                              <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-500 font-black uppercase text-xs">
+                                {ch.name.substring(0, 2)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-white">{ch.name}</span>
+                              <span className="px-1.5 py-0.5 bg-white/5 border border-white/5 text-slate-400 text-[8px] font-black rounded uppercase tracking-wider">
+                                {ch.group_name || 'General'}
+                              </span>
+                              {ch.is_protected && (
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[8px] font-black rounded uppercase tracking-wider">
+                                  <Shield size={8} /> Protected
+                                </span>
+                              )}
+                            </div>
+                            <span className="block text-[9px] text-slate-500 truncate mt-1 font-mono">{ch.stream_url}</span>
+                            {ch.created_at && (
+                              <span className="block text-[8px] text-slate-600 mt-0.5">
+                                Added: {formatDate(ch.created_at)}
+                              </span>
+                            )}
+                          </div>
                         </button>
                       ))}
                     </div>
