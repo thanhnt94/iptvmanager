@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
@@ -38,7 +39,16 @@ interface UserRecord {
 }
 
 export const AdminPortal: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'security' | 'maintenance' | 'tasks'>('users');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab = (tabParam === 'tasks' || tabParam === 'users' || tabParam === 'system' || tabParam === 'security' || tabParam === 'maintenance') ? tabParam : 'users';
+  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'security' | 'maintenance' | 'tasks'>(initialTab);
+
+  // Sync state back to URL if tab clicked manually
+  const changeTab = (tab: 'users' | 'system' | 'security' | 'maintenance' | 'tasks') => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
   const [settings, setSettings] = useState<Setting[]>([]);
   const [usersList, setUsersList] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -353,7 +363,7 @@ export const AdminPortal: React.FC = () => {
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => changeTab(tab.id as any)}
               className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
                 activeTab === tab.id 
                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 

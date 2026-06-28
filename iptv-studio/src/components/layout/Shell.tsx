@@ -13,7 +13,8 @@ import {
   FolderTree,
   Settings,
   Users,
-  PlayCircle
+  PlayCircle,
+  Activity
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -73,7 +74,8 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
   if (user.role === 'admin') {
     adminGroup.items.unshift(
       { icon: <FolderTree size={20} />, label: 'Group Manager', path: '/groups' },
-      { icon: <ShieldCheck size={20} />, label: 'Admin Portal', path: '/admin' }
+      { icon: <ShieldCheck size={20} />, label: 'Admin Portal', path: '/admin' },
+      { icon: <Activity size={20} />, label: 'Scan Queue', path: '/admin?tab=tasks' }
     );
   }
   menuGroups.push(adminGroup);
