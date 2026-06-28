@@ -109,6 +109,7 @@ def _channel_to_dict(ch: Channel) -> dict:
         'last_checked_at': ch.last_checked_at.isoformat() if ch.last_checked_at else None,
         'is_original': ch.is_original,
         'is_passthrough': ch.is_passthrough,
+        'is_protected': ch.is_protected,
         'is_public': ch.is_public,
         'public_status': ch.public_status,
         'owner_id': ch.owner_id,
@@ -485,6 +486,9 @@ async def update_channel(
     if 'is_passthrough' in data:
         channel.is_passthrough = bool(data['is_passthrough'])
 
+    if 'is_protected' in data:
+        channel.is_protected = bool(data['is_protected'])
+
     if 'is_public' in data:
         channel.is_public = bool(data['is_public'])
         channel.public_status = 'approved' if channel.is_public else 'none'
@@ -567,10 +571,49 @@ async def batch_delete(
     ids = data.get('ids', [])
     if not ids:
         raise HTTPException(status_code=400, detail="No IDs provided")
-    db.query(PlaylistEntry).filter(PlaylistEntry.channel_id.in_(ids)).delete(synchronize_session=False)
-    count = db.query(Channel).filter(Channel.id.in_(ids)).delete(synchronize_session=False)
+    # Skip protected channels
+    protected_ids = [c.id for c in db.query(Channel.id).filter(Channel.id.in_(ids), Channel.is_protected == True).all()]
+    deletable_ids = [i for i in ids if i not in protected_ids]
+    if not deletable_ids:
+        return {'status': 'ok', 'deleted': 0, 'skipped_protected': len(protected_ids)}
+    db.query(PlaylistEntry).filter(PlaylistEntry.channel_id.in_(deletable_ids)).delete(synchronize_session=False)
+    count = db.query(Channel).filter(Channel.id.in_(deletable_ids)).delete(synchronize_session=False)
     db.commit()
-    return {'status': 'ok', 'deleted': count}
+    return {'status': 'ok', 'deleted': count, 'skipped_protected': len(protected_ids)}
+
+
+@router.post("/clean-dead")
+async def clean_dead_channels(
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    """Delete all channels with status='die' that are NOT protected."""
+    dead_channels = db.query(Channel).filter(
+        Channel.status == 'die',
+        or_(Channel.is_protected == False, Channel.is_protected == None)
+    ).all()
+    dead_ids = [ch.id for ch in dead_channels]
+    if not dead_ids:
+        return {'status': 'ok', 'deleted_count': 0}
+    db.query(PlaylistEntry).filter(PlaylistEntry.channel_id.in_(dead_ids)).delete(synchronize_session=False)
+    count = db.query(Channel).filter(Channel.id.in_(dead_ids)).delete(synchronize_session=False)
+    db.commit()
+    protected_count = db.query(Channel).filter(Channel.status == 'die', Channel.is_protected == True).count()
+    return {'status': 'ok', 'deleted_count': count, 'protected_kept': protected_count}
+
+
+@router.post("/toggle-protected/{channel_id}")
+async def toggle_protected(
+    channel_id: int,
+    user: User = Depends(login_required),
+    db: Session = Depends(get_db),
+):
+    access, channel = _check_channel_access(db, channel_id, user)
+    if access != 'edit':
+        raise HTTPException(status_code=403, detail="No edit access")
+    channel.is_protected = not channel.is_protected
+    db.commit()
+    return {'status': 'ok', 'is_protected': channel.is_protected}
 
 
 @router.post("/batch-group")

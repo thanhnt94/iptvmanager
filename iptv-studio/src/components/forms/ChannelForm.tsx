@@ -11,7 +11,9 @@ import {
   AlertCircle,
   Play,
   Globe,
-  Lock as LockIcon
+  Lock as LockIcon,
+  Shield,
+  ShieldOff
 } from 'lucide-react';
 import { getLogoUrl } from '../../utils';
 import { UnifiedPlayer } from '../player/UnifiedPlayer';
@@ -43,6 +45,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
     proxy_type: 'none',
     is_original: false,
     is_passthrough: false,
+    is_protected: false,
     is_public: false,
     selected_playlists: [] as number[]
   });
@@ -86,6 +89,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
               proxy_type: ch.proxy_type || 'none',
               is_original: !!ch.is_original,
               is_passthrough: !!ch.is_passthrough,
+              is_protected: !!ch.is_protected,
               is_public: !!ch.is_public,
               selected_playlists: ch.playlists?.map((p: any) => p.playlist_id) || []
             });
@@ -357,7 +361,27 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                </div>
 
                <div className="space-y-4">
-                  <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-4">Public Accessibility</h4>
+                  <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-4">Protection & Access</h4>
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, is_protected: !formData.is_protected})}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all mb-3 ${
+                      formData.is_protected 
+                      ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' 
+                      : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                       {formData.is_protected ? <Shield size={20} /> : <ShieldOff size={20} />}
+                       <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-widest">Protected Channel</p>
+                          <p className="text-[9px] font-medium opacity-60">Immune to bulk delete (Clean Dead)</p>
+                       </div>
+                    </div>
+                    <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_protected ? 'bg-indigo-500' : 'bg-slate-800'}`}>
+                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_protected ? 'left-5' : 'left-1'}`} />
+                    </div>
+                  </button>
                   <button 
                     type="button"
                     onClick={() => setFormData({...formData, is_public: !formData.is_public})}

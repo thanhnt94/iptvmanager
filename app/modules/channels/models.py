@@ -31,6 +31,7 @@ class Channel(Base):
     last_checked_at = Column(DateTime)
     is_original = Column(Boolean, default=False)
     is_passthrough = Column(Boolean, default=False)
+    is_protected = Column(Boolean, default=False)
     is_dynamic = Column(Boolean, default=False)
     dynamic_origin_url = Column(String(512))
 

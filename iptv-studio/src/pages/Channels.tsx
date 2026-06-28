@@ -56,6 +56,7 @@ interface Channel {
   latency: number;
   is_original: boolean;
   is_passthrough: boolean;
+  is_protected: boolean;
   is_public: boolean;
   last_checked: string;
   play_url?: string;
@@ -376,9 +377,9 @@ export const Channels: React.FC = () => {
   const toggleProtection = async (id: number) => {
     setProcessingId(id);
     try {
-      const res = await fetch(`/api/channels/toggle-protection/${id}`, { method: 'POST' });
+      const res = await fetch(`/api/channels/toggle-protected/${id}`, { method: 'POST' });
       if (res.ok) {
-        setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, is_original: !ch.is_original } : ch));
+        setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, is_protected: !ch.is_protected } : ch));
       }
     } finally {
       setProcessingId(null);
@@ -856,7 +857,7 @@ export const Channels: React.FC = () => {
                                <h4 className="text-sm font-black text-white truncate leading-tight">{ch.name}</h4>
                                <div className="flex gap-1 shrink-0 items-center">
                                   {ch.epg_id && <CalendarCheck className="text-indigo-400" size={10} />}
-                                  {ch.is_original && <Shield className="text-indigo-400" size={10} />}
+                                  {ch.is_protected && <Shield className="text-indigo-400" size={10} />}
                                   {ch.is_passthrough && <ZapOff className="text-rose-400" size={10} />}
                                   {ch.is_public ? <Globe className="text-emerald-400" size={10} /> : <LockIcon className="text-slate-600" size={10} />}
                                </div>
@@ -894,7 +895,7 @@ export const Channels: React.FC = () => {
                                { icon: <Share2 size={16} />, onClick: () => setShareChannel(ch), title: 'Distribute', hide: user.role === 'free' },
                                { icon: processingId === ch.id ? <Loader2 className="animate-spin" size={16} /> : <Activity size={16} />, onClick: () => handleCheck(ch.id), title: 'Check', disabled: ch.is_passthrough },
                                { icon: ch.is_public ? <Globe size={16} /> : <LockIcon size={16} />, onClick: () => togglePublic(ch.id), title: 'Toggle Visibility', active: ch.is_public },
-                               { icon: ch.is_original ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_original },
+                               { icon: ch.is_protected ? <Shield size={16} /> : <ShieldOff size={16} />, onClick: () => toggleProtection(ch.id), title: 'Protect', active: ch.is_protected },
                                { icon: <Settings2 size={16} />, onClick: () => openEdit(ch.id), title: 'Edit' },
                                { icon: <Trash2 size={16} />, onClick: () => handleDelete(ch.id), title: 'Delete', danger: true }
                             ].filter(b => !b.hide).map((btn, idx) => (
@@ -1338,7 +1339,7 @@ export const Channels: React.FC = () => {
                     <ZapOff size={18} />
                  </button>
                  <button 
-                   onClick={() => handleBatchToggle('is_original', true)}
+                   onClick={() => handleBatchToggle('is_protected', true)}
                    className="w-12 h-12 bg-white/5 hover:bg-indigo-500/20 text-slate-500 hover:text-indigo-400 rounded-2xl transition-all flex items-center justify-center border border-white/5"
                    title="Batch: Set Protected (Scan Lock)"
                  >
