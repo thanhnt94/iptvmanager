@@ -88,6 +88,32 @@ export const MediaScanner: React.FC = () => {
     setIsSaveModalOpen(true);
   };
 
+  const handleAddDirectlyToChannels = async (streamUrl: string, index: number) => {
+    const name = prompt("Enter Channel Name:", `Extracted Stream ${index + 1}`);
+    if (!name) return;
+
+    try {
+      const res = await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name,
+          stream_url: streamUrl,
+          group_name: 'Extracted',
+          status: 'unknown'
+        })
+      });
+      if (res.ok) {
+        alert("Successfully added to TV Channels registry!");
+      } else {
+        const errData = await res.json();
+        alert(`Failed: ${errData.detail || 'API error'}`);
+      }
+    } catch (err) {
+      alert("Failed to add channel");
+    }
+  };
+
   const handleSaveToPlaylist = async () => {
     if (!selectedPlaylistId || savingResults.length === 0) return;
     setIsSaving(true);
@@ -193,14 +219,23 @@ export const MediaScanner: React.FC = () => {
                       <button 
                         onClick={() => copyToClipboard(res.url, `res-${i}`)}
                         className={`p-3 rounded-xl transition-all ${copiedIndex === `res-${i}` ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-500 hover:text-white'}`}
+                        title="Copy URL"
                       >
                          {copiedIndex === `res-${i}` ? <CheckCircle2 size={18} /> : <Copy size={18} />}
                       </button>
                       <button 
                          onClick={() => openSaveModal([{ name: `Extracted Stream ${i+1}`, stream_url: res.url }])}
                          className="p-3 rounded-xl bg-slate-800 text-slate-500 hover:text-emerald-400 transition-all"
+                         title="Save to Playlist"
                       >
                          <Save size={18} />
+                      </button>
+                      <button 
+                         onClick={() => handleAddDirectlyToChannels(res.url, i)}
+                         className="p-3 rounded-xl bg-slate-800 text-slate-500 hover:text-indigo-400 transition-all"
+                         title="Add Directly to TV Channels"
+                      >
+                         <Plus size={18} />
                       </button>
                    </div>
                 </div>

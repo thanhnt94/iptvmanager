@@ -32,35 +32,50 @@ async def extract_media_link(
     url = data.get("url")
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")
+        
+    from app.modules.channels.services import ExtractorService
+    import re
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": url
-    }
-    
+    urls = []
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers=headers) as client:
-            resp = await client.get(url)
-            html = resp.text
-            
-            patterns = [
-                r'(https?://[^\s"\']+\.m3u8[^\s"\']*)',
-                r'(https?://[^\s"\']+\.mp4[^\s"\']*)',
-                r'(https?://[^\s"\']+\.ts[^\s"\']*)',
-                r'(https?:\\/\\/[^\s"\']+\.m3u8[^\s"\']*)',
-            ]
-            
-            found_urls = []
-            for pattern in patterns:
-                for match in re.findall(pattern, html, re.IGNORECASE):
-                    cleaned = match.replace('\\/', '/')
-                    if cleaned not in found_urls:
-                        found_urls.append(cleaned)
-            
-            return {"status": "success", "urls": found_urls}
-            
+        # Try Playwright deep rendering scan first
+        res = ExtractorService.extract_direct_url(url, deep_scan=True)
+        if res.get("success") and res.get("links"):
+            for link in res.get("links", []):
+                if isinstance(link, dict) and "url" in link:
+                    urls.append(link["url"])
+                elif isinstance(link, str):
+                    urls.append(link)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch or extract: {str(e)}")
+        logger.error(f"[sniff] Playwright extractor error: {e}", exc_info=True)
+        
+    # If no URLs found from Playwright, fall back to basic regex scan
+    if not urls:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": url
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers=headers) as client:
+                resp = await client.get(url)
+                html = resp.text
+                
+                patterns = [
+                    r'(https?://[^\s"\']+\.m3u8[^\s"\']*)',
+                    r'(https?://[^\s"\']+\.mp4[^\s"\']*)',
+                    r'(https?://[^\s"\']+\.ts[^\s"\']*)',
+                    r'(https?:\\/\\/[^\s"\']+\.m3u8[^\s"\']*)',
+                ]
+                
+                for pattern in patterns:
+                    for match in re.findall(pattern, html, re.IGNORECASE):
+                        cleaned = match.replace('\\/', '/')
+                        if cleaned not in urls:
+                            urls.append(cleaned)
+        except Exception as e:
+            logger.error(f"[sniff] Fallback regex scraper failed: {e}")
+            
+    return {"status": "success", "urls": urls}
 
 
 # --- Helper ---
