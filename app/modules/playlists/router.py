@@ -593,7 +593,7 @@ async def legacy_m3u(
     )
     if not content:
         raise HTTPException(status_code=404, detail="Empty playlist")
-    return PlainTextResponse(content, media_type="text/plain")")
+    return PlainTextResponse(content, media_type="text/plain")
 
 
 @router.get("/get.m3u")
