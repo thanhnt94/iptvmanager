@@ -279,7 +279,8 @@ async def get_entries(
         for e in items:
             if not e.channel: continue
             channels_data.append({
-                'id': e.id,
+                'id': e.channel.id,
+                'entry_id': e.id,
                 'channel_id': e.channel.id,
                 'name': e.custom_name or e.channel.name,
                 'custom_name': e.custom_name,
