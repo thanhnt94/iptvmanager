@@ -62,9 +62,9 @@ async def list_playlists(
             'channel_count': channel_count,
             'live_count': live_count,
             'die_count': die_count,
-            'auto_scan_enabled': p.auto_scan_enabled,
-            'auto_scan_time': p.auto_scan_time,
-            'is_scanning': p.is_scanning,
+            'auto_scan_enabled': False,
+            'auto_scan_time': None,
+            'is_scanning': False,
             'owner_username': user.username, # Add this for tab filtering in frontend
         })
     return result
@@ -152,8 +152,6 @@ async def update_playlist(
         db, playlist_id,
         name=data.get('name'),
         slug=data.get('slug'),
-        auto_scan_enabled=data.get('auto_scan_enabled'),
-        auto_scan_time=data.get('auto_scan_time'),
     )
     if success:
         return {'status': 'ok'}

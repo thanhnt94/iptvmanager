@@ -40,11 +40,6 @@ class PlaylistService:
                     return False, "Slug already in use"
                 profile.slug = slug
 
-        if auto_scan_enabled is not None:
-            profile.auto_scan_enabled = bool(auto_scan_enabled)
-        if auto_scan_time is not None:
-            profile.auto_scan_time = str(auto_scan_time)
-
         db.commit()
         return True, profile
 
