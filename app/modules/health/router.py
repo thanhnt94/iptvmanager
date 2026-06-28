@@ -1,7 +1,7 @@
 """
 Health Router () — FastAPI, no Flask dependency.
 """
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
