@@ -272,18 +272,17 @@ export const Channels: React.FC = () => {
 
   const handleBatchAdd = async (playlistId: number, groupId?: number) => {
     try {
-      const res = await fetch('/api/playlists/batch-add', {
+      const res = await fetch(`/api/playlists/${playlistId}/batch-add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          playlist_id: playlistId,
           channel_ids: selectedIds,
           group_id: groupId
         })
       });
       const data = await res.json();
       if (data.status === 'ok') {
-        alert(`Successfully added ${data.added_count} channels!`);
+        alert(`Successfully added ${data.added} channels!`);
         setSelectedIds([]);
         setIsBatchModalOpen(false);
       }
