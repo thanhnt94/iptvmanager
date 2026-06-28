@@ -65,14 +65,8 @@ def main():
         result = db.execute(stmt)
         print(f"[+] Successfully migrated {result.rowcount} admin channels to private.")
         
-        # 4. Truncate existing playlists data
-        print("[+] Clearing existing playlist profiles, groups, and entries to start fresh...")
-        db.execute(text("DELETE FROM playlist_entries"))
-        db.execute(text("DELETE FROM playlist_groups"))
-        db.execute(text("DELETE FROM playlist_profiles"))
-        
         db.commit()
-        print("[+] Migration and cleanup completed successfully.")
+        print("[+] Migration and updates completed successfully.")
         
     except Exception as e:
         db.rollback()
