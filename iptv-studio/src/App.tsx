@@ -21,6 +21,7 @@ import { LiveTVDirectory } from './pages/LiveTV/LiveTVDirectory';
 import { LiveViewer } from './pages/LiveTV/LiveViewer';
 import { TVManager } from './pages/LiveTV/TVManager';
 import { QueueManager } from './pages/QueueManager';
+import { MergeChannels } from './pages/MergeChannels';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -76,6 +77,7 @@ const App: React.FC = () => {
                   <Route path="/tv/:slug" element={<LiveViewer />} />
                   <Route path="/tv-manager" element={<TVManager />} />
                   <Route path="/import" element={<Import />} />
+                  <Route path="/merge" element={<MergeChannels />} />
                   <Route path="/diagnostics" element={<Diagnostics />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   

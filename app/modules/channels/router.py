@@ -1137,3 +1137,53 @@ async def open_vlc(
         return {'status': 'ok'}
     return {'status': 'error', 'message': 'VLC not found'}
 
+
+@router.post("/merge")
+async def merge_channels(
+    data: dict = Body(...),
+    user: User = Depends(login_required),
+    db: Session = Depends(get_db),
+):
+    """
+    Merge two channels: copy stream_url from source to target, then delete source.
+    - source_id: Channel with new link (will be DELETED after merge)
+    - target_id: Channel to receive the new link (keeps name, config, playlist entries)
+    """
+    source_id = data.get("source_id")
+    target_id = data.get("target_id")
+
+    if not source_id or not target_id:
+        raise HTTPException(status_code=400, detail="source_id and target_id are required")
+    if source_id == target_id:
+        raise HTTPException(status_code=400, detail="Source and target must be different channels")
+
+    source = db.query(Channel).get(source_id)
+    target = db.query(Channel).get(target_id)
+
+    if not source:
+        raise HTTPException(status_code=404, detail="Source channel not found")
+    if not target:
+        raise HTTPException(status_code=404, detail="Target channel not found")
+
+    # Copy stream_url from source to target
+    old_url = target.stream_url
+    target.stream_url = source.stream_url
+    target.status = 'unknown'  # Reset to recheck
+    target.updated_at = datetime.utcnow()
+
+    # Delete source channel (and its playlist entries / shares)
+    db.query(PlaylistEntry).filter(PlaylistEntry.channel_id == source.id).delete()
+    db.query(ChannelShare).filter(ChannelShare.channel_id == source.id).delete()
+    db.delete(source)
+
+    db.commit()
+
+    logger.info(f"[MERGE] User '{user.username}' merged channel #{source_id} -> #{target_id}. "
+                f"Target '{target.name}' stream updated. Source deleted.")
+
+    return {
+        'status': 'ok',
+        'target_name': target.name,
+        'old_url': old_url,
+        'new_url': target.stream_url,
+    }

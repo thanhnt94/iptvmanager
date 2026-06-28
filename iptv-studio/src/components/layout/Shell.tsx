@@ -14,7 +14,8 @@ import {
   Settings,
   Users,
   PlayCircle,
-  Activity
+  Activity,
+  GitMerge
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -57,7 +58,8 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
 
   if (user.role === 'admin' || user.role === 'vip') {
     const tools = [
-      { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' }
+      { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' },
+      { icon: <GitMerge size={20} />, label: 'Merge Channels', path: '/merge' }
     ];
     if (user.role === 'admin') {
       tools.push({ icon: <Activity size={20} />, label: 'Scan Queue', path: '/queue' });
