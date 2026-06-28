@@ -142,11 +142,9 @@ class PlaylistService:
             m = mode_override or ch.proxy_type or 'default'
             if m == 'direct' or ch.is_passthrough or m == 'none':
                 return ch.stream_url
-            if m == 'tracking' or (m in ('default', 'smart') and ch.stream_url and '.flv' in ch.stream_url.lower()):
-                return f"{base}/api/channels/track/{ch.id}"
             if m == 'hls':
                 return f"{base}/api/channels/hls-manifest/{ch.id}/index.m3u8"
-            return f"{base}/api/channels/play/{ch.id}"
+            return f"{base}/api/channels/track/{ch.id}"
 
         # System playlists
         if profile.is_system:
