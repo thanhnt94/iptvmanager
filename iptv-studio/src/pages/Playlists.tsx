@@ -187,11 +187,7 @@ export const Playlists: React.FC = () => {
   const filtered = playlists.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || 
                           p.slug.toLowerCase().includes(search.toLowerCase());
-    if (!matchesSearch) return false;
-
-    if (activeTab === 'system') return p.is_system && !p.owner_username.includes('user-');
-    if (activeTab === 'dynamic') return p.is_dynamic;
-    return !p.is_system && !p.is_dynamic;
+    return matchesSearch;
   });
 
   const copyToClipboard = (playlist: Playlist, hideDie: boolean, mode: string) => {
@@ -284,35 +280,13 @@ export const Playlists: React.FC = () => {
         </button>
       </header>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 bg-slate-900/40 p-1 rounded-2xl border border-white/5 w-fit">
-        <button 
-          onClick={() => setActiveTab('personal')}
-          className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'personal' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}
-        >
-          <FolderTree size={14} /> Personal
-        </button>
-        <button 
-          onClick={() => setActiveTab('system')}
-          className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'system' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}
-        >
-          <Layers size={14} /> System
-        </button>
-        <button 
-          onClick={() => setActiveTab('dynamic')}
-          className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'dynamic' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}
-        >
-          <Globe size={14} /> Website Discovery
-        </button>
-      </div>
-
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-900/40 p-3 rounded-2xl border border-white/5">
         <div className="relative w-full md:w-96 group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" size={18} />
           <input 
             type="text" 
-            placeholder="Search within tab..." 
+            placeholder="Search playlists..." 
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full bg-slate-950/50 border border-white/5 rounded-xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-600"
@@ -348,71 +322,51 @@ export const Playlists: React.FC = () => {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${item.is_dynamic ? 'bg-emerald-500/10 text-emerald-400' : item.is_system ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-400'}`}>
-                        {item.is_dynamic ? <Globe size={24} /> : <Layers size={24} />}
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-indigo-500/10 text-indigo-400">
+                        <Layers size={24} />
                       </div>
                       <div>
                         <h3 className="font-black text-white tracking-tight">{item.name}</h3>
                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest leading-none mt-1">
-                          {item.is_dynamic ? item.scanner_type : item.is_system ? 'System' : 'Personal'}
+                          Personal
                         </p>
                       </div>
                   </div>
-                  {!item.is_dynamic && (
-                      <button 
-                        onClick={() => handleHealthScan(item)}
-                        disabled={isThisPlaylistScanning}
-                        className={`p-2.5 rounded-xl border transition-all ${isThisPlaylistScanning ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-slate-800 border-white/5 hover:bg-indigo-500/10 hover:text-indigo-400 hover:border-indigo-500/20'}`}
-                        title="Run Health Scan (Check Live/Die)"
-                      >
-                        <Activity size={16} className={isThisPlaylistScanning ? 'animate-pulse' : ''} />
-                      </button>
-                  )}
-                  {item.is_dynamic && (
-                      <button 
-                        onClick={() => handleSync(item)}
-                        disabled={isThisPlaylistScanning}
-                        className={`p-2.5 rounded-xl border transition-all ${isThisPlaylistScanning ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 border-white/5 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20'}`}
-                      >
-                        <Activity size={16} className={isThisPlaylistScanning ? 'animate-pulse' : ''} />
-                      </button>
-                  )}
+                  <button 
+                    onClick={() => handleHealthScan(item)}
+                    disabled={isThisPlaylistScanning}
+                    className={`p-2.5 rounded-xl border transition-all ${isThisPlaylistScanning ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-slate-800 border-white/5 hover:bg-indigo-500/10 hover:text-indigo-400 hover:border-indigo-500/20'}`}
+                    title="Run Health Scan (Check Live/Die)"
+                  >
+                    <Activity size={16} className={isThisPlaylistScanning ? 'animate-pulse' : ''} />
+                  </button>
                 </div>
 
                 <div className="mt-8 bg-slate-950/40 p-4 rounded-2xl border border-white/5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          {item.is_dynamic ? 'Links Found' : 'Channels'}
+                          Channels
                         </span>
                         <span className="text-2xl font-black text-white leading-none mt-1">
                           {item.channel_count}
                         </span>
                       </div>
                       
-                      {!item.is_dynamic && (
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                              <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest leading-none mb-1">Live</p>
-                              <p className="text-[10px] font-black text-white">
-                                {isThisPlaylistScanning ? scannerStatus?.live_count : item.live_count}
-                              </p>
-                          </div>
-                          <div className="text-right border-l border-white/5 pl-3">
-                              <p className="text-[8px] font-black text-rose-500 uppercase tracking-widest leading-none mb-1">Die</p>
-                              <p className="text-[10px] font-black text-white">
-                                {isThisPlaylistScanning ? scannerStatus?.die_count : item.die_count}
-                              </p>
-                          </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                            <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest leading-none mb-1">Live</p>
+                            <p className="text-[10px] font-black text-white">
+                              {isThisPlaylistScanning ? scannerStatus?.live_count : item.live_count}
+                            </p>
                         </div>
-                      )}
-
-                      {item.is_dynamic && isThisPlaylistScanning && (
-                         <div className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
-                            <Activity size={12} className="text-emerald-400 animate-pulse" />
-                            <span className="text-[10px] font-black text-emerald-400 uppercase">Scanning</span>
-                         </div>
-                      )}
+                        <div className="text-right border-l border-white/5 pl-3">
+                            <p className="text-[8px] font-black text-rose-500 uppercase tracking-widest leading-none mb-1">Die</p>
+                            <p className="text-[10px] font-black text-white">
+                              {isThisPlaylistScanning ? scannerStatus?.die_count : item.die_count}
+                            </p>
+                        </div>
+                      </div>
                     </div>
 
                     {isThisPlaylistScanning && (
@@ -555,27 +509,10 @@ export const Playlists: React.FC = () => {
                  <div className="flex items-center justify-between mb-8">
                     <div>
                       <h3 className="text-xl font-black text-white tracking-tight">Create <span className="text-indigo-500">Playlist</span></h3>
-                      <p className="text-slate-500 text-xs mt-1">Select your playlist architecture.</p>
+                      <p className="text-slate-500 text-xs mt-1">Configure your new playlist profile.</p>
                     </div>
                     <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
                        <Plus size={20} className="rotate-45" />
-                    </button>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4 mb-8">
-                    <button 
-                      onClick={() => setCreateType('manual')}
-                      className={`p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${createType === 'manual' ? 'border-indigo-600 bg-indigo-600/10 text-white' : 'border-white/5 bg-slate-950/50 text-slate-500 hover:border-white/10'}`}
-                    >
-                       <FolderTree size={24} />
-                       <span className="text-[10px] font-black uppercase tracking-widest">Manual</span>
-                    </button>
-                    <button 
-                      onClick={() => setCreateType('dynamic')}
-                      className={`p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${createType === 'dynamic' ? 'border-indigo-600 bg-indigo-600/10 text-white' : 'border-white/5 bg-slate-950/50 text-slate-500 hover:border-white/10'}`}
-                    >
-                       <Globe size={24} />
-                       <span className="text-[10px] font-black uppercase tracking-widest">Dynamic</span>
                     </button>
                  </div>
 
@@ -587,55 +524,28 @@ export const Playlists: React.FC = () => {
                          value={newName} 
                          onChange={e => {
                            setNewName(e.target.value);
-                           if (createType === 'manual') {
-                             setNewSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''));
-                           }
+                           setNewSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''));
                          }}
                          placeholder="e.g., My Favorite Sports"
                          className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-indigo-500/20 outline-none"
                        />
                     </div>
 
-                    {createType === 'manual' ? (
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Slug Identifier</label>
-                          <input 
-                            type="text" 
-                            value={newSlug} 
-                            onChange={e => setNewSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-                            placeholder="my-sports"
-                            className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                          />
-                       </div>
-                    ) : (
-                       <>
-                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Website URL</label>
-                            <input 
-                              type="url" 
-                              value={newUrl} 
-                              onChange={e => setNewUrl(e.target.value)}
-                              placeholder="https://colatv48.live/"
-                              className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                            />
-                         </div>
-                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Scanner Engine</label>
-                            <select 
-                              value={newScanner}
-                              onChange={e => setNewScanner(e.target.value)}
-                              className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none"
-                            >
-                               {scannerTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                         </div>
-                       </>
-                    )}
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Slug Identifier</label>
+                       <input 
+                         type="text" 
+                         value={newSlug} 
+                         onChange={e => setNewSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                         placeholder="my-sports"
+                         className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                       />
+                    </div>
                  </div>
 
                  <button 
                    onClick={handleCreate}
-                   disabled={creating || !newName || (createType === 'manual' && !newSlug) || (createType === 'dynamic' && !newUrl)}
+                   disabled={creating || !newName || !newSlug}
                    className="w-full mt-10 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white h-16 rounded-[1.5rem] font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3"
                  >
                     {creating ? <Loader2 className="animate-spin" /> : <Plus size={20} />}

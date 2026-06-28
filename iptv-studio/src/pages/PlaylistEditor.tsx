@@ -64,6 +64,8 @@ export const PlaylistEditor: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  const [entryCustomName, setEntryCustomName] = useState('');
+  const [entryCustomGroup, setEntryCustomGroup] = useState('');
   
   // Playlist Info Edit State
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -106,6 +108,8 @@ export const PlaylistEditor: React.FC = () => {
         id: ch.id, 
         channel_id: ch.channel_id,
         name: ch.name,
+        custom_name: ch.custom_name,
+        custom_group: ch.custom_group,
         group_name: ch.group || 'Ungrouped',
         logo_url: ch.logo_url,
         status: ch.status,
@@ -277,27 +281,19 @@ export const PlaylistEditor: React.FC = () => {
     }
   };
 
-  // Override handleUpdateGroup to support bulk
-  const handleUpdateGroupBulk = async (groupId: number | null, customName?: string) => {
+  const handleSaveEntryDetails = async () => {
+    if (!editingEntry) return;
     setProcessing(true);
     try {
-      let finalGroupId = groupId;
-      if (!finalGroupId && customName) {
-        const res = await fetch(`/api/playlists/groups`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playlist_id: id, name: customName })
-        });
-        const data = await res.json();
-        if (data.status === 'ok') finalGroupId = data.group_id;
-      }
-
-      const ids = Array.from(selectedIds.size > 0 ? selectedIds : new Set(editingEntry ? [editingEntry.id] : []));
+      const ids = Array.from(selectedIds.size > 0 ? selectedIds : new Set([editingEntry.id]));
       for (const entryId of ids) {
         await fetch(`/api/playlists/update-entry-group/${entryId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ group_id: finalGroupId })
+          body: JSON.stringify({
+            custom_name: entryCustomName,
+            custom_group: entryCustomGroup
+          })
         });
       }
       
@@ -306,10 +302,17 @@ export const PlaylistEditor: React.FC = () => {
       setEditingEntry(null);
       setSelectedIds(new Set());
     } catch (err) {
-       alert("Error updating groups");
+       alert("Error updating entry details");
     } finally {
       setProcessing(false);
     }
+  };
+
+  const handleEditEntry = (item: Entry) => {
+    setEditingEntry(item);
+    setEntryCustomName(item.custom_name || item.name);
+    setEntryCustomGroup(item.custom_group || (item.group_name === 'Ungrouped' ? '' : item.group_name));
+    setIsGroupModalOpen(true);
   };
 
   const handleBulkGroup = () => {
@@ -318,8 +321,7 @@ export const PlaylistEditor: React.FC = () => {
     const firstId = Array.from(selectedIds)[0];
     const item = entries.find(e => e.id === firstId);
     if (item) {
-      setEditingEntry(item);
-      setIsGroupModalOpen(true);
+      handleEditEntry(item);
     }
   };
 
@@ -481,9 +483,9 @@ export const PlaylistEditor: React.FC = () => {
                           </button>
                         )}
                         <button 
-                          onClick={(e) => { e.stopPropagation(); setEditingEntry(item); setIsGroupModalOpen(true); }}
+                          onClick={(e) => { e.stopPropagation(); handleEditEntry(item); }}
                           className="p-2 bg-slate-900 hover:bg-indigo-500 text-slate-500 hover:text-white rounded-xl transition-all"
-                          title="Move to Group"
+                          title="Edit Custom Name / Group"
                         >
                            <FolderEdit size={14} />
                         </button>
@@ -518,57 +520,43 @@ export const PlaylistEditor: React.FC = () => {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-[2rem] p-8 shadow-2xl"
            >
-              <h3 className="text-xl font-black text-white mb-2 uppercase">Custom Grouping</h3>
-              <p className="text-slate-500 text-xs mb-8">Override group assignment for <span className="text-white font-bold">{editingEntry?.name}</span></p>
+              <h3 className="text-xl font-black text-white mb-2 uppercase">Custom Name & Group</h3>
+              <p className="text-slate-500 text-xs mb-8">Override channel settings for this playlist entry</p>
               
               <div className="space-y-6">
-                 <div className="space-y-3">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Existing Groups</label>
-                    <div className="grid grid-cols-2 gap-2">
-                       <button 
-                          onClick={() => handleUpdateGroupBulk(null)}
-                          className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${!editingEntry?.group_name || editingEntry.group_name === 'Ungrouped' ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
-                        >
-                           None / Main
-                        </button>
-                        {groups.map(g => (
-                           <button 
-                              key={g.id}
-                              onClick={() => handleUpdateGroupBulk(g.id)}
-                              className={`p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${editingEntry?.group_name === g.name ? 'bg-indigo-500 border-indigo-400 text-white' : 'bg-slate-950/50 border-white/5 text-slate-400 hover:border-indigo-500/30'}`}
-                           >
-                              {g.name}
-                           </button>
-                        ))}
-                    </div>
-                 </div>
-
-                 <div className="relative py-4">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-                    <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest"><span className="bg-slate-900 px-4 text-slate-600">Or New Group</span></div>
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Custom Channel Name</label>
+                    <input 
+                       type="text" 
+                       placeholder="e.g. VTV3 HD"
+                       value={entryCustomName}
+                       onChange={e => setEntryCustomName(e.target.value)}
+                       className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                    />
                  </div>
 
                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Custom Group Name</label>
                     <input 
                        type="text" 
-                       placeholder="Enter new group name..."
-                       value={newGroupName}
-                       onChange={e => setNewGroupName(e.target.value)}
+                       placeholder="e.g. Sports, VTV"
+                       value={entryCustomGroup}
+                       onChange={e => setEntryCustomGroup(e.target.value)}
                        className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
                     />
-                    <button 
-                       disabled={!newGroupName || processing}
-                       onClick={() => handleUpdateGroupBulk(null, newGroupName)}
-                       className="w-full bg-white/5 hover:bg-white/10 text-indigo-400 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                     >
-                        {processing ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                        Create & Assign
-                     </button>
                  </div>
               </div>
 
-              <div className="mt-8 flex justify-end">
-                 <button onClick={() => setIsGroupModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Close</button>
+              <div className="mt-8 flex justify-end gap-3">
+                 <button onClick={() => setIsGroupModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Cancel</button>
+                 <button 
+                    onClick={handleSaveEntryDetails}
+                    disabled={processing}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-6 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                 >
+                    {processing && <Loader2 size={12} className="animate-spin" />}
+                    Apply
+                 </button>
               </div>
            </motion.div>
         </div>

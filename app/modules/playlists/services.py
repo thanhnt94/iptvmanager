@@ -50,35 +50,11 @@ class PlaylistService:
 
     @staticmethod
     def ensure_global_system_playlists(db: Session):
-        public_playlist = db.query(PlaylistProfile).filter_by(slug='public').first()
-        if not public_playlist:
-            public_playlist = PlaylistProfile(
-                name='Hệ thống: Cộng đồng (Shared)',
-                slug='public',
-                is_system=True,
-                security_token=secrets.token_hex(16),
-            )
-            db.add(public_playlist)
-        db.commit()
-        return public_playlist
+        pass
 
     @staticmethod
     def ensure_user_default_playlists(db: Session, user):
-        if not user:
-            return
-        all_slug = f"user-{user.id}-all"
-        if not db.query(PlaylistProfile).filter_by(slug=all_slug).first():
-            db.add(PlaylistProfile(
-                name='Tất cả kênh (Cá nhân)', slug=all_slug,
-                is_system=True, owner_id=user.id, security_token=secrets.token_hex(16),
-            ))
-        protected_slug = f"user-{user.id}-protected"
-        if not db.query(PlaylistProfile).filter_by(slug=protected_slug).first():
-            db.add(PlaylistProfile(
-                name='Kênh Protected (Cá nhân)', slug=protected_slug,
-                is_system=True, owner_id=user.id, security_token=secrets.token_hex(16),
-            ))
-        db.commit()
+        pass
 
     @staticmethod
     def create_group(db: Session, playlist_id: int, name: str) -> PlaylistGroup:
@@ -249,12 +225,12 @@ class PlaylistService:
                 ch_status = ch.status or 'unknown'
                 if hide_die and ch_status == 'die':
                     continue
-                ch_name = ch.name
+                ch_name = entry.custom_name or ch.name
                 if ch_status == 'unknown':
-                    ch_name = f"[Unknown] {ch.name}"
+                    ch_name = f"[Unknown] {ch_name}"
                 elif not hide_die and ch_status == 'die':
-                    ch_name = f"[Unavailable] {ch.name}"
-                group_name = entry.group.name if entry.group else ch.group_name or ""
+                    ch_name = f"[Unavailable] {ch_name}"
+                group_name = entry.custom_group or (entry.group.name if entry.group else ch.group_name or "General")
                 extinf = f'#EXTINF:-1 tvg-id="{ch.epg_id or ""}" tvg-logo="{ch.logo_url or ""}" group-title="{group_name}",{ch_name}'
                 m3u_lines.append(extinf)
                 m3u_lines.append(get_wrapped_url(ch, mode))
@@ -310,7 +286,7 @@ class PlaylistService:
                 if ch.epg_id:
                     epg_ids.add(ch.epg_id)
                     c_node = ET.SubElement(root, 'channel', id=ch.epg_id)
-                    ET.SubElement(c_node, 'display-name').text = ch.name
+                    ET.SubElement(c_node, 'display-name').text = entry.custom_name or ch.name
                     if ch.logo_url:
                         ET.SubElement(c_node, 'icon', src=ch.logo_url)
 

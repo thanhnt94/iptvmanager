@@ -88,6 +88,7 @@ class PlaylistEntry(Base):
     channel_id = Column(Integer, ForeignKey('channels.id'), nullable=False)
     group_id = Column(Integer, ForeignKey('playlist_groups.id'))
     custom_group = Column(String(255))
+    custom_name = Column(String(255))
     order_index = Column(Integer, default=0)
 
     # Relationships

@@ -4,8 +4,8 @@ Playlists Router () — FastAPI, no Flask dependency.
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
 from fastapi.responses import PlainTextResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
 from app.core.database import get_db
 from app.core.auth_deps import login_required, admin_required, get_current_user
 from app.modules.auth.models import User, UserPlaylist
@@ -27,13 +27,19 @@ async def list_playlists(
 ):
     """Get all accessible playlists for current user."""
     if user.role == 'admin':
-        playlists = db.query(PlaylistProfile).all()
+        playlists = db.query(PlaylistProfile).filter(
+            PlaylistProfile.is_system == False,
+            PlaylistProfile.is_dynamic == False
+        ).all()
     else:
         accessible_ids = [up.playlist_id for up in db.query(UserPlaylist).filter_by(user_id=user.id).all()]
         playlists = db.query(PlaylistProfile).filter(
-            PlaylistProfile.id.in_(accessible_ids) |
-            (PlaylistProfile.owner_id == user.id) |
-            (PlaylistProfile.is_system == True)
+            PlaylistProfile.is_system == False,
+            PlaylistProfile.is_dynamic == False,
+            or_(
+                PlaylistProfile.id.in_(accessible_ids),
+                PlaylistProfile.owner_id == user.id
+            )
         ).all()
 
     result = []
@@ -314,8 +320,11 @@ async def get_entries(
         for e in items:
             if not e.channel: continue
             channels_data.append({
-                'id': e.channel.id,
-                'name': e.channel.name,
+                'id': e.id,
+                'channel_id': e.channel.id,
+                'name': e.custom_name or e.channel.name,
+                'custom_name': e.custom_name,
+                'custom_group': e.custom_group,
                 'logo_url': e.channel.logo_url,
                 'status': e.channel.status,
                 'play_url': f"/api/channels/play/{e.channel.id}",
@@ -328,7 +337,7 @@ async def get_entries(
                 'stream_format': e.channel.stream_format or 'ts',
                 'quality': e.channel.quality or 'HD',
                 'resolution': e.channel.resolution or '1080p',
-                'group': e.custom_group or e.channel.group_name or 'General',
+                'group': e.custom_group or (e.group.name if e.group else e.channel.group_name or 'General'),
                 'epg_id': e.channel.epg_id,
             })
 
@@ -408,15 +417,22 @@ async def get_groups(
     if profile.is_system:
         # For system playlists, get distinct group names from Channel table
         from app.modules.channels.models import Channel
-        from sqlalchemy import func
+        from sqlalchemy import func, or_
         
         query = db.query(Channel.group_name)
         if profile.owner_id:
             oid = int(profile.owner_id)
+            from app.modules.auth.models import User
+            owner_user = db.query(User).get(oid)
+            owner_role = owner_user.role if owner_user else 'free'
+            
             if "protected" in (profile.slug or ""):
                 query = query.filter(Channel.owner_id == oid, Channel.is_original == True)
             else:
-                query = query.filter(or_(Channel.owner_id == oid, Channel.is_public == True))
+                if owner_role == 'free':
+                    query = query.filter(Channel.owner_id == oid)
+                else:
+                    query = query.filter(or_(Channel.owner_id == oid, Channel.is_public == True))
         else:
             query = query.filter_by(is_public=True)
             
@@ -454,6 +470,36 @@ async def delete_group(
         db.commit()
         return {'status': 'ok'}
     raise HTTPException(status_code=404, detail="Group not found")
+
+
+@router.post("/update-entry-group/{entry_id}")
+async def update_entry_group(
+    entry_id: int,
+    data: dict = Body(...),
+    user: User = Depends(login_required),
+    db: Session = Depends(get_db),
+):
+    entry = db.query(PlaylistEntry).get(entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    if entry.playlist.owner_id != user.id and user.role != 'admin':
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    group_id = data.get('group_id')
+    if group_id == "" or group_id == 0 or group_id == '0':
+        group_id = None
+        
+    entry.group_id = group_id
+    
+    if 'custom_name' in data:
+        entry.custom_name = data.get('custom_name')
+        
+    if 'custom_group' in data:
+        entry.custom_group = data.get('custom_group')
+        
+    db.commit()
+    return {'status': 'ok'}
 
 
 # --- M3U / XMLTV Publishing ---
