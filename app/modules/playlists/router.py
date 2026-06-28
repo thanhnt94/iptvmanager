@@ -43,18 +43,12 @@ async def list_playlists(
         ).all()
 
     result = []
-    from app.modules.playlists.models import DiscoveryChannel
     from app.modules.channels.models import Channel
 
     for p in playlists:
-        if p.is_dynamic:
-            channel_count = db.query(DiscoveryChannel).filter_by(playlist_id=p.id).count()
-            live_count = db.query(DiscoveryChannel).filter_by(playlist_id=p.id, status='live').count()
-            die_count = db.query(DiscoveryChannel).filter_by(playlist_id=p.id, status='die').count()
-        else:
-            channel_count = db.query(PlaylistEntry).filter_by(playlist_id=p.id).count()
-            live_count = db.query(PlaylistEntry).join(Channel).filter(PlaylistEntry.playlist_id == p.id, Channel.status == 'live').count()
-            die_count = db.query(PlaylistEntry).join(Channel).filter(PlaylistEntry.playlist_id == p.id, Channel.status == 'die').count()
+        channel_count = db.query(PlaylistEntry).filter_by(playlist_id=p.id).count()
+        live_count = db.query(PlaylistEntry).join(Channel).filter(PlaylistEntry.playlist_id == p.id, Channel.status == 'live').count()
+        die_count = db.query(PlaylistEntry).join(Channel).filter(PlaylistEntry.playlist_id == p.id, Channel.status == 'die').count()
 
         result.append({
             'id': p.id,
@@ -196,47 +190,14 @@ async def get_entries(
     if not profile:
         raise HTTPException(status_code=404, detail="Playlist not found")
 
-    from app.modules.playlists.models import DiscoveryChannel, PlaylistEntry
+    from app.modules.playlists.models import PlaylistEntry
     from app.modules.channels.models import Channel
     from sqlalchemy import or_
 
     channels_data = []
     has_more = False
 
-    if profile.is_dynamic:
-        # Fetch from DiscoveryChannel
-        query = db.query(DiscoveryChannel).filter_by(playlist_id=playlist_id)
-        if q:
-            query = query.filter(DiscoveryChannel.name.ilike(f"%{q}%"))
-        if hide_die == 'true':
-            query = query.filter(DiscoveryChannel.status == 'live')
-        
-        # Sort
-        if sort == 'alphabetical':
-            query = query.order_by(DiscoveryChannel.name.asc())
-        else:
-            query = query.order_by(DiscoveryChannel.id.desc())
-
-        total = query.count()
-        items = query.offset((page - 1) * limit).limit(limit + 1).all()
-        
-        if len(items) > limit:
-            has_more = True
-            items = items[:limit]
-
-        for item in items:
-            channels_data.append({
-                'id': item.id,
-                'name': item.name,
-                'logo_url': None,
-                'status': item.status,
-                'play_url': item.stream_url,
-                'stream_format': 'hls' if '.m3u8' in item.stream_url.lower() else 'ts',
-                'quality': 'HD',
-                'resolution': '1080p',
-                'group': 'Discovery'
-            })
-    elif profile.is_system:
+    if profile.is_system:
         # Fetch from Channel directly (Virtual System Playlist)
         query = db.query(Channel)
         if profile.owner_id:

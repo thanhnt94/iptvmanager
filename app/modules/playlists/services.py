@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, or_
 
-from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup, DiscoveryChannel
+from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, PlaylistGroup
 from app.modules.channels.models import Channel, EPGData, EPGSource
 
 logger = logging.getLogger('iptv')
@@ -152,14 +152,6 @@ class PlaylistService:
             if m == 'hls':
                 return f"{base}/api/channels/hls-manifest/{ch.id}/index.m3u8"
             return f"{base}/api/channels/play/{ch.id}"
-
-        # Dynamic playlists
-        if profile.is_dynamic:
-            items = db.query(DiscoveryChannel).filter_by(playlist_id=playlist_id).order_by(DiscoveryChannel.id).all()
-            for item in items:
-                m3u_lines.append(f'#EXTINF:-1 tvg-name="{item.name}" group-title="Website Discovery",{item.name}')
-                m3u_lines.append(item.stream_url)
-            return "\n".join(m3u_lines)
 
         # System playlists
         if profile.is_system:
