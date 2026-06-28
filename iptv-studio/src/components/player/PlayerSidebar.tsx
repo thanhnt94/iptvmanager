@@ -10,14 +10,12 @@ import {
   HelpCircle,
   Loader2,
   Filter,
-  Layers,
   SearchX,
   Settings2,
   CalendarCheck,
   ArrowDownAZ,
   ArrowDownUp,
   Activity,
-  Globe,
   FolderTree
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -69,7 +67,6 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
   onEditChannel
 }) => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [activeTab, setActiveTab] = useState<'personal' | 'system' | 'dynamic'>('personal');
   const [selectedPlaylist, setSelectedPlaylist] = useState<number | string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -95,13 +92,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
       .then(data => {
         if (Array.isArray(data)) {
           setPlaylists(data);
-          // Auto-select first playlist of the active tab if possible
-          const filtered = data.filter(p => {
-            if (activeTab === 'system') return p.is_system && !p.owner_username?.includes('user-');
-            if (activeTab === 'dynamic') return p.is_dynamic;
-            return !p.is_system && !p.is_dynamic;
-          });
-          if (filtered.length > 0) setSelectedPlaylist(filtered[0].id);
+          if (data.length > 0) setSelectedPlaylist(data[0].id);
           else setSelectedPlaylist(null);
         }
       })
@@ -110,7 +101,7 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
         setError("Source catalog unreachable");
       })
       .finally(() => setLoading(false));
-  }, [activeTab]);
+  }, []);
 
   // Fetch categories when playlist changes
   useEffect(() => {
@@ -227,34 +218,12 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
             </button>
          </div>
 
-         {/* Tabs inside sidebar */}
-         <div className="flex bg-slate-900/60 p-1 rounded-xl border border-white/5">
-            <button 
-              onClick={() => setActiveTab('personal')}
-              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${activeTab === 'personal' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-               Personal
-            </button>
-            <button 
-              onClick={() => setActiveTab('system')}
-              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${activeTab === 'system' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-               System
-            </button>
-            <button 
-              onClick={() => setActiveTab('dynamic')}
-              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${activeTab === 'dynamic' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-               Dynamic
-            </button>
-         </div>
-         
          <div className="space-y-2 lg:space-y-3">
             {/* Quick Filters Row */}
             <div className="grid grid-cols-2 gap-2">
               {/* Playlist Selector */}
               <div className="relative group">
-                {activeTab === 'dynamic' ? <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} /> : activeTab === 'system' ? <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} /> : <FolderTree className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} />}
+                <FolderTree className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={12} />
                 <select 
                   value={selectedPlaylist ?? ''} 
                   onChange={e => {
@@ -263,16 +232,8 @@ export const PlayerSidebar: React.FC<PlayerSidebarProps> = ({
                   }}
                   className="w-full bg-slate-900/60 border border-white/5 rounded-xl pl-8 pr-2 py-2 text-[10px] text-white font-black focus:outline-none focus:ring-1 focus:ring-indigo-500/20 appearance-none hover:bg-slate-900 transition-all cursor-pointer truncate"
                 >
-                   {playlists.filter(p => {
-                      if (activeTab === 'system') return p.is_system && !p.owner_username?.includes('user-');
-                      if (activeTab === 'dynamic') return p.is_dynamic;
-                      return !p.is_system && !p.is_dynamic;
-                   }).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                   {playlists.filter(p => {
-                      if (activeTab === 'system') return p.is_system && !p.owner_username?.includes('user-');
-                      if (activeTab === 'dynamic') return p.is_dynamic;
-                      return !p.is_system && !p.is_dynamic;
-                   }).length === 0 && <option value="">No Playlists</option>}
+                   {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                   {playlists.length === 0 && <option value="">No Playlists</option>}
                 </select>
                 <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-white/20 rotate-90" size={12} />
               </div>
