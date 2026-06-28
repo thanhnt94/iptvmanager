@@ -112,6 +112,7 @@ def _channel_to_dict(ch: Channel) -> dict:
         'is_passthrough': ch.is_passthrough,
         'is_protected': ch.is_protected,
         'is_public': ch.is_public,
+        'is_dynamic': ch.is_dynamic,
         'public_status': ch.public_status,
         'owner_id': ch.owner_id,
         'play_count': ch.play_count,
@@ -458,6 +459,8 @@ async def create_channel(
         is_passthrough=data.get('is_passthrough', False),
         is_public=is_pub,
         public_status='approved' if is_pub else 'none',
+        is_dynamic=bool(data.get('is_dynamic', False)),
+        dynamic_origin_url=stream_url if bool(data.get('is_dynamic', False)) else None,
         owner_id=user.id,
         status='unknown',
     )
@@ -493,6 +496,11 @@ async def update_channel(
     if 'is_public' in data:
         channel.is_public = bool(data['is_public'])
         channel.public_status = 'approved' if channel.is_public else 'none'
+
+    if 'is_dynamic' in data:
+        channel.is_dynamic = bool(data['is_dynamic'])
+        if channel.is_dynamic:
+            channel.dynamic_origin_url = channel.stream_url
 
     db.commit()
     return {'status': 'ok'}
@@ -704,6 +712,32 @@ async def accept_share(
 
 
 
+def _get_resolved_stream_url(db: Session, channel: Channel) -> str:
+    """If is_dynamic is True, uses ExtractorService to sniff the direct media URL."""
+    if not channel.is_dynamic or not channel.dynamic_origin_url:
+        return channel.stream_url
+
+    try:
+        from app.modules.channels.services import ExtractorService
+        logger.info(f" [DYNAMIC-RESOLVER] Resolving dynamic link: {channel.dynamic_origin_url}")
+        
+        # Gọi extractor sniffer để lấy link .m3u8 thật
+        results = ExtractorService.extract_direct_url(channel.dynamic_origin_url, deep_scan=True)
+        if results and len(results) > 0:
+            resolved_url = results[0]['url']
+            logger.info(f" [DYNAMIC-RESOLVER] Successfully resolved: {resolved_url}")
+            
+            # Cập nhật tạm thời stream_url hiện tại trong database để phục vụ chạy nhanh hoặc scan queue
+            channel.stream_url = resolved_url
+            db.commit()
+            
+            return resolved_url
+    except Exception as e:
+        logger.error(f" [DYNAMIC-RESOLVER-ERROR] Failed to resolve link for channel {channel.id}: {e}")
+        
+    return channel.stream_url
+
+
 # --- Proxy / Streaming ---
 
 @router.get("/track/{channel_id}")
@@ -716,6 +750,9 @@ async def track_redirect(
     channel = db.query(Channel).get(channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Phân giải link động nếu được cấu hình
+    target_url = _get_resolved_stream_url(db, channel)
 
     channel.play_count = (channel.play_count or 0) + 1
     db.commit()
@@ -748,7 +785,7 @@ async def track_redirect(
             
         db.commit()
 
-    return RedirectResponse(url=channel.stream_url, status_code=302)
+    return RedirectResponse(url=target_url, status_code=302)
 
 
 @router.get("/play/{channel_id}")
@@ -762,16 +799,18 @@ async def play_channel(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    target_url = _get_resolved_stream_url(db, channel)
+
     from app.modules.settings.services import SettingService
     if not SettingService.get(db, 'ENABLE_TS_PROXY', True):
-        return RedirectResponse(url=channel.stream_url, status_code=302)
+        return RedirectResponse(url=target_url, status_code=302)
 
     channel.play_count = (channel.play_count or 0) + 1
     db.commit()
 
     from app.modules.channels.services import StreamManager, ActiveSessionManager
 
-    url = channel.stream_url
+    url = target_url
     headers = {'User-Agent': request.headers.get('user-agent', 'IPTV-Manager/2.0')}
     q, sid = StreamManager.get_source_stream(url, headers)
 

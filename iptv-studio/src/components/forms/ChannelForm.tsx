@@ -47,6 +47,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
     is_passthrough: false,
     is_protected: false,
     is_public: false,
+    is_dynamic: false,
     selected_playlists: [] as number[]
   });
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
@@ -91,6 +92,7 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
               is_passthrough: !!ch.is_passthrough,
               is_protected: !!ch.is_protected,
               is_public: !!ch.is_public,
+              is_dynamic: !!ch.is_dynamic,
               selected_playlists: ch.playlists?.map((p: any) => p.playlist_id) || []
             });
           }
@@ -380,6 +382,26 @@ export const ChannelForm: React.FC<ChannelFormProps> = ({ channelId, onClose, on
                     </div>
                     <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_protected ? 'bg-indigo-500' : 'bg-slate-800'}`}>
                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_protected ? 'left-5' : 'left-1'}`} />
+                    </div>
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, is_dynamic: !formData.is_dynamic})}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all mb-3 ${
+                      formData.is_dynamic 
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
+                      : 'bg-white/5 border-white/5 text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                       {formData.is_dynamic ? <Play size={20} /> : <Play size={20} className="opacity-40" />}
+                       <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-widest">Dynamic Link Scraper</p>
+                          <p className="text-[9px] font-medium opacity-60">Auto resolve stream url dynamically via browser engine</p>
+                       </div>
+                    </div>
+                    <div className={`w-10 h-6 rounded-full relative transition-colors ${formData.is_dynamic ? 'bg-amber-500' : 'bg-slate-800'}`}>
+                       <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.is_dynamic ? 'left-5' : 'left-1'}`} />
                     </div>
                   </button>
                   <button 
