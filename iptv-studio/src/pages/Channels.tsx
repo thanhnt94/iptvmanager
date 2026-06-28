@@ -265,6 +265,19 @@ export const Channels: React.FC = () => {
     fetchEpgHints();
   }, [fetchChannels]);
 
+  // Auto-fill security token from user's system playlist
+  useEffect(() => {
+    if (userPlaylists.length > 0 && !shareToken) {
+      const systemPlaylist = userPlaylists.find((p: any) => p.is_system && p.security_token);
+      if (systemPlaylist) {
+        setShareToken(systemPlaylist.security_token);
+      } else {
+        const anyWithToken = userPlaylists.find((p: any) => p.security_token);
+        if (anyWithToken) setShareToken(anyWithToken.security_token);
+      }
+    }
+  }, [userPlaylists]);
+
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
@@ -1247,21 +1260,10 @@ export const Channels: React.FC = () => {
                       </button>
                   </header>
 
-                  {/* Auth Configuration for Distribute */}
-                  <div className="px-8 py-4 bg-white/[0.02] border-b border-white/5 space-y-2">
-                    <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">
-                      Tích hợp mã bảo mật (Security Token)
-                    </label>
-                    <div className="w-full">
-                      <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider mb-1">Mã Token</span>
-                      <input
-                        type="text"
-                        placeholder="Nhập security token để gen link bảo mật..."
-                        value={shareToken}
-                        onChange={(e) => setShareToken(e.target.value)}
-                        className="w-full bg-slate-950/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-3 py-2.5 text-[11px] text-white outline-none"
-                      />
-                    </div>
+                  {/* Auto-filled Security Token */}
+                  <div className="px-8 py-3 bg-white/[0.02] border-b border-white/5 flex items-center gap-3">
+                    <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest shrink-0">🔒 Token:</span>
+                    <span className="text-[10px] text-slate-400 font-mono truncate">{shareToken || 'Không có token'}</span>
                   </div>
 
                   <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
