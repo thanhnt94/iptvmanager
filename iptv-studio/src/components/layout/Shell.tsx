@@ -12,7 +12,8 @@ import {
   Search,
   FolderTree,
   Settings,
-  Users
+  Users,
+  PlayCircle
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -39,6 +40,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
     {
       label: 'Viewer',
       items: [
+        { icon: <PlayCircle size={20} />, label: 'Live Player', path: '/player' },
         { icon: <Users size={20} />, label: 'Watch Room', path: '/watch' },
       ]
     },
