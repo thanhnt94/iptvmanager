@@ -307,7 +307,7 @@ export const Channels: React.FC = () => {
 
   const handleBatchGroupUpdate = async (groupName: string) => {
     try {
-      const res = await fetch('/api/channels/batch-update-group', {
+      const res = await fetch('/api/channels/batch-group', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedIds, group_name: groupName })
