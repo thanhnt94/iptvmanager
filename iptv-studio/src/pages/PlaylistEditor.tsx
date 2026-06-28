@@ -14,10 +14,13 @@ import {
   Eye,
   Copy,
   ZapOff,
-  Zap,
-  RefreshCw,
-  Check,
-  XSquare
+  Zap, 
+  RefreshCw, 
+  Check, 
+  XSquare,
+  Search,
+  Plus,
+  X
 } from 'lucide-react';
 import { ChannelForm } from '../components/forms/ChannelForm';
 import { PreviewModal } from '../components/channels/PreviewModal';
@@ -81,11 +84,68 @@ export const PlaylistEditor: React.FC = () => {
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
 
+  // Channel Picker States
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [pickerChannels, setPickerChannels] = useState<any[]>([]);
+  const [pickerSelectedIds, setPickerSelectedIds] = useState<Set<number>>(new Set());
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerLoading, setPickerLoading] = useState(false);
+
   useEffect(() => {
     if (id) {
       fetchPlaylistData();
     }
   }, [id]);
+
+  const openAddChannelsModal = async () => {
+    setIsAddModalOpen(true);
+    setPickerLoading(true);
+    setPickerSelectedIds(new Set());
+    try {
+      const res = await fetch('/api/channels?per_page=1000');
+      const data = await res.json();
+      const existingChannelIds = new Set(entries.map(e => e.channel_id));
+      // Only show channels that are not already in this playlist
+      const available = (data.channels || data || []).filter((ch: any) => !existingChannelIds.has(ch.id));
+      setPickerChannels(available);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
+  const handleAddChannels = async () => {
+    if (pickerSelectedIds.size === 0) return;
+    setProcessing(true);
+    try {
+      const res = await fetch(`/api/playlists/${id}/batch-add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel_ids: Array.from(pickerSelectedIds) })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        setIsAddModalOpen(false);
+        fetchPlaylistData();
+      } else {
+        alert(data.message || "Failed to add channels");
+      }
+    } catch (err) {
+      alert("Error adding channels");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const togglePickerSelect = (chId: number) => {
+    setPickerSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(chId)) next.delete(chId);
+      else next.add(chId);
+      return next;
+    });
+  };
 
   const fetchPlaylistData = async () => {
     setLoading(true);
@@ -357,15 +417,21 @@ export const PlaylistEditor: React.FC = () => {
            </div>
         </div>
         <div className="flex items-center gap-3">
-           <button 
-             onClick={handleSaveOrder}
-             disabled={saving}
-             className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-8 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
-           >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={18} />}
-              Save Sequence
-           </button>
-        </div>
+            <button 
+              onClick={openAddChannelsModal}
+              className="bg-indigo-600/10 border border-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95"
+            >
+               <Plus size={16} /> Add Channels
+            </button>
+            <button 
+              onClick={handleSaveOrder}
+              disabled={saving}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-8 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+            >
+               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={18} />}
+               Save Sequence
+            </button>
+         </div>
       </header>
 
       {/* Editor Surface */}
@@ -497,13 +563,19 @@ export const PlaylistEditor: React.FC = () => {
             ))}
          </Reorder.Group>
 
-         {entries.length === 0 && (
-            <div className="p-20 text-center">
-               <Tv className="text-slate-800 mx-auto mb-4" size={48} />
-               <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest">Empty Registry</h3>
-               <p className="text-slate-600 text-sm mt-1">Add channels to this profile from the Channels page.</p>
-            </div>
-         )}
+          {entries.length === 0 && (
+             <div className="p-20 text-center">
+                <Tv className="text-slate-800 mx-auto mb-4" size={48} />
+                <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest">Empty Registry</h3>
+                <p className="text-slate-600 text-sm mt-1 mb-6">You haven't added any channels to this playlist yet.</p>
+                <button 
+                  onClick={openAddChannelsModal}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-8 rounded-2xl font-black text-xs uppercase tracking-widest inline-flex items-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                >
+                  <Plus size={16} /> Choose Channels
+                </button>
+             </div>
+          )}
       </div>
 
       {/* Group Assignment Modal */}
@@ -665,6 +737,96 @@ export const PlaylistEditor: React.FC = () => {
           channel={previewChannel}
           onClose={() => setPreviewChannel(null)}
         />
+      )}
+
+      {/* Add Channels Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsAddModalOpen(false)} />
+           <motion.div 
+             initial={{ opacity: 0, scale: 0.9, y: 20 }}
+             animate={{ opacity: 1, scale: 1, y: 0 }}
+             className="relative w-full max-w-xl bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+           >
+              <div className="flex items-center justify-between mb-4">
+                 <div>
+                    <h3 className="text-xl font-black text-white uppercase">Choose Signals</h3>
+                    <p className="text-slate-500 text-xs mt-0.5">Select channels from your repository to include in this playlist</p>
+                 </div>
+                 <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all">
+                    <X size={20} />
+                 </button>
+              </div>
+
+              {/* Search Bar inside Modal */}
+              <div className="relative mb-6 shrink-0">
+                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
+                 <input 
+                   type="text"
+                   placeholder="Search available channels..."
+                   value={pickerSearch}
+                   onChange={e => setPickerSearch(e.target.value)}
+                   className="w-full bg-slate-950/50 border border-white/5 rounded-2xl pl-12 pr-4 py-3.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                 />
+              </div>
+
+              {/* Channels list */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar min-h-[200px]">
+                 {pickerLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-4">
+                       <Loader2 className="animate-spin text-indigo-500" size={32} />
+                       <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest animate-pulse">Loading Repository...</span>
+                    </div>
+                 ) : (
+                    pickerChannels.filter(ch => ch.name.toLowerCase().includes(pickerSearch.toLowerCase())).map(ch => {
+                      const isSelected = pickerSelectedIds.has(ch.id);
+                      return (
+                         <button 
+                           key={ch.id}
+                           onClick={() => togglePickerSelect(ch.id)}
+                           className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${isSelected ? 'bg-indigo-500/10 border-indigo-500/30 text-white' : 'bg-slate-950/30 border-white/5 hover:bg-white/5 text-slate-400'}`}
+                         >
+                            <div className="flex items-center gap-4 text-left min-w-0">
+                               <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${isSelected ? 'bg-indigo-500 border-indigo-400' : 'bg-slate-900 border-white/10'}`}>
+                                  {isSelected && <Check size={12} className="text-white" />}
+                               </div>
+                               <div className="w-10 h-10 bg-slate-900 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center border border-white/5">
+                                  {ch.logo_url ? <img src={getLogoUrl(ch.logo_url)} alt="" className="w-full h-full object-contain p-1.5" /> : <Tv size={20} className="text-slate-700" />}
+                               </div>
+                               <div className="min-w-0">
+                                  <p className="text-xs font-black truncate">{ch.name}</p>
+                                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">{ch.group_name || 'Ungrouped'}</p>
+                               </div>
+                            </div>
+                         </button>
+                      );
+                    })
+                 )}
+                 {!pickerLoading && pickerChannels.filter(ch => ch.name.toLowerCase().includes(pickerSearch.toLowerCase())).length === 0 && (
+                    <div className="text-center py-20 text-slate-500">
+                       <Tv className="mx-auto mb-3 opacity-20" size={36} />
+                       <p className="text-xs font-black uppercase tracking-widest">No matching channels found</p>
+                    </div>
+                 )}
+              </div>
+
+              {/* Confirm footer */}
+              <div className="mt-6 pt-6 border-t border-white/5 flex items-center justify-between shrink-0">
+                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{pickerSelectedIds.size} selected</span>
+                 <div className="flex items-center gap-4">
+                    <button onClick={() => setIsAddModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors">Cancel</button>
+                    <button 
+                      onClick={handleAddChannels}
+                      disabled={pickerSelectedIds.size === 0 || processing}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white h-12 px-8 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                    >
+                       {processing ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                       Add selected
+                    </button>
+                 </div>
+              </div>
+           </motion.div>
+        </div>
       )}
     </div>
   );
