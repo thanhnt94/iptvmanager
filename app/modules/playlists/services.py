@@ -150,6 +150,9 @@ class PlaylistService:
             if auth_params and 'token' in auth_params:
                 conn = '&' if '?' in url else '?'
                 url += f"{conn}token={auth_params['token']}"
+            if auth_params and 'ua' in auth_params:
+                conn = '&' if '?' in url else '?'
+                url += f"{conn}ua={auth_params['ua']}"
             return url
 
         # System playlists

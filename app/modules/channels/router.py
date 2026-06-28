@@ -860,6 +860,7 @@ async def play_channel(
     channel_id: int,
     request: Request,
     token: str = Query(default=None),
+    ua: str = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """TS Proxy — Proxies the stream through the server."""
@@ -881,7 +882,18 @@ async def play_channel(
     from app.modules.channels.services import StreamManager, ActiveSessionManager
 
     url = target_url
-    headers = {'User-Agent': request.headers.get('user-agent', 'IPTV-Manager/2.0')}
+    
+    # Map friendly User-Agent types to typical strings
+    ua_map = {
+        'chrome': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'iphone': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1',
+        'tv': 'Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.124 Safari/537.36 WebAppManager',
+        'tivimate': 'TiviMate/4.7.0 (Linux; Google TV)',
+        'vlc': 'VLC/3.0.18 LibVLC/3.0.18'
+    }
+    selected_ua = ua_map.get(ua.lower()) if ua else request.headers.get('user-agent', 'IPTV-Manager/2.0')
+    headers = {'User-Agent': selected_ua}
+    
     q, sid = StreamManager.get_source_stream(url, headers)
 
     client_host = request.client.host if request.client else '127.0.0.1'

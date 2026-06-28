@@ -14,7 +14,6 @@ import {
   List,
   Clock,
   Copy,
-  Check,
   RefreshCw
 } from 'lucide-react';
 
@@ -56,10 +55,15 @@ export const Playlists: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [activeDropdown, setActiveDropdown] = useState<number | string | null>(null);
   const [activeMenu, setActiveMenu] = useState<number | string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [hideDieFilter, setHideDieFilter] = useState(true);
+  const hideDieFilter = true;
+
+  // Advanced Copy Modal States
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [activePlaylistForCopy, setActivePlaylistForCopy] = useState<Playlist | null>(null);
+  const [advMode, setAdvMode] = useState('default');
+  const [advUa, setAdvUa] = useState('default');
+  const [advHideDie, setAdvHideDie] = useState(false);
   
   // Scanner Progress State
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus | null>(null);
@@ -144,14 +148,9 @@ export const Playlists: React.FC = () => {
   const handleSync = async (playlist: Playlist) => {
     try {
       const res = await fetch(`/api/playlists/${playlist.id}/sync`, { method: 'POST' });
-      const data = await res.json();
-      if (data.status === 'success') {
-        fetchPlaylists();
-        // Immediately trigger a poll
-        fetchScannerStatus();
-      } else {
-        alert(data.message);
-      }
+      await res.json();
+      await fetch(`/api/playlists/sync/${playlist.id}`, { method: 'POST' });
+      alert("Scanner thread started for playlist " + playlist.name);
     } catch (err) {
       alert("Failed to start sync");
     }
@@ -163,26 +162,12 @@ export const Playlists: React.FC = () => {
     return matchesSearch;
   });
 
-  const copyToClipboard = (playlist: Playlist, hideDie: boolean, mode: string) => {
-    const baseUrl = window.location.origin;
-    let friendlySlug = playlist.slug;
-    if (friendlySlug.includes('-all')) friendlySlug = 'all';
-    if (friendlySlug.includes('-protected')) friendlySlug = 'protected';
-    
-    const finalMode = mode === 'default' ? 'smart' : mode;
-    const statusPart = hideDie ? '/live' : '';
-    
-    let modePart = '';
-    if (finalMode === 'tracking' || finalMode === 'track') modePart = '/track';
-    else if (finalMode === 'direct') modePart = '/direct';
-    else if (finalMode === 'smart' && hideDie) modePart = '/smart';
-    
-    const url = `${baseUrl}/p/${playlist.owner_username}/${friendlySlug}${modePart}${statusPart}`;
-    
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(`${playlist.id}-${mode}`);
-      setTimeout(() => setCopiedId(null), 2000);
-    });
+  const openCopyModal = (playlist: Playlist) => {
+    setActivePlaylistForCopy(playlist);
+    setAdvMode('default');
+    setAdvUa('default');
+    setAdvHideDie(hideDieFilter);
+    setIsCopyModalOpen(true);
   };
 
   const handleDelete = async (id: number | string) => {
@@ -281,7 +266,7 @@ export const Playlists: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
                 key={item.id} 
-                className={`glass relative group transition-all hover:bg-slate-900/60 p-6 rounded-[2rem] border border-white/5 ${activeDropdown === item.id || activeMenu === item.id ? 'z-50' : ''}`}
+                className={`glass relative group transition-all hover:bg-slate-900/60 p-6 rounded-[2rem] border border-white/5 ${activeMenu === item.id ? 'z-50' : ''}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
@@ -363,8 +348,8 @@ export const Playlists: React.FC = () => {
                 <div className="mt-6 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <button 
-                          onClick={() => setActiveDropdown(activeDropdown === item.id ? null : item.id)}
-                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeDropdown === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+                          onClick={() => openCopyModal(item)}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
                         >
                            <Copy size={14} /> Copy Link
                         </button>
@@ -431,32 +416,6 @@ export const Playlists: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Copy Dropdown Menu */}
-                {activeDropdown === item.id && (
-                  <div className="absolute bottom-full left-6 mb-4 w-64 bg-slate-950/98 backdrop-blur-3xl rounded-3xl p-4 shadow-2xl z-[100] border border-white/10">
-                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Copy Links</span>
-                        <button onClick={() => setHideDieFilter(!hideDieFilter)} className={`text-[8px] font-black uppercase px-2 py-1 rounded-lg border ${hideDieFilter ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-800 border-white/5 text-slate-500'}`}>
-                          {hideDieFilter ? 'Live Only' : 'All'}
-                        </button>
-                    </div>
-                    <div className="space-y-1">
-                        {[
-                          { mode: 'direct', label: 'Direct Gateway (Link gốc)' },
-                          { mode: 'tracking', label: 'Tracking Gateway (Link track)' }
-                        ].map(({ mode, label }) => (
-                          <button 
-                            key={mode} 
-                            onClick={() => copyToClipboard(item, hideDieFilter, mode)}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all border ${copiedId === `${item.id}-${mode}` ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-white/5 hover:bg-white/5'}`}
-                          >
-                            <span className="text-[10px] font-black text-white uppercase">{label}</span>
-                            {copiedId === `${item.id}-${mode}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-slate-600" />}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                )}
               </motion.div>
             );
           })}
@@ -516,6 +475,148 @@ export const Playlists: React.FC = () => {
                  >
                     {creating ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
                     {creating ? 'Creating...' : 'Launch Playlist'}
+                 </button>
+              </div>
+            </motion.div>
+         </div>
+      )}
+      {/* Advanced Copy Modal */}
+      {isCopyModalOpen && activePlaylistForCopy && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+           <motion.div 
+             initial={{ opacity: 0, scale: 0.9 }}
+             animate={{ opacity: 1, scale: 1 }}
+             className="bg-slate-900 border border-white/10 w-full max-w-lg rounded-[2.5rem] overflow-hidden shadow-2xl"
+           >
+              <div className="p-8">
+                 <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-black text-white tracking-tight">Cài đặt <span className="text-indigo-500">Đường Dẫn</span></h3>
+                      <p className="text-slate-500 text-xs mt-1">Tùy biến playlist: {activePlaylistForCopy.name}</p>
+                    </div>
+                    <button onClick={() => setIsCopyModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
+                       <Plus size={20} className="rotate-45" />
+                    </button>
+                 </div>
+
+                 <div className="space-y-6">
+                    {/* Chế độ phát */}
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Chế Độ Phát (Play Mode)</label>
+                       <select 
+                         value={advMode}
+                         onChange={e => setAdvMode(e.target.value)}
+                         className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-xs text-white focus:ring-2 focus:ring-indigo-500/20 outline-none uppercase font-black tracking-wider"
+                       >
+                         <option value="default">SMART GATEWAY (Mặc định)</option>
+                         <option value="direct">DIRECT (Link gốc)</option>
+                         <option value="tracking">TRACKING ONLY (Link track)</option>
+                         <option value="ts">TS PROXY (Che giấu IP qua VPS)</option>
+                       </select>
+                    </div>
+
+                    {/* Giả lập User-Agent */}
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Giả lập thiết bị (User-Agent Spoofing)</label>
+                       <select 
+                         value={advUa}
+                         onChange={e => setAdvUa(e.target.value)}
+                         className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-xs text-white focus:ring-2 focus:ring-indigo-500/20 outline-none uppercase font-black tracking-wider"
+                       >
+                         <option value="default">MẶC ĐỊNH (Tự động nhận diện)</option>
+                         <option value="chrome">GOOGLE CHROME (Trình duyệt máy tính)</option>
+                         <option value="iphone">IPHONE / SAFARI (Di động)</option>
+                         <option value="tv">SMART TV (LG WebOS)</option>
+                         <option value="tivimate">TIVIMATE (Đầu phát TiviMate)</option>
+                         <option value="vlc">VLC MEDIA PLAYER (Đầu phát VLC)</option>
+                       </select>
+                    </div>
+
+                    {/* Ẩn kênh die */}
+                    <div className="flex items-center justify-between p-6 rounded-2xl bg-white/[0.02] border border-white/5">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black text-white uppercase tracking-wider block">Ẩn Kênh Không Hoạt Động</span>
+                        <span className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Chỉ giữ lại các luồng đang Live</span>
+                      </div>
+                      <button 
+                        onClick={() => setAdvHideDie(!advHideDie)} 
+                        className={`text-[8px] font-black uppercase px-4 py-2 rounded-xl border transition-all ${advHideDie ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-800 border-white/5 text-slate-500'}`}
+                      >
+                        {advHideDie ? 'Đang Bật' : 'Đang Tắt'}
+                      </button>
+                    </div>
+
+                    {/* Link được sinh ra */}
+                    <div className="space-y-2 pt-4">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Link được tạo tương ứng</label>
+                       <div className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-[10px] text-slate-400 font-mono break-all leading-relaxed">
+                          {(() => {
+                            const baseUrl = window.location.origin;
+                            let friendlySlug = activePlaylistForCopy.slug;
+                            if (friendlySlug.includes('-all')) friendlySlug = 'all';
+                            if (friendlySlug.includes('-protected')) friendlySlug = 'protected';
+                            
+                            const finalMode = advMode === 'default' ? 'smart' : advMode;
+                            const statusPart = advHideDie ? '/live' : '';
+                            
+                            let modePart = '';
+                            if (finalMode === 'tracking' || finalMode === 'track') modePart = '/track';
+                            else if (finalMode === 'direct') modePart = '/direct';
+                            else if (finalMode === 'smart' && advHideDie) modePart = '/smart';
+                            
+                            let url = `${baseUrl}/p/${activePlaylistForCopy.owner_username}/${friendlySlug}${modePart}${statusPart}`;
+                            const queryParams: string[] = [];
+                            if (activePlaylistForCopy.security_token) {
+                              queryParams.push(`token=${encodeURIComponent(activePlaylistForCopy.security_token)}`);
+                            }
+                            if (advUa !== 'default') {
+                              queryParams.push(`ua=${encodeURIComponent(advUa)}`);
+                            }
+                            if (queryParams.length > 0) {
+                              url += `?${queryParams.join('&')}`;
+                            }
+                            return url;
+                          })()}
+                       </div>
+                    </div>
+                 </div>
+
+                 <button 
+                   onClick={() => {
+                     const baseUrl = window.location.origin;
+                     let friendlySlug = activePlaylistForCopy.slug;
+                     if (friendlySlug.includes('-all')) friendlySlug = 'all';
+                     if (friendlySlug.includes('-protected')) friendlySlug = 'protected';
+                     
+                     const finalMode = advMode === 'default' ? 'smart' : advMode;
+                     const statusPart = advHideDie ? '/live' : '';
+                     
+                     let modePart = '';
+                     if (finalMode === 'tracking' || finalMode === 'track') modePart = '/track';
+                     else if (finalMode === 'direct') modePart = '/direct';
+                     else if (finalMode === 'smart' && advHideDie) modePart = '/smart';
+                     
+                     let url = `${baseUrl}/p/${activePlaylistForCopy.owner_username}/${friendlySlug}${modePart}${statusPart}`;
+                     const queryParams: string[] = [];
+                     if (activePlaylistForCopy.security_token) {
+                       queryParams.push(`token=${encodeURIComponent(activePlaylistForCopy.security_token)}`);
+                     }
+                     if (advUa !== 'default') {
+                       queryParams.push(`ua=${encodeURIComponent(advUa)}`);
+                     }
+                     if (queryParams.length > 0) {
+                       url += `?${queryParams.join('&')}`;
+                     }
+                     
+                     navigator.clipboard.writeText(url).then(() => {
+                       alert("Đã sao chép link playlist tùy chỉnh thành công!");
+                       setIsCopyModalOpen(false);
+                     });
+                   }}
+                   className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white h-16 rounded-[1.5rem] font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3"
+                 >
+                    <Copy size={16} />
+                    Copy Playlist Link
                  </button>
               </div>
            </motion.div>

@@ -516,6 +516,7 @@ async def friendly_m3u(
     request: Request,
     filename: str = None,
     token: str = Query(default=None),
+    ua: str = Query(default=None),
     hide_die: bool = Query(default=False),
     mode: str = Query(default=None),
     status: str = Query(default=None),
@@ -535,7 +536,9 @@ async def friendly_m3u(
         effective_hide_die = True
 
     base_url = str(request.base_url).rstrip('/')
-    auth_params = {"token": token} if token else None
+    auth_params = {}
+    if token: auth_params["token"] = token
+    if ua: auth_params["ua"] = ua
     
     content = PlaylistService.generate_m3u(
         db, profile.id, base_url=base_url, 
@@ -551,6 +554,7 @@ async def legacy_m3u(
     path: str,
     request: Request,
     token: str = Query(default=None),
+    ua: str = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """
@@ -585,7 +589,9 @@ async def legacy_m3u(
 
     base_url = str(request.base_url).rstrip('/')
     hide_die = (status == 'live')
-    auth_params = {"token": token} if token else None
+    auth_params = {}
+    if token: auth_params["token"] = token
+    if ua: auth_params["ua"] = ua
     
     content = PlaylistService.generate_m3u(
         db, profile.id, base_url=base_url, 
@@ -603,6 +609,7 @@ async def get_authenticated_m3u(
     p: str = Query(...),
     id: int = Query(...),
     mode: str = Query(default=None),
+    ua: str = Query(default=None),
     hide_die: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
@@ -619,6 +626,7 @@ async def get_authenticated_m3u(
 
     base_url = str(request.base_url).rstrip('/')
     auth_params = {"u": u, "p": p}
+    if ua: auth_params["ua"] = ua
     content = PlaylistService.generate_m3u(
         db, profile.id, base_url=base_url, 
         hide_die=hide_die, mode=mode, auth_params=auth_params
