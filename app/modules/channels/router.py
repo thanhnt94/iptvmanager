@@ -712,17 +712,22 @@ async def accept_share(
 
 
 
-def _get_resolved_stream_url(db: Session, channel: Channel) -> str:
+async def _get_resolved_stream_url(db: Session, channel: Channel) -> str:
     """If is_dynamic is True, uses ExtractorService to sniff the direct media URL."""
     if not channel.is_dynamic or not channel.dynamic_origin_url:
         return channel.stream_url
 
     try:
         from app.modules.channels.services import ExtractorService
+        from starlette.concurrency import run_in_threadpool
         logger.info(f" [DYNAMIC-RESOLVER] Resolving dynamic link: {channel.dynamic_origin_url}")
         
-        # Gọi extractor sniffer để lấy link .m3u8 thật
-        results = ExtractorService.extract_direct_url(channel.dynamic_origin_url, deep_scan=True)
+        # Chạy hàm đồng bộ trong threadpool để tránh xung đột event loop của Playwright
+        results = await run_in_threadpool(
+            ExtractorService.extract_direct_url,
+            channel.dynamic_origin_url,
+            deep_scan=True
+        )
         if results and len(results) > 0:
             resolved_url = results[0]['url']
             logger.info(f" [DYNAMIC-RESOLVER] Successfully resolved: {resolved_url}")
@@ -752,7 +757,7 @@ async def track_redirect(
         raise HTTPException(status_code=404, detail="Channel not found")
 
     # Phân giải link động nếu được cấu hình
-    target_url = _get_resolved_stream_url(db, channel)
+    target_url = await _get_resolved_stream_url(db, channel)
 
     channel.play_count = (channel.play_count or 0) + 1
     db.commit()
@@ -773,13 +778,16 @@ async def track_redirect(
     
     # 3. Nếu die thì đổi tên [die] và đẩy xuống cuối playlist
     if check_res.get('status') == 'die':
-        if not channel.name.startswith("[die]"):
-            channel.name = f"[die] {channel.name}"
-            
-        # Đẩy xuống cuối các playlist chứa kênh này
+        # Đẩy xuống cuối các playlist chứa kênh này và thêm prefix [die] vào custom_name
         from sqlalchemy import func
+        from app.modules.playlists.models import PlaylistEntry
         entries = db.query(PlaylistEntry).filter_by(channel_id=channel_id).all()
         for entry in entries:
+            # Chỉ cập nhật custom_name của PlaylistEntry, giữ nguyên tên kênh gốc
+            current_display = entry.custom_name or channel.name
+            if not current_display.startswith("[die]"):
+                entry.custom_name = f"[die] {current_display}"
+            
             max_order = db.query(func.max(PlaylistEntry.order_index)).filter_by(playlist_id=entry.playlist_id).scalar() or 0
             entry.order_index = max_order + 1
             
@@ -799,7 +807,7 @@ async def play_channel(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    target_url = _get_resolved_stream_url(db, channel)
+    target_url = await _get_resolved_stream_url(db, channel)
 
     from app.modules.settings.services import SettingService
     if not SettingService.get(db, 'ENABLE_TS_PROXY', True):
