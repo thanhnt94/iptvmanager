@@ -870,7 +870,22 @@ async def check_channel_now(
 ):
     """Triggers an immediate health check for a single channel."""
     from app.modules.health.services import HealthCheckService
+    
+    # 1. Prioritize/Register in the Scan Queue (status='pending', priority=1)
+    HealthCheckService.prioritize_channel_in_queue(db, channel_id)
+    
+    # 2. Run the check immediately
     result = HealthCheckService.check_stream(db, channel_id, force=True)
+    
+    # 3. Mark the queue item as finished (success/failed)
+    from app.modules.health.models import ScanQueue
+    item = db.query(ScanQueue).filter_by(channel_id=channel_id).first()
+    if item:
+        item.status = 'success' if result.get('status') == 'live' else 'failed'
+        item.error_message = result.get('skipped') or result.get('error_message') or None
+        item.processed_at = datetime.utcnow()
+        db.commit()
+        
     return {'status': 'ok', 'result': result}
 
 

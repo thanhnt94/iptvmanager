@@ -59,6 +59,7 @@ class ScanQueue(Base):
     id = Column(Integer, primary_key=True)
     channel_id = Column(Integer, ForeignKey('channels.id', ondelete='CASCADE'), nullable=False)
     status = Column(String(50), default='pending')  # pending, processing, success, failed
+    priority = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime, nullable=True)

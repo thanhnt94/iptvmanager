@@ -56,11 +56,15 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
   ];
 
   if (user.role === 'admin' || user.role === 'vip') {
+    const tools = [
+      { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' }
+    ];
+    if (user.role === 'admin') {
+      tools.push({ icon: <Activity size={20} />, label: 'Scan Queue', path: '/queue' });
+    }
     menuGroups.push({
       label: 'Tools',
-      items: [
-        { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' }
-      ]
+      items: tools
     });
   }
 
@@ -74,8 +78,7 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
   if (user.role === 'admin') {
     adminGroup.items.unshift(
       { icon: <FolderTree size={20} />, label: 'Group Manager', path: '/groups' },
-      { icon: <ShieldCheck size={20} />, label: 'Admin Portal', path: '/admin' },
-      { icon: <Activity size={20} />, label: 'Scan Queue', path: '/admin?tab=tasks' }
+      { icon: <ShieldCheck size={20} />, label: 'Admin Portal', path: '/admin' }
     );
   }
   menuGroups.push(adminGroup);

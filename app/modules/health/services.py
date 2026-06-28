@@ -363,10 +363,10 @@ class HealthCheckService:
                 # Check delay setting
                 delay = int(SettingService.get(db, 'SCAN_QUEUE_DELAY_SECONDS', '5'))
                 
-                # Find oldest pending queue item
-                item = db.query(ScanQueue).filter_by(status='pending').order_by(ScanQueue.id.asc()).first()
+                # Find oldest pending queue item, prioritizing high priority items (priority=1)
+                item = db.query(ScanQueue).filter_by(status='pending').order_by(ScanQueue.priority.desc(), ScanQueue.id.asc()).first()
                 if item:
-                    logger.info(f"[QUEUE-WORKER] Processing item ID {item.id} (Channel ID {item.channel_id})")
+                    logger.info(f"[QUEUE-WORKER] Processing item ID {item.id} (Channel ID {item.channel_id}, Priority {item.priority})")
                     item.status = 'processing'
                     db.commit()
                     
@@ -387,4 +387,17 @@ class HealthCheckService:
                 logger.error(f"[QUEUE-WORKER] Scan Queue loop error: {e}", exc_info=True)
             finally:
                 db.close()
+
+    @staticmethod
+    def prioritize_channel_in_queue(db: Session, channel_id: int):
+        """Adds or updates a channel in the scan queue as high-priority pending."""
+        from app.modules.health.models import ScanQueue
+        item = db.query(ScanQueue).filter_by(channel_id=channel_id).first()
+        if item:
+            item.status = 'pending'
+            item.priority = 1
+        else:
+            item = ScanQueue(channel_id=channel_id, status='pending', priority=1)
+            db.add(item)
+        db.commit()
 

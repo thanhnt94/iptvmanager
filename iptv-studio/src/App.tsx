@@ -20,6 +20,7 @@ import { WatchRoom } from './pages/WatchRoom';
 import { LiveTVDirectory } from './pages/LiveTV/LiveTVDirectory';
 import { LiveViewer } from './pages/LiveTV/LiveViewer';
 import { TVManager } from './pages/LiveTV/TVManager';
+import { QueueManager } from './pages/QueueManager';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<{username: string, role: string} | null | undefined>(undefined);
@@ -96,6 +97,10 @@ const App: React.FC = () => {
                   <Route 
                     path="/admin" 
                     element={user.role === 'admin' ? <AdminPortal /> : <Navigate to="/" replace />} 
+                  />
+                  <Route 
+                    path="/queue" 
+                    element={user.role === 'admin' ? <QueueManager /> : <Navigate to="/" replace />} 
                   />
                   
                   <Route path="*" element={<Navigate to="/" replace />} />

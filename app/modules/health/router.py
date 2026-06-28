@@ -249,13 +249,27 @@ async def get_queue_status(
     
     delay_seconds = int(SettingService.get(db, 'SCAN_QUEUE_DELAY_SECONDS', '5'))
     
+    # Query channel counts for filter options
+    unscanned_count = db.query(Channel).filter(Channel.status == 'unknown').count()
+    scanned_count = db.query(Channel).filter(Channel.status != 'unknown').count()
+    die_count = db.query(Channel).filter(Channel.status == 'die').count()
+    live_count = db.query(Channel).filter(Channel.status == 'live').count()
+    all_count = db.query(Channel).count()
+    
     return {
         "status": "ok",
         "pending": stats.get('pending', 0),
         "processing": stats.get('processing', 0),
         "success": stats.get('success', 0),
         "failed": stats.get('failed', 0),
-        "delay_seconds": delay_seconds
+        "delay_seconds": delay_seconds,
+        "counts": {
+            "unscanned": unscanned_count,
+            "scanned": scanned_count,
+            "die": die_count,
+            "live": live_count,
+            "all": all_count
+        }
     }
 
 
