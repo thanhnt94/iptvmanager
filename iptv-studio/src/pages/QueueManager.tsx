@@ -8,8 +8,26 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
-  PlayCircle
+  PlayCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Link2
 } from 'lucide-react';
+
+interface QueueItem {
+  id: number;
+  channel_id: number;
+  channel_name: string;
+  channel_logo: string | null;
+  stream_url: string;
+  status: string;
+  priority: number;
+  error_message: string | null;
+  created_at: string | null;
+  processed_at: string | null;
+}
 
 interface QueueStatus {
   pending: number;
@@ -31,8 +49,25 @@ export const QueueManager: React.FC = () => {
   const [selectedQueueFilter, setSelectedQueueFilter] = useState('unscanned');
   const [queueDelayInput, setQueueDelayInput] = useState('5');
   const [addingToQueue, setAddingToQueue] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // Queue Items List States (Vocaburn style)
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   const fetchQueueStatus = async () => {
     try {
@@ -44,8 +79,26 @@ export const QueueManager: React.FC = () => {
       }
     } catch (err) {
       console.error("Queue status fetch error:", err);
+    }
+  };
+
+  const fetchQueueItems = async () => {
+    setLoadingItems(true);
+    try {
+      let url = `/api/health/queue/items?page=${page}&per_page=15`;
+      if (statusFilter) url += `&status=${statusFilter}`;
+      if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
+      
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data.items);
+        setTotalItems(data.total);
+      }
+    } catch (err) {
+      console.error("Failed to fetch queue items:", err);
     } finally {
-      setLoading(false);
+      setLoadingItems(false);
     }
   };
 
@@ -55,6 +108,10 @@ export const QueueManager: React.FC = () => {
     const interval = setInterval(fetchQueueStatus, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    fetchQueueItems();
+  }, [page, statusFilter, debouncedSearch]);
 
   const handleAddToQueue = async () => {
     setAddingToQueue(true);
@@ -68,6 +125,7 @@ export const QueueManager: React.FC = () => {
         const data = await res.json();
         showMsg('success', `Added ${data.added} channels to scan queue`);
         fetchQueueStatus();
+        fetchQueueItems();
       } else {
         showMsg('error', 'Failed to add channels');
       }
@@ -79,17 +137,34 @@ export const QueueManager: React.FC = () => {
   };
 
   const handleClearQueue = async () => {
-    if (!confirm("Are you sure you want to clear the scan queue?")) return;
+    if (!confirm("Are you sure you want to clear the entire scan queue?")) return;
     try {
       const res = await fetch('/api/health/queue/clear', { method: 'POST' });
       if (res.ok) {
         showMsg('success', 'Scan queue cleared');
         fetchQueueStatus();
+        setPage(1);
+        fetchQueueItems();
       } else {
         showMsg('error', 'Failed to clear queue');
       }
     } catch (err) {
       showMsg('error', 'Failed to clear queue');
+    }
+  };
+
+  const handleDeleteItem = async (itemId: number) => {
+    try {
+      const res = await fetch(`/api/health/queue/items/${itemId}`, { method: 'DELETE' });
+      if (res.ok) {
+        showMsg('success', 'Item removed from queue');
+        fetchQueueStatus();
+        fetchQueueItems();
+      } else {
+        showMsg('error', 'Failed to delete item');
+      }
+    } catch (err) {
+      showMsg('error', 'Error deleting item');
     }
   };
 
@@ -121,7 +196,7 @@ export const QueueManager: React.FC = () => {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  if (loading && !queueStatus) {
+  if (!queueStatus) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="animate-spin text-indigo-500" size={32} />
@@ -129,10 +204,21 @@ export const QueueManager: React.FC = () => {
     );
   }
 
+  const formatTime = (isoString: string | null) => {
+    if (!isoString) return '—';
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return '—';
+    }
+  };
+
+  const totalPages = Math.ceil(totalItems / 15);
   const counts = queueStatus?.counts || { unscanned: 0, scanned: 0, die: 0, live: 0, all: 0 };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-12">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -140,7 +226,7 @@ export const QueueManager: React.FC = () => {
           <p className="text-slate-400 font-medium">Asynchronous background health check queue manager</p>
         </div>
         <button 
-          onClick={fetchQueueStatus}
+          onClick={() => { fetchQueueStatus(); fetchQueueItems(); }}
           className="p-3 rounded-2xl bg-white/5 text-slate-400 hover:text-white border border-white/10 transition-all active:scale-95 shadow-lg"
         >
           <RefreshCw size={18} />
@@ -195,7 +281,7 @@ export const QueueManager: React.FC = () => {
                   <option value="all">All Registry Channels — ({counts.all.toLocaleString()} channels)</option>
                 </select>
 
-                <div className="flex gap-3">
+                <div className="flex gap-3 font-semibold">
                   <button 
                     onClick={handleAddToQueue}
                     disabled={addingToQueue}
@@ -280,6 +366,182 @@ export const QueueManager: React.FC = () => {
               <span className="text-xs text-rose-500/60">failed</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Queue Items Table Section (Vocaburn style) */}
+      <div className="space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-indigo-500 ml-2">Active Task List</h3>
+          
+          {/* Filters Bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+              <input 
+                type="text" 
+                placeholder="Search channel name..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="bg-slate-900/50 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 w-56 font-bold"
+              />
+            </div>
+            
+            <select 
+              value={statusFilter} 
+              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              className="bg-slate-900/50 border border-white/5 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 font-black uppercase tracking-wider cursor-pointer"
+            >
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="success">Success</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Table Glass Container */}
+        <div className="bg-slate-900/20 rounded-[2rem] border border-white/5 overflow-hidden shadow-2xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-white/5 bg-slate-950/20">
+                  <th className="p-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Task Info</th>
+                  <th className="p-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Channel Name</th>
+                  <th className="p-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Stream Source</th>
+                  <th className="p-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
+                  <th className="p-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingItems ? (
+                  <tr>
+                    <td colSpan={5} className="p-20 text-center">
+                      <Loader2 className="animate-spin text-indigo-500 inline-block" size={24} />
+                      <p className="text-xs text-slate-500 mt-2 font-bold">Querying tasks registry...</p>
+                    </td>
+                  </tr>
+                ) : items.length > 0 ? (
+                  items.map(item => (
+                    <tr key={item.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-all">
+                      <td className="p-5">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-slate-300">#{item.id}</span>
+                            {item.priority === 1 && (
+                              <span className="px-1.5 py-0.5 rounded text-[8px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                                <Sparkles size={8} /> PRIORITY
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold">
+                            <Clock size={10} />
+                            <span>Enqueued {formatTime(item.created_at)}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="p-5">
+                        <div className="flex items-center gap-3">
+                          {item.channel_logo ? (
+                            <img src={item.channel_logo} className="w-8 h-8 rounded-lg object-contain bg-slate-950/40 p-1 border border-white/5" alt="" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-xs font-black uppercase">
+                              {item.channel_name.substring(0, 2)}
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs font-bold text-white leading-tight">{item.channel_name}</p>
+                            <p className="text-[10px] text-slate-500 font-mono">ID: {item.channel_id}</p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="p-5">
+                        <div className="flex items-center gap-2 max-w-xs sm:max-w-md">
+                          <Link2 size={12} className="text-slate-500 flex-shrink-0" />
+                          <span className="text-[10px] font-mono text-slate-400 truncate select-all" title={item.stream_url}>
+                            {item.stream_url}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="p-5">
+                        {item.status === 'processing' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest">
+                            <Loader2 className="animate-spin" size={10} /> Checking
+                          </span>
+                        ) : item.status === 'success' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest">
+                            <CheckCircle2 size={10} /> Passed
+                          </span>
+                        ) : item.status === 'failed' ? (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-black uppercase tracking-widest">
+                              <AlertCircle size={10} /> Failed
+                            </span>
+                            {item.error_message && (
+                              <p className="text-[9px] text-rose-400/80 font-bold max-w-xs truncate" title={item.error_message}>
+                                {item.error_message}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 text-slate-400 border border-white/5 text-[10px] font-black uppercase tracking-widest">
+                            <Clock size={10} /> Pending
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="p-5 text-right">
+                        <button 
+                          onClick={() => handleDeleteItem(item.id)}
+                          className="p-2 rounded-xl hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 border border-transparent hover:border-rose-500/20 transition-all active:scale-90"
+                          title="Remove from queue"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="p-20 text-center">
+                      <PlayCircle size={32} className="text-slate-800 inline-block mb-3" />
+                      <p className="text-slate-500 font-bold">No tasks matching filters</p>
+                      <p className="text-[10px] text-slate-600 mt-1">Select a filter filter above to feed new channels to the queue.</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Footer */}
+          {totalPages > 1 && (
+            <div className="p-5 border-t border-white/5 bg-slate-950/20 flex items-center justify-between">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                Page {page} of {totalPages} ({totalItems.toLocaleString()} items total)
+              </span>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-all"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button 
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-all"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

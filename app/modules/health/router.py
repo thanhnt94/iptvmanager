@@ -297,3 +297,72 @@ async def update_queue_settings(
     SettingService.set(db, 'SCAN_QUEUE_DELAY_SECONDS', str(delay_seconds), type='int')
     return {"status": "ok", "delay_seconds": delay_seconds}
 
+
+@router.get("/queue/items")
+async def get_queue_items(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    status: str = Query(None),
+    search: str = Query(None),
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    from app.modules.health.models import ScanQueue
+    from app.modules.channels.models import Channel
+    
+    query = db.query(ScanQueue).join(Channel, ScanQueue.channel_id == Channel.id)
+    
+    if status:
+        query = query.filter(ScanQueue.status == status)
+        
+    if search:
+        # Search by channel name, channel id, or queue id
+        query = query.filter(
+            (Channel.name.ilike(f"%{search}%")) |
+            (Channel.id == search)
+        )
+        
+    query = query.order_by(ScanQueue.priority.desc(), ScanQueue.id.desc())
+    
+    total = query.count()
+    items = query.offset((page - 1) * per_page).limit(per_page).all()
+    
+    result_items = []
+    for item in items:
+        result_items.append({
+            "id": item.id,
+            "channel_id": item.channel_id,
+            "channel_name": item.channel.name if item.channel else "Unknown",
+            "channel_logo": item.channel.logo_url if item.channel else None,
+            "stream_url": item.channel.stream_url if item.channel else "",
+            "status": item.status,
+            "priority": item.priority,
+            "error_message": item.error_message,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "processed_at": item.processed_at.isoformat() if item.processed_at else None,
+        })
+        
+    return {
+        "status": "ok",
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "items": result_items
+    }
+
+
+@router.delete("/queue/items/{item_id}")
+async def delete_queue_item(
+    item_id: int,
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    from app.modules.health.models import ScanQueue
+    item = db.query(ScanQueue).filter_by(id=item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    db.delete(item)
+    db.commit()
+    return {"status": "ok", "message": "Item deleted"}
+
