@@ -458,12 +458,14 @@ export const Channels: React.FC = () => {
    };
 
    const cleanDead = async () => {
-     if (!confirm('Clean all unprotected offline channels?')) return;
+     if (!confirm('Xóa toàn bộ kênh có trạng thái DIE (trừ các kênh được Protect)?\n\nHành động này không thể hoàn tác!')) return;
      try {
        const res = await fetch('/api/channels/clean-dead', { method: 'POST' });
        if (res.ok) {
          const data = await res.json();
-         alert(`Successfully removed ${data.deleted_count} stale entries.`);
+         let msg = `Đã xóa ${data.deleted_count} kênh die.`;
+         if (data.protected_kept) msg += `\n${data.protected_kept} kênh die được bảo vệ (Protected) đã được giữ lại.`;
+         alert(msg);
          fetchChannels();
        }
      } catch (err) { alert('Operation failed'); }

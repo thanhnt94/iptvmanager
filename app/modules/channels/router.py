@@ -646,6 +646,28 @@ async def batch_proxy(
 
 # --- Sharing ---
 
+@router.post("/batch-update-toggle")
+async def batch_update_toggle(
+    data: dict = Body(...),
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    """Batch toggle a boolean field on multiple channels."""
+    ids = data.get('ids', [])
+    field = data.get('field')
+    value = data.get('value', True)
+    allowed = ['is_protected', 'is_public', 'is_original', 'is_passthrough']
+    if field not in allowed:
+        raise HTTPException(status_code=400, detail=f"Invalid field. Allowed: {allowed}")
+    if not ids:
+        raise HTTPException(status_code=400, detail="No IDs provided")
+    db.query(Channel).filter(Channel.id.in_(ids)).update({field: bool(value)}, synchronize_session=False)
+    db.commit()
+    return {'status': 'ok'}
+
+
+# --- Sharing ---
+
 @router.post("/share/{channel_id}")
 async def share_channel(
     channel_id: int,
