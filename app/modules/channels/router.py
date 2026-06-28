@@ -789,14 +789,14 @@ async def _get_resolved_stream_url(db: Session, channel: Channel) -> str:
     return channel.stream_url
 
 
-def _authenticate_stream_request(db: Session, u: str = None, p: str = None):
-    """Verifies stream request credentials."""
-    if not u or not p:
-        raise HTTPException(status_code=403, detail="Authentication credentials (u and p) required")
-    from app.modules.auth.models import User
-    user = db.query(User).filter_by(username=u).first()
-    if not user or not user.check_password(p):
-        raise HTTPException(status_code=403, detail="Invalid username or password")
+def _authenticate_stream_request(db: Session, token: str = None):
+    """Verifies stream request using playlist security tokens."""
+    if not token:
+        raise HTTPException(status_code=403, detail="Security token required")
+    from app.modules.playlists.models import PlaylistProfile
+    exists = db.query(PlaylistProfile).filter_by(security_token=token, is_active=True).first()
+    if not exists:
+        raise HTTPException(status_code=403, detail="Invalid security token")
 
 
 # --- Proxy / Streaming ---
@@ -805,12 +805,11 @@ def _authenticate_stream_request(db: Session, u: str = None, p: str = None):
 async def track_redirect(
     channel_id: int,
     request: Request,
-    u: str = Query(default=None),
-    p: str = Query(default=None),
+    token: str = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Tracking redirect — increments play_count, then redirects to stream URL."""
-    _authenticate_stream_request(db, u, p)
+    _authenticate_stream_request(db, token)
 
     channel = db.query(Channel).get(channel_id)
     if not channel:
@@ -860,12 +859,11 @@ async def track_redirect(
 async def play_channel(
     channel_id: int,
     request: Request,
-    u: str = Query(default=None),
-    p: str = Query(default=None),
+    token: str = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """TS Proxy — Proxies the stream through the server."""
-    _authenticate_stream_request(db, u, p)
+    _authenticate_stream_request(db, token)
 
     channel = db.query(Channel).get(channel_id)
     if not channel:

@@ -147,9 +147,9 @@ class PlaylistService:
             else:
                 url = f"{base}/api/channels/track/{ch.id}"
 
-            if auth_params and 'u' in auth_params and 'p' in auth_params:
+            if auth_params and 'token' in auth_params:
                 conn = '&' if '?' in url else '?'
-                url += f"{conn}u={auth_params['u']}&p={auth_params['p']}"
+                url += f"{conn}token={auth_params['token']}"
             return url
 
         # System playlists

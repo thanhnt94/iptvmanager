@@ -509,9 +509,7 @@ async def publish_epg(
     return PlainTextResponse(content, media_type="application/xml")
 
 
-# --- Friendly URL Support ---
-
-@router.get("/m3u/{slug}")
+# --- Friendly URL Support ---@router.get("/m3u/{slug}")
 @router.get("/m3u/{slug}/{filename}")
 async def friendly_m3u(
     slug: str,
@@ -528,18 +526,25 @@ async def friendly_m3u(
     if not profile or not profile.is_active:
         raise HTTPException(status_code=404, detail="Playlist not found or inactive")
 
+    # Enforce security token check
     if profile.security_token and token != profile.security_token:
-        raise HTTPException(status_code=403, detail="Invalid or missing token")
+        raise HTTPException(status_code=403, detail="Access denied. Invalid or missing token.")
 
     effective_hide_die = hide_die
     if status == 'live':
         effective_hide_die = True
 
     base_url = str(request.base_url).rstrip('/')
-    content = PlaylistService.generate_m3u(db, profile.id, base_url=base_url, hide_die=effective_hide_die, mode=mode)
+    auth_params = {"token": token} if token else None
+    
+    content = PlaylistService.generate_m3u(
+        db, profile.id, base_url=base_url, 
+        hide_die=effective_hide_die, mode=mode, auth_params=auth_params
+    )
     if not content:
         raise HTTPException(status_code=404, detail="Empty playlist")
     return PlainTextResponse(content, media_type="audio/mpegurl")
+
 
 @legacy_router.get("/p/{path:path}", tags=["Legacy"])
 async def legacy_m3u(
@@ -550,7 +555,7 @@ async def legacy_m3u(
 ):
     """
     Catch-all Legacy URL support: /p/admin/tv/track/live
-    Parses path segments manually.
+    Parses path segments manually. Requires security token validation if set on playlist.
     """
     parts = path.split('/')
     if len(parts) < 2:
@@ -562,23 +567,33 @@ async def legacy_m3u(
     status = parts[3] if len(parts) > 3 else None
 
     from app.modules.auth.models import User
+    
     user = db.query(User).filter_by(username=username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+        
     profile = db.query(PlaylistProfile).filter_by(slug=slug, owner_id=user.id).first()
     if not profile:
         profile = db.query(PlaylistProfile).filter_by(slug=slug, is_system=True).first()
         
     if not profile or not profile.is_active:
-        raise HTTPException(status_code=404, detail="Playlist not found")
+        raise HTTPException(status_code=404, detail="Playlist not found or inactive")
+
+    # Enforce security token check
+    if profile.security_token and token != profile.security_token:
+        raise HTTPException(status_code=403, detail="Access denied. Invalid or missing token.")
 
     base_url = str(request.base_url).rstrip('/')
     hide_die = (status == 'live')
-    content = PlaylistService.generate_m3u(db, profile.id, base_url=base_url, mode=mode, hide_die=hide_die)
+    auth_params = {"token": token} if token else None
+    
+    content = PlaylistService.generate_m3u(
+        db, profile.id, base_url=base_url, 
+        mode=mode, hide_die=hide_die, auth_params=auth_params
+    )
     if not content:
         raise HTTPException(status_code=404, detail="Empty playlist")
-    return PlainTextResponse(content, media_type="text/plain")
+    return PlainTextResponse(content, media_type="text/plain")")
 
 
 @router.get("/get.m3u")

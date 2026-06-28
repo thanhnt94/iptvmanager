@@ -208,7 +208,7 @@ export const Channels: React.FC = () => {
    const [checkingBatch, setCheckingBatch] = useState(false);
    const [epgHints, setEpgHints] = useState<string[]>([]);
    const [isMergeOpen, setIsMergeOpen] = useState(false);
-   const [sharePassword, setSharePassword] = useState('');
+   const [shareToken, setShareToken] = useState('');
 
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -1250,28 +1250,17 @@ export const Channels: React.FC = () => {
                   {/* Auth Configuration for Distribute */}
                   <div className="px-8 py-4 bg-white/[0.02] border-b border-white/5 space-y-2">
                     <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block">
-                      Tích hợp xác thực TiviMate / Basic Auth
+                      Tích hợp mã bảo mật (Security Token)
                     </label>
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider mb-1">Username</span>
-                        <input
-                          type="text"
-                          disabled
-                          value={user.username || ''}
-                          className="w-full bg-slate-950/40 border border-white/5 rounded-xl px-3 py-2 text-[11px] text-slate-400 outline-none"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider mb-1">Password</span>
-                        <input
-                          type="password"
-                          placeholder="Nhập password để gen link bảo mật..."
-                          value={sharePassword}
-                          onChange={(e) => setSharePassword(e.target.value)}
-                          className="w-full bg-slate-950/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-3 py-2 text-[11px] text-white outline-none"
-                        />
-                      </div>
+                    <div className="w-full">
+                      <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider mb-1">Mã Token</span>
+                      <input
+                        type="text"
+                        placeholder="Nhập security token để gen link bảo mật..."
+                        value={shareToken}
+                        onChange={(e) => setShareToken(e.target.value)}
+                        className="w-full bg-slate-950/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-3 py-2.5 text-[11px] text-white outline-none"
+                      />
                     </div>
                   </div>
 
@@ -1284,10 +1273,10 @@ export const Channels: React.FC = () => {
                           url = `${window.location.origin}${url}`;
                         }
 
-                        // Nếu nhập password, đính kèm xác thực vào các link phát thông qua gateway
-                        if (sharePassword && mode !== 'original') {
+                        // Nếu nhập security token, đính kèm xác thực vào các link phát thông qua gateway
+                        if (shareToken && mode !== 'original') {
                           const conn = url.includes('?') ? '&' : '?';
-                          url = `${url}${conn}u=${encodeURIComponent(user.username)}&p=${encodeURIComponent(sharePassword)}`;
+                          url = `${url}${conn}token=${encodeURIComponent(shareToken)}`;
                         }
 
                         const labelMap: Record<string, string> = {
