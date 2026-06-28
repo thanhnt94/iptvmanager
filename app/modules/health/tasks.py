@@ -17,7 +17,7 @@ def check_channel_task(channel_id, force=False, fast_mode=False, timeout=10):
         ch = db.query(Channel).get(channel_id)
         ch_name = ch.name if ch else f"ID:{channel_id}"
         
-        result = HealthCheckService.check_stream(channel_id, force=force, fast_mode=fast_mode, timeout=timeout)
+        result = HealthCheckService.check_stream(db, channel_id, force=force, fast_mode=fast_mode, timeout=timeout)
         
         status = result.get('status', 'unknown')
         latency = result.get('latency', 'N/A')

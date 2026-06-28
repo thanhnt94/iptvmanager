@@ -4,20 +4,15 @@ import {
   LayoutDashboard, 
   Radio, 
   ListVideo, 
-  Activity, 
   LogOut,
-  PlayCircle,
   ShieldCheck,
   Calendar,
-  Monitor,
-  CloudDownload,
   Menu,
   X,
   Search,
   FolderTree,
   Settings,
-  Users,
-  MonitorPlay
+  Users
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -44,34 +39,26 @@ export const Shell: React.FC<ShellProps> = ({ children, user }) => {
     {
       label: 'Viewer',
       items: [
-        { icon: <PlayCircle size={20} />, label: 'Live Player', path: '/player' },
         { icon: <Users size={20} />, label: 'Watch Room', path: '/watch' },
-        { icon: <MonitorPlay size={20} />, label: 'TV & Playlists', path: '/tv' },
       ]
     },
     {
       label: 'Content Management',
       items: [
-        { icon: <Radio size={20} />, label: 'Signal Registry', path: '/channels' },
-        { icon: <Settings size={20} />, label: 'TV Channels', path: '/tv-manager' },
+        { icon: <Radio size={20} />, label: 'TV Channels', path: '/channels' },
         { icon: <ListVideo size={20} />, label: 'Playlists', path: '/playlists' },
         { icon: <Calendar size={20} />, label: 'EPG Registry', path: '/epg' },
-      ]
-    },
-    {
-      label: 'Tools & System',
-      items: [
-        { icon: <CloudDownload size={20} />, label: 'Ingestion', path: '/import' },
-        { icon: <Monitor size={20} />, label: 'Monitoring', path: '/streams' },
-        { icon: <Activity size={20} />, label: 'Diagnostics', path: '/diagnostics' },
       ]
     }
   ];
 
   if (user.role === 'admin' || user.role === 'vip') {
-    menuGroups.find(g => g.label === 'Tools & System')?.items.unshift(
-      { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' }
-    );
+    menuGroups.push({
+      label: 'Tools',
+      items: [
+        { icon: <Search size={20} />, label: 'Media Scanner', path: '/scanner' }
+      ]
+    });
   }
 
   const adminGroup = {

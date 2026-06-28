@@ -5,6 +5,8 @@ Handles: Channel CRUD, Proxy/HLS/TS streaming, batch operations, sharing, playba
 import logging
 import time
 import queue
+import re
+import httpx
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
 from fastapi.responses import StreamingResponse, RedirectResponse
@@ -20,6 +22,45 @@ from app.modules.playlists.models import PlaylistProfile, PlaylistEntry, Playlis
 logger = logging.getLogger('iptv')
 
 router = APIRouter()
+
+
+@router.post("/extract")
+async def extract_media_link(
+    data: dict = Body(...),
+    user: User = Depends(login_required),
+):
+    url = data.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": url
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers=headers) as client:
+            resp = await client.get(url)
+            html = resp.text
+            
+            patterns = [
+                r'(https?://[^\s"\']+\.m3u8[^\s"\']*)',
+                r'(https?://[^\s"\']+\.mp4[^\s"\']*)',
+                r'(https?://[^\s"\']+\.ts[^\s"\']*)',
+                r'(https?:\\/\\/[^\s"\']+\.m3u8[^\s"\']*)',
+            ]
+            
+            found_urls = []
+            for pattern in patterns:
+                for match in re.findall(pattern, html, re.IGNORECASE):
+                    cleaned = match.replace('\\/', '/')
+                    if cleaned not in found_urls:
+                        found_urls.append(cleaned)
+            
+            return {"status": "success", "urls": found_urls}
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch or extract: {str(e)}")
 
 
 # --- Helper ---
