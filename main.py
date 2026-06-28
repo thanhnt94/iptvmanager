@@ -41,6 +41,13 @@ async def lifespan(app: FastAPI):
         PlaylistService.ensure_global_system_playlists(db)
         SettingService.init_defaults(db)
         logger.info("Database defaults initialized.")
+
+        # 3. Start background Scan Queue worker thread
+        import threading
+        from app.modules.health.services import HealthCheckService
+        queue_thread = threading.Thread(target=HealthCheckService.process_scan_queue_loop, daemon=True, name="ScanQueueWorker")
+        queue_thread.start()
+        logger.info("Scan Queue Worker thread started successfully.")
     except Exception as e:
         logger.error(f"Startup initialization error: {e}", exc_info=True)
     finally:

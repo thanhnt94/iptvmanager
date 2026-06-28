@@ -196,3 +196,90 @@ async def set_task_backend(
     TaskDispatcher.invalidate_cache()
     return {"status": "ok", "backend": backend}
 
+
+# --- Scan Queue Management ---
+
+@router.post("/queue/add")
+async def add_to_queue(
+    data: dict = Body(...),
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    filter_type = data.get('filter', 'all')  # unscanned, scanned, die, live, all
+    query = db.query(Channel)
+    
+    if filter_type == 'unscanned':
+        query = query.filter(Channel.status == 'unknown')
+    elif filter_type == 'scanned':
+        query = query.filter(Channel.status != 'unknown')
+    elif filter_type == 'die':
+        query = query.filter(Channel.status == 'die')
+    elif filter_type == 'live':
+        query = query.filter(Channel.status == 'live')
+        
+    channels = query.all()
+    
+    from app.modules.health.models import ScanQueue
+    existing_channel_ids = [
+        r[0] for r in db.query(ScanQueue.channel_id).filter(ScanQueue.status.in_(['pending', 'processing'])).all()
+    ]
+    existing_set = set(existing_channel_ids)
+    
+    added_count = 0
+    for ch in channels:
+        if ch.id not in existing_set:
+            item = ScanQueue(channel_id=ch.id, status='pending')
+            db.add(item)
+            added_count += 1
+            
+    db.commit()
+    return {"status": "ok", "added": added_count}
+
+
+@router.get("/queue/status")
+async def get_queue_status(
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    from app.modules.health.models import ScanQueue
+    from sqlalchemy import func
+    
+    stats_query = db.query(ScanQueue.status, func.count(ScanQueue.id)).group_by(ScanQueue.status).all()
+    stats = {status: count for status, count in stats_query}
+    
+    delay_seconds = int(SettingService.get(db, 'SCAN_QUEUE_DELAY_SECONDS', '5'))
+    
+    return {
+        "status": "ok",
+        "pending": stats.get('pending', 0),
+        "processing": stats.get('processing', 0),
+        "success": stats.get('success', 0),
+        "failed": stats.get('failed', 0),
+        "delay_seconds": delay_seconds
+    }
+
+
+@router.post("/queue/clear")
+async def clear_queue(
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    from app.modules.health.models import ScanQueue
+    db.query(ScanQueue).delete()
+    db.commit()
+    return {"status": "ok", "message": "Queue cleared"}
+
+
+@router.post("/queue/settings")
+async def update_queue_settings(
+    data: dict = Body(...),
+    user: User = Depends(admin_required),
+    db: Session = Depends(get_db),
+):
+    delay_seconds = data.get('delay_seconds')
+    if delay_seconds is None:
+        raise HTTPException(status_code=400, detail="delay_seconds required")
+        
+    SettingService.set(db, 'SCAN_QUEUE_DELAY_SECONDS', str(delay_seconds), type='int')
+    return {"status": "ok", "delay_seconds": delay_seconds}
+

@@ -18,7 +18,8 @@ import {
   Code,
   HardDrive,
   Zap,
-  Server
+  Server,
+  Loader2
 } from 'lucide-react';
 
 interface Setting {
@@ -48,18 +49,41 @@ export const AdminPortal: React.FC = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'free' });
 
+  // Scan Queue States
+  const [queueStatus, setQueueStatus] = useState({ pending: 0, processing: 0, success: 0, failed: 0, delay_seconds: 5 });
+  const [selectedQueueFilter, setSelectedQueueFilter] = useState('unscanned');
+  const [queueDelayInput, setQueueDelayInput] = useState('5');
+  const [addingToQueue, setAddingToQueue] = useState(false);
+
   useEffect(() => {
     fetchInitialData();
     fetchTaskBackend();
     
-    // Auto-poll tasks if on tasks tab
+    // Auto-poll tasks and queue if on tasks tab
     let interval: any;
     if (activeTab === 'tasks') {
       fetchTasks();
-      interval = setInterval(fetchTasks, 5000);
+      fetchQueueStatus();
+      interval = setInterval(() => {
+        fetchTasks();
+        fetchQueueStatus();
+      }, 5000);
     }
     return () => clearInterval(interval);
   }, [activeTab]);
+
+  const fetchQueueStatus = async () => {
+    try {
+      const res = await fetch('/api/health/queue/status');
+      if (res.ok) {
+        const data = await res.json();
+        setQueueStatus(data);
+        setQueueDelayInput(data.delay_seconds.toString());
+      }
+    } catch (err) {
+      console.error("Queue status fetch error:", err);
+    }
+  };
 
   const fetchInitialData = async () => {
     setLoading(true);
@@ -153,6 +177,60 @@ export const AdminPortal: React.FC = () => {
       }
     } catch (err) {
       showMsg('error', 'Stop failed');
+    }
+  };
+
+  const handleAddToQueue = async () => {
+    setAddingToQueue(true);
+    try {
+      const res = await fetch('/api/health/queue/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filter: selectedQueueFilter })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showMsg('success', `Added ${data.added} channels to scan queue`);
+        fetchQueueStatus();
+      }
+    } catch (err) {
+      showMsg('error', 'Failed to add to queue');
+    } finally {
+      setAddingToQueue(false);
+    }
+  };
+
+  const handleClearQueue = async () => {
+    if (!confirm("Are you sure you want to clear the scan queue?")) return;
+    try {
+      const res = await fetch('/api/health/queue/clear', { method: 'POST' });
+      if (res.ok) {
+        showMsg('success', 'Scan queue cleared');
+        fetchQueueStatus();
+      }
+    } catch (err) {
+      showMsg('error', 'Failed to clear queue');
+    }
+  };
+
+  const handleSaveQueueSettings = async () => {
+    const delay = parseInt(queueDelayInput);
+    if (isNaN(delay) || delay < 1) {
+      showMsg('error', 'Delay must be at least 1 second');
+      return;
+    }
+    try {
+      const res = await fetch('/api/health/queue/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delay_seconds: delay })
+      });
+      if (res.ok) {
+        showMsg('success', 'Queue settings updated');
+        fetchQueueStatus();
+      }
+    } catch (err) {
+      showMsg('error', 'Failed to update queue settings');
     }
   };
 
@@ -757,6 +835,82 @@ export const AdminPortal: React.FC = () => {
                          <span className="text-3xl font-black text-emerald-400">
                             {Object.values(tasksInfo?.scheduled || {}).flat().length}
                          </span>
+                      </div>
+                   </div>
+
+                   {/* Scan Queue Controls */}
+                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {/* Add to Queue */}
+                      <div className="bg-slate-900/40 p-6 rounded-3xl border border-white/5 space-y-4 lg:col-span-2">
+                         <h4 className="font-black text-white uppercase text-xs tracking-wider">Feed Scan Queue</h4>
+                         <p className="text-slate-500 text-xs">Add signals to the background worker queue based on specific filter criteria.</p>
+                         <div className="flex flex-col sm:flex-row gap-3">
+                            <select 
+                              value={selectedQueueFilter} 
+                              onChange={e => setSelectedQueueFilter(e.target.value)} 
+                              className="bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-xs font-black uppercase tracking-widest cursor-pointer flex-1"
+                            >
+                               <option value="unscanned">Unscanned Channels (Unknown)</option>
+                               <option value="scanned">Scanned Channels</option>
+                               <option value="die">Offline Channels (Die)</option>
+                               <option value="live">Online Channels (Live)</option>
+                               <option value="all">All Registry Channels</option>
+                            </select>
+                            <button 
+                              onClick={handleAddToQueue}
+                              disabled={addingToQueue}
+                              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white h-12 px-6 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
+                            >
+                               {addingToQueue ? <Loader2 className="animate-spin" size={14} /> : <Zap size={14} />}
+                               Add to queue
+                            </button>
+                            <button 
+                              onClick={handleClearQueue}
+                              className="px-6 h-12 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 text-[10px] font-black uppercase tracking-widest transition-all"
+                            >
+                               Clear queue
+                            </button>
+                         </div>
+                      </div>
+
+                      {/* Delay settings */}
+                      <div className="bg-slate-900/40 p-6 rounded-3xl border border-white/5 space-y-4">
+                         <h4 className="font-black text-white uppercase text-xs tracking-wider">Queue Loop Delay</h4>
+                         <p className="text-slate-500 text-xs">Set sleep interval between individual signal checks (seconds).</p>
+                         <div className="flex gap-3">
+                            <input 
+                              type="number" 
+                              value={queueDelayInput}
+                              onChange={e => setQueueDelayInput(e.target.value)}
+                              className="bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-bold w-24 text-center" 
+                            />
+                            <button 
+                              onClick={handleSaveQueueSettings}
+                              className="bg-indigo-600/10 border border-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white px-6 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center transition-all active:scale-95 flex-1"
+                            >
+                               Update Delay
+                            </button>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* Scan Queue Status Summary */}
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-slate-950/30 p-4 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Queue Pending</p>
+                         <span className="text-2xl font-black text-white">{queueStatus.pending}</span>
+                      </div>
+                      <div className="bg-slate-950/30 p-4 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Queue Processing</p>
+                         <span className="text-2xl font-black text-indigo-400">{queueStatus.processing}</span>
+                      </div>
+                      <div className="bg-slate-950/30 p-4 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Queue Success (Live)</p>
+                         <span className="text-2xl font-black text-emerald-400">{queueStatus.success}</span>
+                      </div>
+                      <div className="bg-slate-950/30 p-4 rounded-2xl border border-white/5">
+                         <p className="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">Queue Failed (Die)</p>
+                         <span className="text-2xl font-black text-rose-400">{queueStatus.failed}</span>
                       </div>
                    </div>
 

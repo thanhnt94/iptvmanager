@@ -2,8 +2,8 @@
 Health Models () — Standalone SQLAlchemy, no Flask dependency.
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime
-from sqlalchemy.orm import Session
+from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime, ForeignKey
+from sqlalchemy.orm import Session, relationship
 
 from app.core.database import Base
 
@@ -51,4 +51,19 @@ class ScannerStatus(Base):
                 db.rollback()
                 status = db.query(cls).first()
         return status
+
+
+class ScanQueue(Base):
+    __tablename__ = 'scan_queue'
+
+    id = Column(Integer, primary_key=True)
+    channel_id = Column(Integer, ForeignKey('channels.id', ondelete='CASCADE'), nullable=False)
+    status = Column(String(50), default='pending')  # pending, processing, success, failed
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+
+    # Relationship
+    channel = relationship('Channel', primaryjoin='ScanQueue.channel_id == Channel.id')
+
 

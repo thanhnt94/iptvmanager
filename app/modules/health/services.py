@@ -348,3 +348,43 @@ class HealthCheckService:
             results.append(r)
         return results
 
+    @staticmethod
+    def process_scan_queue_loop():
+        """Daemon thread loop that processes the scan queue sequentially."""
+        logger.info("[QUEUE-WORKER] Starting background Scan Queue worker daemon...")
+        import time
+        while True:
+            time.sleep(1)  # Prevent CPU spinning
+            db = SessionFactory()
+            try:
+                from app.modules.settings.services import SettingService
+                from app.modules.health.models import ScanQueue
+                
+                # Check delay setting
+                delay = int(SettingService.get(db, 'SCAN_QUEUE_DELAY_SECONDS', '5'))
+                
+                # Find oldest pending queue item
+                item = db.query(ScanQueue).filter_by(status='pending').order_by(ScanQueue.id.asc()).first()
+                if item:
+                    logger.info(f"[QUEUE-WORKER] Processing item ID {item.id} (Channel ID {item.channel_id})")
+                    item.status = 'processing'
+                    db.commit()
+                    
+                    # Full check (force=True)
+                    res = HealthCheckService.check_stream(db, item.channel_id, force=True, timeout=10)
+                    
+                    # Update queue status
+                    status = 'success' if res.get('status') == 'live' else 'failed'
+                    item.status = status
+                    item.error_message = res.get('skipped') or res.get('error_message') or None
+                    item.processed_at = datetime.utcnow()
+                    db.commit()
+                    
+                    logger.info(f"[QUEUE-WORKER] Item ID {item.id} done -> {status.upper()}")
+                    time.sleep(max(1, delay))
+            except Exception as e:
+                db.rollback()
+                logger.error(f"[QUEUE-WORKER] Scan Queue loop error: {e}", exc_info=True)
+            finally:
+                db.close()
+
