@@ -719,15 +719,20 @@ async def _get_resolved_stream_url(db: Session, channel: Channel) -> str:
 
     try:
         from app.modules.channels.services import ExtractorService
-        from starlette.concurrency import run_in_threadpool
+        import asyncio
+        from concurrent.futures import ProcessPoolExecutor
         logger.info(f" [DYNAMIC-RESOLVER] Resolving dynamic link: {channel.dynamic_origin_url}")
         
-        # Chạy hàm đồng bộ trong threadpool để tránh xung đột event loop của Playwright
-        results = await run_in_threadpool(
-            ExtractorService.extract_direct_url,
-            channel.dynamic_origin_url,
-            deep_scan=True
-        )
+        # Chạy trong một process con riêng biệt để tránh lỗi event loop của Playwright
+        loop = asyncio.get_running_loop()
+        with ProcessPoolExecutor(max_workers=1) as executor:
+            results = await loop.run_in_executor(
+                executor,
+                ExtractorService.extract_direct_url,
+                channel.dynamic_origin_url,
+                True # deep_scan = True
+            )
+            
         if results and len(results) > 0:
             resolved_url = results[0]['url']
             logger.info(f" [DYNAMIC-RESOLVER] Successfully resolved: {resolved_url}")

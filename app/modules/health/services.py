@@ -36,9 +36,15 @@ class HealthCheckService:
         if channel.is_dynamic:
             try:
                 from app.modules.channels.services import ExtractorService
+                from concurrent.futures import ProcessPoolExecutor
                 logger.info(f" [HEALTH-DYNAMIC] Resolving dynamic channel {channel.id} before check")
                 origin_url = channel.dynamic_origin_url or channel.stream_url
-                results = ExtractorService.extract_direct_url(origin_url, deep_scan=True)
+                
+                # Sử dụng ProcessPoolExecutor để chạy trong process con riêng biệt
+                with ProcessPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(ExtractorService.extract_direct_url, origin_url, True)
+                    results = future.result(timeout=45)
+                    
                 if results and len(results) > 0:
                     resolved_url = results[0]['url']
                     logger.info(f" [HEALTH-DYNAMIC] Resolved to: {resolved_url}")
