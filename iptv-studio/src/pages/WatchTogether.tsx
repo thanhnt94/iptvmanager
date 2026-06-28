@@ -11,7 +11,8 @@ import {
   ShieldAlert, 
   ArrowRight,
   Eye,
-  KeyRound
+  KeyRound,
+  Trash2
 } from 'lucide-react';
 
 interface Room {
@@ -129,6 +130,22 @@ export const WatchTogether: React.FC = () => {
     }
   };
 
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa phòng này không?")) return;
+    try {
+      const res = await fetch(`/api/watchtogether/rooms/${roomId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchRooms();
+      } else {
+        alert("Lỗi khi xóa phòng");
+      }
+    } catch (err) {
+      alert("Lỗi kết nối máy chủ");
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-96 flex flex-col items-center justify-center gap-4">
@@ -173,7 +190,7 @@ export const WatchTogether: React.FC = () => {
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Phòng của tôi ({rooms.my_rooms.length})</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {rooms.my_rooms.map(room => (
-                  <RoomCard key={room.id} room={room} onJoin={handleJoinRoom} isOwner={true} />
+                  <RoomCard key={room.id} room={room} onJoin={handleJoinRoom} isOwner={true} onDelete={handleDeleteRoom} />
                 ))}
               </div>
             </div>
@@ -398,7 +415,7 @@ export const WatchTogether: React.FC = () => {
   );
 };
 
-const RoomCard: React.FC<{ room: Room; onJoin: (r: Room) => void; isOwner: boolean }> = ({ room, onJoin, isOwner }) => {
+const RoomCard: React.FC<{ room: Room; onJoin: (r: Room) => void; isOwner: boolean; onDelete?: (id: string) => void }> = ({ room, onJoin, isOwner, onDelete }) => {
   return (
     <motion.div
       whileHover={{ y: -4 }}
@@ -437,12 +454,23 @@ const RoomCard: React.FC<{ room: Room; onJoin: (r: Room) => void; isOwner: boole
 
       <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
         <span className="text-[10px] text-slate-500 font-semibold">{isOwner ? 'Phòng của bạn' : 'Phòng công khai'}</span>
-        <button
-          onClick={() => onJoin(room)}
-          className="text-xs font-black text-indigo-400 flex items-center gap-1 hover:text-indigo-300 transition-colors uppercase tracking-widest"
-        >
-          Tham gia <ArrowRight size={14} />
-        </button>
+        <div className="flex items-center gap-3">
+          {isOwner && onDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(room.id); }}
+              className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all"
+              title="Xóa phòng"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+          <button
+            onClick={() => onJoin(room)}
+            className="text-xs font-black text-indigo-400 flex items-center gap-1 hover:text-indigo-300 transition-colors uppercase tracking-widest"
+          >
+            Tham gia <ArrowRight size={14} />
+          </button>
+        </div>
       </div>
     </motion.div>
   );
